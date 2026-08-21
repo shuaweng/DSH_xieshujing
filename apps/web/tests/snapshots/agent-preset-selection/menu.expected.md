@@ -5,3 +5,4 @@
   - menuitem "PTC mode All Standard mode capabilities, with tools exposed through the Code Mode SDK so the model can combine multi-step operations in one TypeScript program."
   - menuitem "Minimal mode Two-tool coding agent with persistent bash and str_replace_editor."
   - menuitem "Creator mode Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance."
+  - menuitem "Novel mode Webnovel and long-form fiction writing agent with filesystem, search, shell, subagents, goals, compaction, novel-writing skills, style-context injection, and post-write style/snapshot guards."

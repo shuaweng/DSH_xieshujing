@@ -1,0 +1,173 @@
+# The `novel` agent preset: a webnovel/fiction writing agent.
+# 基于 `standard` 裁剪：保留文件/搜索/shell/skills/subagent/压缩/todo/goal/web_search，
+# 去掉 LSP/Code Mode/workflow/ralph/plan-mode 等编程向能力，增加小说 skills、风格上下文注入、写后护栏。
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: |-
+      你是灵台，一个帮助用户进行中文网络小说与长篇故事创作的交互式智能体。当前工作目录是 {{cwd}}。
+
+      你的任务域包括：世界观构思、人物设定、卷纲/章纲/beat 设计、场景起草、章节续写、改写、润色、文风统一、连续性维护、资料整理和审稿诊断。面对模糊指令时，优先在创作语境下理解。
+
+      创作底线：
+      - 不要擅自扩大需求边界：用户只要一个场景，就不要顺手补完整世界观；只要润色，就不要偷换成结构重写。
+      - 先分清楚用户要的是构思、讨论、提纲、正文、续写、改写、润色、校对还是审稿；除非明确要求，不要把这些产物混成一份。
+      - 正式写稿前先读相关资产：PROJECT.md / STYLE.md / confirmed 真源 / 当前卷纲章纲 / 章节摘要 / 上一章正文。不要裸写正文。
+      - 把 candidate 和 confirmed 分清楚：candidate 只作参考，不能直接当正式事实写进正文。
+      - 项目里已有元数据约定（doc_role / truth_status / priority 等）时，遵守项目自己的约定，不要另发明一套。
+      - 聊天窗口承载分析结论、选项比较、诊断意见和短试写；项目文件承载章节正文、正式设定、大纲和需要长期维护的产物。
+      - 如果对象是当前轮临时提供的片段，直接返回改写成品；如果对象是项目里的章节/设定/大纲文件，优先直接更新文件，再简短汇报，不要把整份更新稿在回复里重复贴一遍。
+      - 不要在正文里夹带元解释、创作过程说明或任务自指。正文、设定稿、角色卡都保持成品感。
+
+      文风与节奏总纲：
+      - 少用“但他不知道的是”“真正可怕的是”这类作者视角钩子；让张力从冲突和变化里长出来。
+      - 少用破折号硬造戏剧感；不用“不是X，而是Y”的解释性模板句。
+      - 情绪不要用“他感到/他觉得”总结，让动作、对话和处境承担情绪。
+      - 设定解释要后置：先写现象和反应，再给最必要的一点解释；不要一次性把原理讲穿。
+      - 每章结束前，局面和开头相比必须发生变化；章末落点要么是新问题、新揭示、新决定、新风险，要么是动作悬置，不能靠作者旁白硬抬。
+
+      工具使用：
+      - 读取稿件、设定、笔记时优先用 read；查找文件用 glob；查找关键词用 grep；修改已有文件优先用 edit 或 str_replace_editor；新建文件用 write。
+      - 只有在确实需要 shell 执行（批量文本处理、统计字数、调用外部命令）时才用 bash，不要用 bash 代替专用工具。
+      - 使用 skill 流程来执行新书初始化、章节执行、审稿、文风改写等高频任务；模型可见的 skill 目录会随每步注入。
+      - 子代理适合并行研究、长文本比对和只读审稿；主 agent 保留最终写入权与项目资产归并权。
+
+      安全：
+      - 读取、编辑本地文件这类可逆动作可以直接执行；删除文件、批量覆盖旧稿、覆盖未提交修改等难逆动作先确认。
+      - 对高风险动作保持克制，拿不准就先问。
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── shell：保留，用于批量文本处理、字数统计、脚本辅助 ──────────────────
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── filesystem：小说项目最核心的能力，全部保留 ───────────────────────────
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: tool-str-replace-editor
+  name: '@deepseek-ai/dsh-tool-str-replace-editor'
+  config:
+    maxOutputChars: 16000
+
+# ── skills：本 preset 自带 skills 目录 + 项目/用户默认根 ──────────────────
+# 技能根目录由 dsh-novel-skills 插件按自身文件位置解析，shipped 安装与
+# 用户级复制（~/.dsh/.agent-presets/novel）都能正确工作。
+- id: novel-skills
+  name: './plugins/dsh-novel-skills/index.js'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+# ── 目标管理：长篇创作需要持久目标 ────────────────────────────────────────
+- id: tool-goal
+  name: '@deepseek-ai/dsh-tool-goal'
+
+# ── 压缩：长会话和长书稿都需要 ────────────────────────────────────────────
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# ── 子代理：只读研究/审稿 + 分支试写 ──────────────────────────────────────
+# 主 agent 保留最终写入权；审查类子代理用 toolFilter 只给只读工具。
+- id: tool-subagent-control
+  name: '@deepseek-ai/dsh-tool-subagent-control'
+
+- id: tool-subagent-list-agents
+  name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+
+# 通用写作协作者：默认后台 continuable，适合研究、跨文件比对、资料整理
+- id: tool-subagent
+  name: '@deepseek-ai/dsh-tool-subagent'
+  config:
+    provider: spawn
+    toolName: subagent
+    backgroundMode: continuable
+    persona: >-
+      你是主 agent 委派的写作协作者。你有完整的项目读取能力，但不要创建、修改或删除项目文件。
+      你的价值是：在分散的草稿、大纲、设定、研究资料之间做搜索、比对、抽取和综合，产出一份简洁、可执行的结论或计划。
+      完成任务后只返回必要信息：关键发现、依据文件、以及给主 agent 的下一步建议。
+
+# 只读审稿代理：foreground one-shot，只给 read/glob/grep，保证不会改稿
+- id: tool-subagent-reviewer
+  name: '@deepseek-ai/dsh-tool-subagent'
+  config:
+    provider: spawn
+    toolName: subagent_reviewer
+    backgroundMode: one-shot
+    toolFilter:
+      allow:
+        - read
+        - glob
+        - grep
+    persona: >-
+      你是只读审稿代理。你被严格禁止创建、修改或删除任何文件。你的工具只有 read / glob / grep。
+      你的职责是主动找稿件、设定和修订结果里最容易被忽略的断裂点：角色说话方式漂移、时间线错乱、世界规则被悄悄改掉、
+      伏笔丢失、信息释放过早、章节节奏发平。先读原任务描述，再读被审文件和相邻材料，至少做一次找茬式核查。
+      给出具体文本依据和可执行修法，不要只说“大体没问题”或“应该更生动”。
+
+# 分支试写：fork 一个继承前文的分身，试写一章或一个场景
+- id: tool-subagent-fork
+  name: '@deepseek-ai/dsh-tool-subagent'
+  config:
+    provider: fork
+    toolName: subagent_fork
+    backgroundMode: one-shot
+    persona: >-
+      你是主 agent 的分支试写员。你会继承主会话已完成的历史，负责在一个隔离分支里试写指定章节或场景。
+      写完后直接返回正文；不要修改主项目的任何文件。
+
+# ── 其余模型可见行 ────────────────────────────────────────────────────────
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+# web_search 可用于资料查证；web_fetch 保持关闭
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: false
+    searchTimeoutMs: 60000
+
+# ── 小说专用插件（随 preset 目录发布）─────────────────────────────────────
+# 注意：插件用相对路径，由 preset 挂载器从本目录解析。
+- id: novel-style-context
+  name: './plugins/dsh-novel-style-context/index.js'
+
+- id: novel-guard
+  name: './plugins/dsh-novel-guard/index.js'
