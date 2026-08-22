@@ -10,6 +10,7 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../util/brand" },
     { "path": "../../llm/llm" },
+    { "path": "../../core/session" },
     { "path": "../../fs/fs" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]

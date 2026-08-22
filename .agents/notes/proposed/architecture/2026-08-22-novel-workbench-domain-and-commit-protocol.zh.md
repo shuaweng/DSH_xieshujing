@@ -30,6 +30,14 @@ PR1 以独立包建立最小而完整的 `ctx.novelRepository` 能力 seam：纯
 
 受支持的显式 Novel Studio 组合会在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后加载该切片。默认 `web` 与 `headless` 组合以及 `PROFILE_TEMPLATES` 保持不变；自定义 `cordis.yml` 仍可直接安装这些私有包。打开项目是只读操作：PR1 不创建 `.novel`，不初始化 SQLite，不扫描资产文件，不启动文件监听，不注册 Novel UI 或模型工具，也不实现 ChangeSet。
 
+## PR2 资产与 Revision 切片
+
+PR2 在同一能力 seam 上加入第一种作者资产 `manuscript.chapter`。本地 Provider 只递归扫描已声明 `manuscript` 根下的 Markdown 文件，执行可配置的目录深度、资产数量与精确字节边界，要求严格的第一版 `novel` Frontmatter，拒绝重复稳定 id 和扫描过程中变化的文件，并在路径重命名后保持 Asset 身份。文件仍是当前作者序列化内容的权威来源。
+
+第一版持久 `.novel/history.sqlite` schema 保存完整的不可变 Revision 字节和协调后的当前 head。初次观察、受保护的浏览器保存与外部字节分歧分别记为 `initial-scan`、`user-edit` 和 `external-edit`；`agent-apply` 为 PR3 预留。未知、无版本、外来或损坏的数据库会明确失败，绝不会被重置。数据库使用私有文件、WAL、外键、`trusted_schema = OFF`、`synchronous = FULL`、DSH Novel application id 与 strict tables。
+
+浏览器 Consumer 增加有边界的项目级资产列表、章节读取、仅正文的版本保护保存与选区冻结方法。正文保存保留精确解析出的 Frontmatter 前缀，校验生成后的完整文件，同时要求当前基础 Revision 与 Provider 内部 `FsVersion` 一致，并且只在文件系统发布成功后记录新 Revision。SelectionRef 在一个已保留 Revision 上按 Unicode code-point 边界冻结非空 UTF-16 范围；引用哈希、有边界的上下文和预览均从该不可变正文派生。PR2 不加入提示上下文、模型工具、ChangeSet 持久化或工作台布局。
+
 ## 范围与不变量
 
 - `ProjectId`、`AssetId`、`RevisionId`、`SelectionRefId` 和 `ChangeSetId` 都是不透明品牌 id。路径、标题、顺序或数据库行号绝不成为身份。

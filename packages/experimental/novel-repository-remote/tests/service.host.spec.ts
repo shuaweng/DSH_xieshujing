@@ -1,8 +1,16 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import NovelRepository, {
+  AssetId,
   ProjectId,
+  RevisionId,
+  SelectionRefId,
+  type AssetSnapshot,
+  type AssetSummary,
+  type CaptureSelectionRequest,
   type NovelProjectSnapshot,
+  type SaveChapterBodyRequest,
+  type SelectionRef,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs'
 import { describe, expect, it, vi } from 'vitest'
@@ -10,9 +18,31 @@ import NovelRepositoryRemote from '../src/index.ts'
 
 class StubNovelRepository extends NovelRepository {
   project: NovelProjectSnapshot | undefined
+  assets: readonly AssetSummary[] = []
+  snapshot: AssetSnapshot | undefined
+  selection: SelectionRef | undefined
 
   override discoverProject(_root: FsTarget): Promise<NovelProjectSnapshot | undefined> {
     return Promise.resolve(this.project)
+  }
+
+  override listAssets(): Promise<readonly AssetSummary[]> {
+    return Promise.resolve(this.assets)
+  }
+
+  override readAsset(): Promise<AssetSnapshot> {
+    if (this.snapshot === undefined) throw new Error('snapshot not configured')
+    return Promise.resolve(this.snapshot)
+  }
+
+  override saveChapterBody(_project: NovelProjectSnapshot, request: SaveChapterBodyRequest): Promise<AssetSnapshot> {
+    if (this.snapshot === undefined) throw new Error('snapshot not configured')
+    return Promise.resolve({ ...this.snapshot, body: request.body })
+  }
+
+  override captureSelection(_project: NovelProjectSnapshot, _request: CaptureSelectionRequest): Promise<SelectionRef> {
+    if (this.selection === undefined) throw new Error('selection not configured')
+    return Promise.resolve(this.selection)
   }
 }
 
@@ -101,6 +131,96 @@ describe('NovelRepositoryRemote Host service', () => {
       testAgent('/plain-workspace'),
       new AbortController().signal,
     )).resolves.toBeUndefined()
+    await expect(ctx.novelRepositoryRemote.assets(
+      testAgent('/plain-workspace'),
+      new AbortController().signal,
+    )).rejects.toMatchObject({ code: 'NOVEL_PROJECT_ROOT_INVALID' })
+
+    await remoteFiber.dispose()
+    await repositoryFiber.dispose()
+    disposeFs()
+  })
+
+  it('projects chapter catalog, read, guarded save, and frozen selection without filesystem identities', async () => {
+    const ctx = new Context()
+    const root = { targetKey: 'root', displayPath: '/story' } as FsTarget
+    const manifest = { targetKey: 'manifest', displayPath: '/story/novel.yaml' } as FsTarget
+    const chapters = { targetKey: 'chapters', displayPath: '/story/manuscript' } as FsTarget
+    const disposeFs = ctx.provide('fs', {
+      resolve: vi.fn<FileSystem['resolve']>().mockResolvedValue(root),
+    } as unknown as FileSystem)
+    const repositoryFiber = ctx.plugin(StubNovelRepository)
+    await repositoryFiber
+    const repository = ctx.novelRepository as StubNovelRepository
+    repository.project = {
+      schema: 1,
+      id: ProjectId('project-1'),
+      title: '白港',
+      root,
+      manifest,
+      contentRoots: { manuscript: chapters },
+    }
+    const snapshot: AssetSnapshot = {
+      asset: {
+        id: AssetId('chapter-1'),
+        projectId: ProjectId('project-1'),
+        type: 'manuscript.chapter',
+        projectRelativePath: 'manuscript/chapter-1.md',
+      },
+      revisionId: RevisionId('revision-1'),
+      serializedUtf8: new TextEncoder().encode('serialized bytes stay Host-only'),
+      contentHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      frontmatter: { novel: { title: '第一章' } },
+      body: '旧正文',
+    }
+    repository.snapshot = snapshot
+    repository.assets = [{
+      asset: snapshot.asset,
+      revisionId: snapshot.revisionId,
+      contentHash: snapshot.contentHash,
+      title: '第一章',
+    }]
+    repository.selection = {
+      version: 1,
+      id: SelectionRefId('selection-1'),
+      projectId: ProjectId('project-1'),
+      assetId: AssetId('chapter-1'),
+      revisionId: RevisionId('revision-1'),
+      selector: {
+        kind: 'text-range',
+        startUtf16: 0,
+        endUtf16: 1,
+        quoteHash: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      },
+      preview: '旧',
+    }
+    const remoteFiber = ctx.plugin(NovelRepositoryRemote)
+    await remoteFiber
+    const agent = testAgent('/story')
+    const signal = new AbortController().signal
+
+    await expect(ctx.novelRepositoryRemote.assets(agent, signal)).resolves.toEqual([{
+      id: 'chapter-1',
+      projectId: 'project-1',
+      type: 'manuscript.chapter',
+      projectRelativePath: 'manuscript/chapter-1.md',
+      revisionId: 'revision-1',
+      contentHash: snapshot.contentHash,
+      title: '第一章',
+    }])
+    await expect(ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-1'), null, signal))
+      .resolves.toMatchObject({ title: '第一章', body: '旧正文' })
+    await expect(ctx.novelRepositoryRemote.saveChapter(agent, {
+      assetId: AssetId('chapter-1'),
+      baseRevisionId: RevisionId('revision-1'),
+      body: '新正文',
+    }, signal)).resolves.toMatchObject({ title: '第一章', body: '新正文' })
+    await expect(ctx.novelRepositoryRemote.captureSelection(agent, {
+      assetId: AssetId('chapter-1'),
+      revisionId: RevisionId('revision-1'),
+      startUtf16: 0,
+      endUtf16: 1,
+    }, signal)).resolves.toMatchObject({ id: 'selection-1', preview: '旧' })
 
     await remoteFiber.dispose()
     await repositoryFiber.dispose()
@@ -165,5 +285,64 @@ describe('NovelRepositoryRemote Host service', () => {
         .toThrow(/integer between 1 and/)
       await ctx.fiber.dispose()
     }
+    for (const responseMaxBytes of [0, 1.5, Number.MAX_VALUE, Number.MAX_SAFE_INTEGER]) {
+      const ctx = new Context()
+      expect(() => new NovelRepositoryRemote(ctx, { responseMaxBytes }))
+        .toThrow(/integer between 1 and/)
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('fails closed when browser responses exceed their bound or retained title metadata is corrupt', async () => {
+    const ctx = new Context()
+    const root = { targetKey: 'root', displayPath: '/story' } as FsTarget
+    const manifest = { targetKey: 'manifest', displayPath: '/story/novel.yaml' } as FsTarget
+    const chapters = { targetKey: 'chapters', displayPath: '/story/manuscript' } as FsTarget
+    const disposeFs = ctx.provide('fs', {
+      resolve: vi.fn<FileSystem['resolve']>().mockResolvedValue(root),
+    } as unknown as FileSystem)
+    const repositoryFiber = ctx.plugin(StubNovelRepository)
+    await repositoryFiber
+    const repository = ctx.novelRepository as StubNovelRepository
+    repository.project = {
+      schema: 1,
+      id: ProjectId('project-1'),
+      title: 'Story',
+      root,
+      manifest,
+      contentRoots: { manuscript: chapters },
+    }
+    repository.assets = [{
+      asset: {
+        id: AssetId('chapter-1'),
+        projectId: ProjectId('project-1'),
+        type: 'manuscript.chapter',
+        projectRelativePath: 'manuscript/chapter-1.md',
+      },
+      revisionId: RevisionId('revision-1'),
+      contentHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      title: 'A title that exceeds the tiny response budget',
+    }]
+    const remoteFiber = ctx.plugin(NovelRepositoryRemote, { responseMaxBytes: 1 })
+    await remoteFiber
+    const agent = testAgent('/story')
+    const signal = new AbortController().signal
+    await expect(ctx.novelRepositoryRemote.assets(agent, signal))
+      .rejects.toMatchObject({ code: 'NOVEL_RESPONSE_TOO_LARGE' })
+
+    repository.snapshot = {
+      asset: repository.assets[0]!.asset,
+      revisionId: RevisionId('revision-1'),
+      serializedUtf8: new Uint8Array(),
+      contentHash: repository.assets[0]!.contentHash,
+      frontmatter: { novel: [] },
+      body: 'body',
+    }
+    await expect(ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-1'), null, signal))
+      .rejects.toMatchObject({ code: 'NOVEL_HISTORY_CORRUPT' })
+
+    await remoteFiber.dispose()
+    await repositoryFiber.dispose()
+    disposeFs()
   })
 })

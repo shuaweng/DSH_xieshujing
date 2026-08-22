@@ -42,6 +42,16 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         '  manuscript: manuscript',
         '',
       ].join('\n'))
+      await writeFile(join(projectRoot, 'manuscript', 'chapter.md'), [
+        '---',
+        'novel:',
+        '  schema: 1',
+        '  id: chapter-built',
+        '  type: manuscript.chapter',
+        '  title: Built Chapter',
+        '---',
+        '白港下雨了。',
+      ].join('\n'))
 
       const urls = Object.fromEntries(Object.entries({
         agent: 'packages/core/agent/lib/index.js',
@@ -112,11 +122,27 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         await novelFiber
         const retained = client.remote.novelRepository.discover
         const response = await retained(agentId)
+        const assets = await client.remote.novelRepository.assets(agentId)
+        const chapter = await client.remote.novelRepository.asset(agentId, 'chapter-built', null)
+        if (chapter.ok !== true) {
+          throw new Error('chapter read failed: ' + JSON.stringify(chapter))
+        }
+        const selection = await client.remote.novelRepository.captureSelection(agentId, {
+          assetId: 'chapter-built',
+          revisionId: chapter.value.revisionId,
+          startUtf16: 0,
+          endUtf16: 2,
+        })
+        const saved = await client.remote.novelRepository.saveChapter(agentId, {
+          assetId: 'chapter-built',
+          baseRevisionId: chapter.value.revisionId,
+          body: '白港放晴了。',
+        })
         await novelFiber.dispose()
         const withdrawn = client.remote.novelRepository === undefined
         const retainedAfterDispose = await retained(agentId)
 
-        console.log(JSON.stringify({ response, withdrawn, retainedAfterDispose }))
+        console.log(JSON.stringify({ response, assets, chapter, selection, saved, withdrawn, retainedAfterDispose }))
         await client.fiber.dispose()
         await host.fiber.dispose()
       `
@@ -125,11 +151,19 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
       expect(result.exitCode, `stderr:\n${result.stderr}`).toBe(0)
       const output = JSON.parse(result.stdout.trim().split('\n').at(-1) ?? '{}') as {
         response: { ok: boolean; value?: { id?: string; title?: string } }
+        assets: { ok: boolean; value?: Array<{ id?: string; title?: string }> }
+        chapter: { ok: boolean; value?: { body?: string } }
+        selection: { ok: boolean; value?: { preview?: string } }
+        saved: { ok: boolean; value?: { body?: string } }
         withdrawn: boolean
         retainedAfterDispose: { ok: boolean; error?: { message?: string } }
       }
       expect(output).toMatchObject({
         response: { ok: true, value: { id: 'project-built', title: 'Built Project' } },
+        assets: { ok: true, value: [{ id: 'chapter-built', title: 'Built Chapter' }] },
+        chapter: { ok: true, value: { body: '白港下雨了。' } },
+        selection: { ok: true, value: { preview: '白港' } },
+        saved: { ok: true, value: { body: '白港放晴了。' } },
         withdrawn: true,
         retainedAfterDispose: { ok: false },
       })

@@ -30,6 +30,14 @@ Project discovery reads only the root `novel.yaml` through `ctx.fs`. The local P
 
 The supported explicit Novel Studio composition loads the slice after `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. The default `web` and `headless` compositions and `PROFILE_TEMPLATES` remain unchanged; a custom `cordis.yml` may still install the private packages directly. Opening a project is read-only: PR1 does not create `.novel`, initialize SQLite, scan asset files, start watchers, register Novel UI or model tools, or implement ChangeSets.
 
+## PR2 asset and Revision slice
+
+PR2 extends the same capability seam with the first authored asset, `manuscript.chapter`. The local Provider recursively scans only Markdown files below the declared `manuscript` root, enforces configurable depth, asset-count, and exact-byte bounds, requires strict version-one `novel` Frontmatter, rejects duplicate stable ids and mid-scan file changes, and preserves Asset identity across a path rename. Files remain authoritative for the current authored serialization.
+
+The first durable `.novel/history.sqlite` schema stores complete immutable Revision bytes and the reconciled current head. Initial observation, guarded browser saves, and external byte divergence are distinguished as `initial-scan`, `user-edit`, and `external-edit`; `agent-apply` is reserved for PR3. Unknown, unversioned, foreign, or corrupt databases fail explicitly and are never reset. The database uses a private file, WAL, foreign keys, `trusted_schema = OFF`, `synchronous = FULL`, a DSH Novel application id, and strict tables.
+
+Browser Consumers gain bounded project-scoped asset list, chapter read, body-only guarded save, and selection capture methods. A body save retains the exact parsed Frontmatter prefix, validates the resulting complete file, requires both the current base Revision and provider-local `FsVersion`, and records the new Revision only after filesystem publication succeeds. A SelectionRef freezes a non-empty UTF-16 range on code-point boundaries over one retained Revision; quote hash, bounded context, and preview are derived from that immutable body. PR2 adds no prompt context, model tool, ChangeSet persistence, or workbench layout.
+
 ## Scope and invariants
 
 - `ProjectId`, `AssetId`, `RevisionId`, `SelectionRefId`, and `ChangeSetId` are opaque branded ids. A path, title, order, or database row number never becomes identity.
