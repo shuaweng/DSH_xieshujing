@@ -8,18 +8,22 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import {
+  ChangeSetId,
   NovelRepositoryError,
   type AssetId,
   type AssetSnapshot,
+  type ChangeSet,
   type NovelProjectSnapshot,
   type RevisionId,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
+import { formatNovelReferenceMention } from '@deepseek-ai/dsh-experimental-novel-context'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
 import type {
   CaptureNovelSelectionRequest,
   NovelAssetDescriptor,
+  NovelChangeSetDescriptor,
   NovelChapterDocument,
   NovelProjectDescriptor,
   NovelSelectionDescriptor,
@@ -29,6 +33,7 @@ import type {
 export type {
   CaptureNovelSelectionRequest,
   NovelAssetDescriptor,
+  NovelChangeSetDescriptor,
   NovelChapterDocument,
   NovelProjectDescriptor,
   NovelSelectionDescriptor,
@@ -174,8 +179,73 @@ export class NovelRepositoryRemote extends TypertRemoteService {
   ): Promise<NovelSelectionDescriptor> {
     const project = await this.requireProject(agent, signal)
     const selection = await this.ctx.novelRepository.captureSelection(project, request, signal)
-    assertResponseBytes(selection, this.responseMaxBytes, 'selection reference')
-    return selection
+    const result = {
+      ...selection,
+      mention: formatNovelReferenceMention({
+        projectId: selection.projectId,
+        assetId: selection.assetId,
+        revisionId: selection.revisionId,
+        selector: selection.selector,
+        label: selection.preview === undefined ? selection.assetId : selection.preview,
+      }),
+    }
+    assertResponseBytes(result, this.responseMaxBytes, 'selection reference')
+    return result
+  }
+
+  /**
+   * Read one durable ChangeSet for browser review.
+   * @param agent - addressed Agent whose Session selects the project root.
+   * @param changeSetId - durable ChangeSet identity to review.
+   * @param signal - caller cancellation.
+   * @returns a browser-safe ChangeSet descriptor.
+   */
+  @Remote('changeSet')
+  async changeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor> {
+    const project = await this.requireProject(agent, signal)
+    const result = changeSetDescriptor(await this.ctx.novelRepository.readChangeSet(project, changeSetId, signal))
+    assertResponseBytes(result, this.responseMaxBytes, 'ChangeSet')
+    return result
+  }
+
+  /**
+   * Explicitly accept one Session-owned ChangeSet.
+   * @param agent - addressed Agent authorizing publication through its Session identity.
+   * @param changeSetId - durable proposal identity to apply.
+   * @param signal - caller cancellation before publication begins.
+   * @returns the browser-safe terminal or applying result.
+   */
+  @Remote('applyChangeSet')
+  async applyChangeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor> {
+    const project = await this.requireProject(agent, signal)
+    const result = changeSetDescriptor(await this.ctx.novelRepository.applyChangeSet(
+      project,
+      changeSetId,
+      { sessionId: agent.id },
+      signal,
+    ))
+    assertResponseBytes(result, this.responseMaxBytes, 'ChangeSet')
+    return result
+  }
+
+  /**
+   * Explicitly reject one Session-owned ChangeSet.
+   * @param agent - addressed Agent authorizing rejection through its Session identity.
+   * @param changeSetId - durable proposal identity to reject.
+   * @param signal - caller cancellation before durable rejection.
+   * @returns the browser-safe rejected or already terminal result.
+   */
+  @Remote('rejectChangeSet')
+  async rejectChangeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor> {
+    const project = await this.requireProject(agent, signal)
+    const result = changeSetDescriptor(await this.ctx.novelRepository.rejectChangeSet(
+      project,
+      changeSetId,
+      { sessionId: agent.id },
+      signal,
+    ))
+    assertResponseBytes(result, this.responseMaxBytes, 'ChangeSet')
+    return result
   }
 
   private async projectFor(agent: Agent, signal: AbortSignal): Promise<NovelProjectSnapshot | undefined> {
@@ -235,6 +305,29 @@ function chapterDocument(snapshot: AssetSnapshot): NovelChapterDocument {
     contentHash: snapshot.contentHash,
     title,
     body: snapshot.body,
+  }
+}
+
+function changeSetDescriptor(value: ChangeSet): NovelChangeSetDescriptor {
+  const [operation] = value.operations
+  if (operation === undefined || value.operations.length !== 1) {
+    throw new NovelRepositoryError('novel repository remote: ChangeSet operation is invalid', 'NOVEL_HISTORY_CORRUPT')
+  }
+  return {
+    id: value.id,
+    projectId: value.projectId,
+    assetId: value.assetId,
+    baseRevisionId: value.baseRevisionId,
+    summary: value.summary,
+    status: value.status,
+    ...(value.resultRevisionId === undefined ? {} : { resultRevisionId: value.resultRevisionId }),
+    operation: {
+      kind: 'replace-text',
+      startUtf16: operation.selector.startUtf16,
+      endUtf16: operation.selector.endUtf16,
+      quoteHash: operation.selector.quoteHash,
+      replacement: operation.replacement,
+    },
   }
 }
 

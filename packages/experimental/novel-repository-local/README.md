@@ -15,6 +15,9 @@ This experimental package provides the local-filesystem implementation of `ctx.n
 - The `manuscript` tree is scanned within configurable depth, count, and byte bounds. Markdown chapters require strict YAML Frontmatter with `novel.schema: 1`, a stable `novel.id`, `novel.type: manuscript.chapter`, and a title. Duplicate ids and files that change during scanning fail closed.
 - Exact UTF-8 file bytes are hashed and stored as immutable Revision snapshots in a private SQLite database. Renaming a file preserves Asset identity and the current Revision; an external byte change creates an `external-edit` Revision. Unknown or corrupt history schemas are refused and never reset.
 - Author saves replace only the parsed body, retain the exact Frontmatter prefix, and use the current `FsVersion` plus base Revision to reject stale publication. Selection references use UTF-16 body offsets, reject surrogate-pair splits, and bind quote hashes to retained Revisions.
+- History schema version two stores ChangeSets and an apply journal. Proposal is file-read-only; apply requires the proposing Session, an exact current base Revision, and one validated `replace-text` operation; reject is also Session-owned and terminal.
+- Apply records exact before/after bytes and hashes as `applying` before guarded filesystem publication, then records the `agent-apply` Revision and terminal state. On project reopen, an after-hash finalizes, a before-hash retries the authorized write, and any third hash marks the ChangeSet `conflicted` without overwriting it.
+- Version-one history databases migrate to version two in place. Unsupported newer or corrupt databases still fail explicitly and are never reset.
 
 ## Model Experience
 
@@ -37,4 +40,5 @@ The provider does not change message ordering or reusable KV-cache prefixes.
 - **Single Host writer** — writes are serialized within one provider process; file watching, cross-process locking, and collaborative editing are deferred.
 - **Explicit reconciliation only** — current files are reconciled on list/read/save boundaries; there is no watcher or automatic repair.
 - **Full snapshots** — every Revision stores complete bytes. Retention, compaction, and export policy are deferred.
-- **No ChangeSet apply yet** — durable proposal, crash recovery, model tools, and workbench review arrive in the next slice.
+- **Single-asset recovery** — multi-asset transactions, automatic rebase, fuzzy relocation, and three-way merge are deferred.
+- **No cross-process lock** — the guarded `FsVersion` prevents one stale publication, but a second Host process is outside the supported writer model.

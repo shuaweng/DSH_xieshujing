@@ -4154,6 +4154,37 @@ importers:
         specifier: workspace:^
         version: link:../../subagent/subagent-spawn-in-process
 
+  packages/experimental/novel-context:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-experimental-novel-repository':
+        specifier: workspace:^
+        version: link:../novel-repository
+      '@deepseek-ai/dsh-fs':
+        specifier: workspace:^
+        version: link:../../fs/fs
+      '@deepseek-ai/dsh-fs-local':
+        specifier: workspace:^
+        version: link:../../fs/fs-local
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+
   packages/experimental/novel-repository:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -4236,6 +4267,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:^
         version: link:../../util/brand
+      '@deepseek-ai/dsh-experimental-novel-context':
+        specifier: workspace:^
+        version: link:../novel-context
       '@deepseek-ai/dsh-experimental-novel-repository':
         specifier: workspace:^
         version: link:../novel-repository
@@ -4251,6 +4285,9 @@ importers:
 
   packages/experimental/novel-studio:
     dependencies:
+      '@deepseek-ai/dsh-experimental-novel-context':
+        specifier: workspace:^
+        version: link:../novel-context
       '@deepseek-ai/dsh-experimental-novel-repository':
         specifier: workspace:^
         version: link:../novel-repository
@@ -4263,6 +4300,15 @@ importers:
       '@deepseek-ai/dsh-experimental-novel-repository-remote':
         specifier: workspace:^
         version: link:../novel-repository-remote
+      '@deepseek-ai/dsh-experimental-novel-workbench':
+        specifier: workspace:^
+        version: link:../novel-workbench
+      '@deepseek-ai/dsh-experimental-tool-novel':
+        specifier: workspace:^
+        version: link:../tool-novel
+      '@deepseek-ai/dsh-persona':
+        specifier: workspace:^
+        version: link:../../preset/persona
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -4309,6 +4355,54 @@ importers:
       js-yaml:
         specifier: ^4.2.0
         version: 4.2.0
+
+  packages/experimental/novel-workbench:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:^
+        version: link:../../client/locale
+      '@deepseek-ai/dsh-client-runtime':
+        specifier: workspace:^
+        version: link:../../client/runtime
+      '@deepseek-ai/dsh-client-ui-conversation':
+        specifier: workspace:^
+        version: link:../../client/ui-conversation
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: workspace:^
+        version: link:../../client/ui-layout
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:^
+        version: link:../../client/ui-slots
+      '@deepseek-ai/dsh-client-ui-theme':
+        specifier: workspace:^
+        version: link:../../client/ui-theme
+      '@deepseek-ai/dsh-client-ui-tool':
+        specifier: workspace:^
+        version: link:../../client/ui-tool
+      '@deepseek-ai/dsh-experimental-novel-repository':
+        specifier: workspace:^
+        version: link:../novel-repository
+      '@deepseek-ai/dsh-experimental-novel-repository-client':
+        specifier: workspace:^
+        version: link:../novel-repository-client
+      '@deepseek-ai/dsh-experimental-novel-repository-remote':
+        specifier: workspace:^
+        version: link:../novel-repository-remote
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-typert-protocol':
+        specifier: workspace:^
+        version: link:../../typert/protocol
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
 
   packages/experimental/tool-agent-team:
     dependencies:
@@ -4358,6 +4452,39 @@ importers:
       '@deepseek-ai/dsh-tool-subagent-control':
         specifier: workspace:^
         version: link:../../subagent/tool-subagent-control
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+
+  packages/experimental/tool-novel:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-experimental-novel-context':
+        specifier: workspace:^
+        version: link:../novel-context
+      '@deepseek-ai/dsh-experimental-novel-repository':
+        specifier: workspace:^
+        version: link:../novel-repository
+      '@deepseek-ai/dsh-fs-local':
+        specifier: workspace:^
+        version: link:../../fs/fs-local
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
       '@deepseek-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools

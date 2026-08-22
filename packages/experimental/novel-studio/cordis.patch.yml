@@ -1,12 +1,32 @@
-# Novel Studio is an explicit third Profile layer after dsh-base and dsh-web-app.
-# This foundation slice mounts only the project repository; later slices own
-# asset tools, mutation Remotes, and the Profile-local layout replacement.
+# Explicit Profile layer: default Web remains untouched; Novel Studio owns one
+# root occupant, a safe proposal-only preset, and the Novel domain services.
+- id: ui-layout
+  disabled: true
+
+- id: agent-presets
+  inject: [novelStudioPaths]
+  config:
+    default: novel-workbench
+    roots:
+      - path: !!js ctx.novelStudioPaths.presetRoot
+        trust: system
+    includeUserRoot: true
+
 - insert:
+    - id: novel-studio-paths
+      name: '@deepseek-ai/dsh-experimental-novel-studio'
+
     - id: novel-repository-local
       name: '@deepseek-ai/dsh-experimental-novel-repository-local'
+
+    - id: novel-context
+      name: '@deepseek-ai/dsh-experimental-novel-context'
 
     - id: novel-repository-remote
       name: '@deepseek-ai/dsh-experimental-novel-repository-remote'
 
     - id: novel-repository-client
       name: '@deepseek-ai/dsh-experimental-novel-repository-client'
+
+    - id: novel-workbench
+      name: '@deepseek-ai/dsh-experimental-novel-workbench'

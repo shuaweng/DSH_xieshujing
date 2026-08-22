@@ -18,7 +18,9 @@ Add a private experimental `novel-studio` capability and Profile around a new `c
 
 Current author content remains authoritative in the project files. `.novel/history.sqlite` is authoritative for immutable Revision snapshots, ChangeSets, and the apply journal. The first catalog and search projection is rebuilt in memory from project files and history; if a persistent search index later lands, it uses a separate disposable `.novel/index.sqlite`, never the history database. DSH Session history remains authoritative for the exact frozen context seen by a model. Browser-only layout, tab, cursor, and draft-view state remain client state.
 
-The existing `novel` Agent Preset remains a session-scoped writing capability and a source of persona and skill behavior. It does not own the workbench domain. A later safe Novel Preset consumes Novel tools and omits raw mutation tools for formal asset roots; research and development Presets may retain generic filesystem and shell tools without gaining authority to commit Novel ChangeSets.
+The existing `novel` Agent Preset remains a session-scoped writing capability and a source of persona and skill behavior. It does not own the workbench domain. The MVP adds a separate package-owned `novel-workbench` Preset that consumes Novel tools and omits raw mutation tools for formal asset roots; research and development Presets may retain generic filesystem and shell tools without gaining authority to commit Novel ChangeSets.
+
+PR1, PR2, and the PR3 MVP described below are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
 
 This proposal extends the existing Profile, filesystem, Session-history, Remote, and client-presentation decisions. It supersedes none of them.
 
@@ -37,6 +39,18 @@ PR2 extends the same capability seam with the first authored asset, `manuscript.
 The first durable `.novel/history.sqlite` schema stores complete immutable Revision bytes and the reconciled current head. Initial observation, guarded browser saves, and external byte divergence are distinguished as `initial-scan`, `user-edit`, and `external-edit`; `agent-apply` is reserved for PR3. Unknown, unversioned, foreign, or corrupt databases fail explicitly and are never reset. The database uses a private file, WAL, foreign keys, `trusted_schema = OFF`, `synchronous = FULL`, a DSH Novel application id, and strict tables.
 
 Browser Consumers gain bounded project-scoped asset list, chapter read, body-only guarded save, and selection capture methods. A body save retains the exact parsed Frontmatter prefix, validates the resulting complete file, requires both the current base Revision and provider-local `FsVersion`, and records the new Revision only after filesystem publication succeeds. A SelectionRef freezes a non-empty UTF-16 range on code-point boundaries over one retained Revision; quote hash, bounded context, and preview are derived from that immutable body. PR2 adds no prompt context, model tool, ChangeSet persistence, or workbench layout.
+
+## PR3 Agent-native MVP slice
+
+PR3 adds history schema version two with durable single-asset ChangeSets and an apply journal. The model-facing `novel_propose_changes` tool can create one exact-Revision `replace-text` proposal but cannot apply it. Apply and reject are browser-only Remote decisions authorized by the addressed Session. Apply writes the journal before guarded filesystem publication, records an `agent-apply` Revision afterward, and recovers `applying` rows by comparing exact before, after, or divergent hashes on project reopen.
+
+The first SelectionRef strategy remains Revision-bound UTF-16 body offsets with a quote hash, optional bounded prefix and suffix, and no persistent block ids. The Client implements the Context Commit Barrier by saving a dirty chapter through the Repository before capturing a selection. It places a readable Markdown mention containing a canonical `dsh-novel:` URI in the ordinary Composer.
+
+`NovelContextResolver` runs at `agent/pre-step`, parses canonical mentions from direct user messages, resolves only retained exact Revisions, and returns the readable direct message followed by one immutable `user/message` with source kind `novel-context`. That message contains safely serialized untrusted authored material and is appended by the ordinary agent loop, so replay does not reread mutable files. One Session is bound to the first referenced Project.
+
+The explicit Novel Studio overlay disables the ordinary `ui-layout` root occupant only in that composition. `novel-workbench` becomes the sole root occupant and declares the native DSH sidebar, conversation, details, overlay, chapter explorer, and manuscript canvas slots. The shipped `web` and `headless` compositions do not contain these packages. The browser MVP renders one chapter editor, a visible Context Tray, and a durable ChangeSet Diff card with Accept and Reject actions.
+
+PR3 does not add a file watcher or browser invalidation stream. Repository calls reconcile external files, and an accepted ChangeSet triggers an explicit workbench refetch. It also defers block ids, autosave cadence, search, additional asset types, multi-asset changes, automatic merge, a shipped CLI Profile template, and multi-Agent orchestration.
 
 ## Scope and invariants
 

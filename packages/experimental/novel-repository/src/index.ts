@@ -12,7 +12,11 @@ import type {
   AssetSnapshot,
   AssetSummary,
   CaptureSelectionRequest,
+  ChangeSet,
+  ChangeSetAuthorization,
+  ChangeSetId,
   NovelProjectSnapshot,
+  ProposeChangeSetRequest,
   RevisionId,
   SaveChapterBodyRequest,
   SelectionRef,
@@ -33,11 +37,13 @@ export type {
   AssetSummary,
   CaptureSelectionRequest,
   ChangeSet,
+  ChangeSetAuthorization,
   ContentHash,
   NovelAssetType,
   NovelOperation,
   NovelProjectSnapshot,
   NovelRepositoryErrorCode,
+  ProposeChangeSetRequest,
   ReplaceTextOperation,
   RevisionOrigin,
   SaveChapterBodyRequest,
@@ -116,6 +122,62 @@ export abstract class NovelRepository extends Service {
     request: CaptureSelectionRequest,
     signal?: AbortSignal,
   ): Promise<SelectionRef>
+
+  /**
+   * Retain one validated proposal without publishing it to authored files.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - exact base Revision, typed operation, actor, and review summary.
+   * @param signal - optional cancellation before durable proposal retention.
+   * @returns the durable proposal-only ChangeSet.
+   */
+  abstract proposeChangeSet(
+    project: NovelProjectSnapshot,
+    request: ProposeChangeSetRequest,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet>
+
+  /**
+   * Read one durable proposal or terminal ChangeSet.
+   * @param project - validated Project declaration returned by this provider.
+   * @param changeSetId - durable ChangeSet identity within the Project.
+   * @param signal - optional cancellation for history access.
+   * @returns the validated durable ChangeSet.
+   */
+  abstract readChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet>
+
+  /**
+   * Apply one authorized proposal through the crash-recoverable publication protocol.
+   * @param project - validated Project declaration returned by this provider.
+   * @param changeSetId - durable proposal identity within the Project.
+   * @param authorization - explicit Session identity accepting the proposal.
+   * @param signal - optional cancellation before authored-file publication begins.
+   * @returns the applied, conflicted, or already terminal ChangeSet.
+   */
+  abstract applyChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    authorization: ChangeSetAuthorization,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet>
+
+  /**
+   * Reject one authorized proposal without changing authored files.
+   * @param project - validated Project declaration returned by this provider.
+   * @param changeSetId - durable proposal identity within the Project.
+   * @param authorization - explicit Session identity rejecting the proposal.
+   * @param signal - optional cancellation before durable rejection.
+   * @returns the rejected or already terminal ChangeSet.
+   */
+  abstract rejectChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    authorization: ChangeSetAuthorization,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet>
 }
 
 export default NovelRepository

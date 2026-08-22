@@ -1,0 +1,23 @@
+/** Stable Novel context failures. */
+
+/** Failure categories callers can present without parsing messages. */
+export type NovelContextErrorCode =
+  | 'NOVEL_CONTEXT_INVALID_CONFIG'
+  | 'NOVEL_CONTEXT_INVALID_REFERENCE'
+  | 'NOVEL_CONTEXT_PROJECT_NOT_FOUND'
+  | 'NOVEL_CONTEXT_PROJECT_MISMATCH'
+  | 'NOVEL_CONTEXT_SESSION_BOUND'
+  | 'NOVEL_CONTEXT_TOO_MANY'
+  | 'NOVEL_CONTEXT_BUDGET_EXCEEDED'
+
+/** One preparation failure raised before any model request begins. */
+export class NovelContextError extends Error {
+  constructor(
+    message: string,
+    readonly code: NovelContextErrorCode,
+    options?: ErrorOptions,
+  ) {
+    super(message, options)
+    this.name = 'NovelContextError'
+  }
+}

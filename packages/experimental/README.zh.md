@@ -7,11 +7,14 @@
 | 包 | 职责 | ctx key |
 |---|---|---|
 | `agent-team/` | 隐式 root Agent Teams roster、持久 peer mailbox、共享任务 DAG 与运行时协调 | `ctx.agentTeams` |
-| `novel-repository/` | 与提供方无关的 Novel Project 发现 seam 和公共 Host 词汇 | `ctx.novelRepository` |
-| `novel-repository-local/` | 有界本地 `novel.yaml` 校验与规范内容根目录解析 | — |
-| `novel-repository-remote/` | 按 Agent 作用域寻址的只读项目发现 Host Remote | `ctx.novelRepositoryRemote` |
+| `novel-context/` | 精确 Revision 引用、规范 Composer mention 与持久模型可见 Novel 上下文 | `ctx.novelContextResolver` |
+| `novel-repository/` | 与提供方无关的 Novel Project、Asset、Revision、Selection 与 ChangeSet seam | `ctx.novelRepository` |
+| `novel-repository-local/` | 文件权威资产、不可变 SQLite 历史与可恢复 ChangeSet 应用 | — |
+| `novel-repository-remote/` | 按 Agent 作用域寻址的浏览器读取、保护保存、选区与 ChangeSet 审阅 | `ctx.novelRepositoryRemote` |
 | `novel-repository-client/` | 生成的 Novel Repository Remote 的浏览器挂载 | — |
-| `novel-studio/` | 在 Web App 之后挂载 Novel Project 发现能力的显式私有 Profile bundle | — |
+| `novel-studio/` | 显式私有 Profile overlay 与安全 Novel Workbench Preset | `ctx.novelStudioPaths` |
+| `novel-workbench/` | Profile 所属正文浏览器、编辑器、Context Tray、对话与 Diff 审阅 | `ctx.layout` |
+| `tool-novel/` | 面向正式 Novel 资产的精确读取与仅提案模型工具 | — |
 | `tool-agent-team/` | 按 Agent 作用域提供的 Agent Teams 模型工具与协作指引 | — |
 
 [子树规则](AGENTS.md)规定依赖隔离、发布排除与 promotion。

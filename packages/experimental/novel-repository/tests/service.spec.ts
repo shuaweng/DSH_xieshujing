@@ -11,7 +11,10 @@ import NovelRepository, {
   type AssetSnapshot,
   type AssetSummary,
   type CaptureSelectionRequest,
+  type ChangeSet,
+  type ChangeSetAuthorization,
   type NovelProjectSnapshot,
+  type ProposeChangeSetRequest,
   type SaveChapterBodyRequest,
   type SelectionRef,
 } from '../src/index.ts'
@@ -40,6 +43,33 @@ class StubNovelRepository extends NovelRepository {
     _project: NovelProjectSnapshot,
     _request: CaptureSelectionRequest,
   ): Promise<SelectionRef> {
+    return Promise.reject(new Error('not configured'))
+  }
+
+  override proposeChangeSet(
+    _project: NovelProjectSnapshot,
+    _request: ProposeChangeSetRequest,
+  ): Promise<ChangeSet> {
+    return Promise.reject(new Error('not configured'))
+  }
+
+  override readChangeSet(): Promise<ChangeSet> {
+    return Promise.reject(new Error('not configured'))
+  }
+
+  override applyChangeSet(
+    _project: NovelProjectSnapshot,
+    _changeSetId: ReturnType<typeof ChangeSetId>,
+    _authorization: ChangeSetAuthorization,
+  ): Promise<ChangeSet> {
+    return Promise.reject(new Error('not configured'))
+  }
+
+  override rejectChangeSet(
+    _project: NovelProjectSnapshot,
+    _changeSetId: ReturnType<typeof ChangeSetId>,
+    _authorization: ChangeSetAuthorization,
+  ): Promise<ChangeSet> {
     return Promise.reject(new Error('not configured'))
   }
 }

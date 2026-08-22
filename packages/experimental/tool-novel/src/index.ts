@@ -1,0 +1,154 @@
+/** Safe Novel tools: exact reads and proposal-only authored mutations. */
+
+import type { Context } from '@deepseek-ai/cordis'
+import { defineTool } from '@deepseek-ai/dsh-tools'
+import {
+  AssetId,
+  ProjectId,
+  RevisionId,
+  type ContentHash,
+} from '@deepseek-ai/dsh-experimental-novel-repository'
+import {
+  decodeNovelReferenceUri,
+  type NovelReferenceInput,
+} from '@deepseek-ai/dsh-experimental-novel-context'
+
+export const name = 'tool-novel'
+export const inject = ['tools', 'systemPrompt', 'novelContextResolver', 'novelRepository']
+
+const PROMPT = `## Novel workbench tools
+
+Novel Assets are versioned authored material. Use \`novel_get\` for exact retained
+Revisions. Use \`novel_propose_changes\` for正文修改；它只创建供用户审阅的
+ChangeSet，绝不代表文件已经修改。不要声称提案已经应用。`
+
+/** Register exact-read and proposal-only Novel tools. */
+export function apply(ctx: Context): void {
+  ctx.systemPrompt.section({ name: 'tool:novel', order: 111, text: PROMPT })
+
+  ctx.tools.register(defineTool({
+    name: 'novel_get',
+    description: 'Read exact retained Novel Asset references. Pass canonical dsh-novel: URIs from the current context.',
+    parameters: {
+      references: {
+        type: 'array',
+        required: true,
+        items: { type: 'string' },
+        description: 'Canonical dsh-novel: URIs to read.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          assets: {
+            type: 'array',
+            required: true,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                projectId: { type: 'string', required: true },
+                assetId: { type: 'string', required: true },
+                revisionId: { type: 'string', required: true },
+                path: { type: 'string', required: true },
+                text: { type: 'string', required: true },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value.assets) }],
+    },
+    async execute(args, exec) {
+      if (!exec.agent) throw new Error('novel_get requires an owning agent Session')
+      if (args.references.length === 0) throw new Error('novel_get requires at least one reference')
+      const references = args.references.map(value => decodeNovelReferenceUri(value))
+      const resolved = await ctx.novelContextResolver.resolveReferences(exec.agent, references, exec.signal)
+      return {
+        assets: resolved.references.map(reference => ({
+          projectId: reference.input.projectId,
+          assetId: reference.input.assetId,
+          revisionId: reference.input.revisionId,
+          path: reference.snapshot.asset.projectRelativePath,
+          text: reference.text,
+        })),
+      }
+    },
+    presentCall: args => ({ card: 'generic', title: '读取小说资产', kind: 'read', rawInput: args.references }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'novel_propose_changes',
+    description: 'Create one reviewable replace-text ChangeSet against an exact retained chapter Revision. This never applies the change.',
+    parameters: {
+      project_id: { type: 'string', required: true },
+      asset_id: { type: 'string', required: true },
+      base_revision_id: { type: 'string', required: true },
+      start_utf16: { type: 'integer', required: true },
+      end_utf16: { type: 'integer', required: true },
+      quote_hash: { type: 'string', required: true },
+      replacement: { type: 'string', required: true },
+      summary: { type: 'string', required: true },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          changeSetId: { type: 'string', required: true },
+          projectId: { type: 'string', required: true },
+          assetId: { type: 'string', required: true },
+          baseRevisionId: { type: 'string', required: true },
+          summary: { type: 'string', required: true },
+          status: { type: 'string', required: true, enum: ['proposed'] },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `已创建修改提案 ${value.changeSetId}：${value.summary}。等待用户审阅，尚未修改正文。`,
+      }],
+      presentationMeta: (_args, value) => ({
+        kind: 'novel-change-set',
+        changeSetId: value.changeSetId,
+        projectId: value.projectId,
+        assetId: value.assetId,
+        baseRevisionId: value.baseRevisionId,
+        summary: value.summary,
+      }),
+    },
+    async execute(args, exec) {
+      if (!exec.agent) throw new Error('novel_propose_changes requires an owning agent Session')
+      const selector = {
+        kind: 'text-range' as const,
+        startUtf16: args.start_utf16,
+        endUtf16: args.end_utf16,
+        quoteHash: args.quote_hash as ContentHash,
+      }
+      const reference: NovelReferenceInput = {
+        projectId: ProjectId(args.project_id),
+        assetId: AssetId(args.asset_id),
+        revisionId: RevisionId(args.base_revision_id),
+        selector,
+      }
+      const resolved = await ctx.novelContextResolver.resolveReferences(exec.agent, [reference], exec.signal)
+      const changeSet = await ctx.novelRepository.proposeChangeSet(resolved.project, {
+        assetId: reference.assetId,
+        baseRevisionId: reference.revisionId,
+        operations: [{ kind: 'replace-text', selector, replacement: args.replacement }],
+        actor: { kind: 'agent', sessionId: exec.agent.id },
+        summary: args.summary,
+      }, exec.signal)
+      return {
+        changeSetId: changeSet.id,
+        projectId: changeSet.projectId,
+        assetId: changeSet.assetId,
+        baseRevisionId: changeSet.baseRevisionId,
+        summary: changeSet.summary,
+        status: 'proposed' as const,
+      }
+    },
+    presentCall: args => ({ card: 'generic', title: '提出小说修改', kind: 'edit', rawInput: args.summary }),
+  }))
+}

@@ -5,12 +5,14 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as yaml from 'js-yaml'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
+import { Context } from '@deepseek-ai/cordis'
 import {
   composeEntries,
   initProfile,
   loadProfile,
   PROFILE_TEMPLATES,
 } from '@deepseek-ai/dsh-app-boot'
+import NovelStudioPaths from '../src/index.ts'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 const installAnchor = resolve(packageRoot, 'package.json')
@@ -40,6 +42,15 @@ function profileRows(name: string, bundles: readonly string[]): ReturnType<typeo
 }
 
 describe('experimental Novel Studio bundle', () => {
+  it('provides the package-owned preset root as a scoped runtime service', async () => {
+    const ctx = new Context()
+    const fiber = ctx.plugin(NovelStudioPaths)
+    await fiber.await()
+    expect(ctx.novelStudioPaths.presetRoot).toBe(resolve(packageRoot, 'presets'))
+    await fiber.dispose()
+    expect(ctx.get('novelStudioPaths')).toBeUndefined()
+  })
+
   it('declares one parseable Profile patch and carries its complete provider closure', () => {
     const manifest = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
@@ -49,27 +60,33 @@ describe('experimental Novel Studio bundle', () => {
     const parsed = yaml.load(
       readFileSync(resolve(packageRoot, manifest.dsh!.bundle!.patch!), 'utf8'),
       { schema: entryListSchema },
-    ) as { insert?: { id?: string; name?: string }[] }[]
-    expect(parsed).toEqual([{
-      insert: [
-        {
-          id: 'novel-repository-local',
-          name: '@deepseek-ai/dsh-experimental-novel-repository-local',
-        },
-        {
-          id: 'novel-repository-remote',
-          name: '@deepseek-ai/dsh-experimental-novel-repository-remote',
-        },
-        {
-          id: 'novel-repository-client',
-          name: '@deepseek-ai/dsh-experimental-novel-repository-client',
-        },
-      ],
-    }])
+    ) as Array<{
+      id?: string
+      disabled?: boolean
+      inject?: string[]
+      config?: { default?: string; roots?: Array<{ trust?: string }> }
+      insert?: { id?: string; name?: string }[]
+    }>
+    expect(parsed.find(row => row.id === 'ui-layout')).toMatchObject({ disabled: true })
+    expect(parsed.find(row => row.id === 'agent-presets')).toMatchObject({
+      inject: ['novelStudioPaths'],
+      config: { default: 'novel-workbench', roots: [{ trust: 'system' }] },
+    })
+    expect(parsed.flatMap(row => row.insert ?? [])).toEqual([
+      { id: 'novel-studio-paths', name: '@deepseek-ai/dsh-experimental-novel-studio' },
+      { id: 'novel-repository-local', name: '@deepseek-ai/dsh-experimental-novel-repository-local' },
+      { id: 'novel-context', name: '@deepseek-ai/dsh-experimental-novel-context' },
+      { id: 'novel-repository-remote', name: '@deepseek-ai/dsh-experimental-novel-repository-remote' },
+      { id: 'novel-repository-client', name: '@deepseek-ai/dsh-experimental-novel-repository-client' },
+      { id: 'novel-workbench', name: '@deepseek-ai/dsh-experimental-novel-workbench' },
+    ])
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-context')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository-client')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository-local')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository-remote')
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-workbench')
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-tool-novel')
   })
 
   it('adds Novel services only to the explicit base + web-app + Novel composition', () => {
@@ -84,15 +101,23 @@ describe('experimental Novel Studio bundle', () => {
     expect(web.some(row => row.id === 'novel-repository-local')).toBe(false)
     expect(web.some(row => row.id === 'novel-repository-remote')).toBe(false)
     expect(web.some(row => row.id === 'novel-repository-client')).toBe(false)
+    expect(web.some(row => row.id === 'novel-workbench')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-local')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-remote')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-client')).toBe(false)
+    expect(headless.some(row => row.id === 'novel-workbench')).toBe(false)
     expect(novel.filter(row => row.id === 'novel-repository-local')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-repository-remote')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-repository-client')).toHaveLength(1)
+    expect(novel.filter(row => row.id === 'novel-context')).toHaveLength(1)
+    expect(novel.filter(row => row.id === 'novel-workbench')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'ui-layout')).toHaveLength(1)
-    expect(novel.find(row => row.id === 'ui-layout'))
-      .toEqual(web.find(row => row.id === 'ui-layout'))
+    expect(novel.find(row => row.id === 'ui-layout')).toMatchObject({ disabled: true })
+    expect(web.find(row => row.id === 'ui-layout')).not.toMatchObject({ disabled: true })
+    expect(novel.find(row => row.id === 'agent-presets')).toMatchObject({
+      inject: expect.arrayContaining(['novelStudioPaths']),
+      config: expect.objectContaining({ default: 'novel-workbench' }),
+    })
     expect(PROFILE_TEMPLATES).not.toHaveProperty('novel-studio')
   })
 })

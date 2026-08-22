@@ -1,0 +1,62 @@
+- main:
+  - complementary "DeepSeek Harness":
+    - button "New session"
+    - button "Collapse sidebar":
+      - img
+    - button "New session":
+      - img
+      - text: New Session
+    - button "Search sessions" [expanded]:
+      - img
+    - textbox "Search sessions...": 把开头改得更克制
+    - button "Clear search":
+      - img
+    - tree "Search results":
+      - treeitem "{{workspace}} {{workspace}} 把开头改得更克制。" [selected]
+    - button "Settings":
+      - img
+      - text: Settings
+  - complementary "Manuscript":
+    - text: "N"
+    - strong: Novel Workbench
+    - text: Manuscript
+    - navigation:
+      - button "第一章 manuscript/chapter-1.md"
+  - text: manuscript/chapter-1.md
+  - heading "第一章" [level=1]
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Reference selection to Agent" [disabled]
+  - textbox "第一章 · Chapter manuscript": 她只看着窗外。雨还在下。
+  - region "Current DSH context":
+    - strong: Current DSH context
+    - text: 第一章 · 0–7 · 她只看着窗外。 It will be frozen into the Session Log when sent
+  - complementary "Agent conversation":
+    - navigation "Session hierarchy":
+      - button "{{workspace}}" [disabled]
+    - img
+    - text: 小说工作台
+    - button "Session log":
+      - text: Session log
+      - img
+    - tablist:
+      - tab "Chat" [selected]
+      - tab "Trajectory"
+    - text: 把开头改得更克制。 {{clock}}
+    - button "Copy":
+      - img
+    - article:
+      - strong: Manuscript change proposal
+      - text: 以动作替代直接解释
+      - deletion: 她
+      - insertion: 她沉默片刻
+      - paragraph: Applied
+    - textbox "Message the agent": "@[她只看着窗外。](dsh-novel:{{reference}})"
+    - button "Commands":
+      - img
+    - 'button "Access mode, current: Workspace Write"'
+    - button "Select model, current DeepSeek-V4-Flash":
+      - text: DeepSeek-V4-Flash
+      - img
+    - button "Send message"
+    - text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}

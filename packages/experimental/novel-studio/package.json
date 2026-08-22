@@ -28,6 +28,7 @@
     "lib/index.js",
     "lib/invariant.js",
     "cordis.patch.yml",
+    "presets/**/*",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
@@ -38,9 +39,13 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-experimental-novel-repository": "workspace:^",
+    "@deepseek-ai/dsh-experimental-novel-context": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-repository-client": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-repository-local": "workspace:^",
-    "@deepseek-ai/dsh-experimental-novel-repository-remote": "workspace:^"
+    "@deepseek-ai/dsh-experimental-novel-repository-remote": "workspace:^",
+    "@deepseek-ai/dsh-experimental-novel-workbench": "workspace:^",
+    "@deepseek-ai/dsh-experimental-tool-novel": "workspace:^",
+    "@deepseek-ai/dsh-persona": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",

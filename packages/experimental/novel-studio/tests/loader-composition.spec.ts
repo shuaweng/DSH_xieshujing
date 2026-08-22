@@ -3,6 +3,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import { AssetId, type ContentHash } from '@deepseek-ai/dsh-experimental-novel-repository'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
@@ -13,6 +14,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelRepositoryRemote from '../../novel-repository-remote/src/index.ts'
+import NovelContextResolver from '../../novel-context/src/index.ts'
 
 const remotePackageName = '@deepseek-ai/dsh-experimental-novel-repository-remote'
 
@@ -39,6 +41,16 @@ describe('Novel Studio real composition', () => {
       '  manuscript: manuscript',
       '',
     ].join('\n'))
+    await writeFile(join(root, 'manuscript', 'chapter.md'), [
+      '---',
+      'novel:',
+      '  schema: 1',
+      '  id: chapter-loader',
+      '  type: manuscript.chapter',
+      '  title: Loader Chapter',
+      '---',
+      '白港下雨。',
+    ].join('\n'))
     const configPath = join(root, 'cordis.yml')
     await writeFile(configPath, [
       '- id: fs',
@@ -47,6 +59,8 @@ describe('Novel Studio real composition', () => {
       `    cwd: ${JSON.stringify(root)}`,
       '- id: repository',
       "  name: '@deepseek-ai/dsh-experimental-novel-repository-local'",
+      '- id: novel-context',
+      "  name: '@deepseek-ai/dsh-experimental-novel-context'",
       '- id: repository-remote',
       `  name: '${remotePackageName}'`,
       '',
@@ -60,6 +74,7 @@ describe('Novel Studio real composition', () => {
     const modules = new Map<string, unknown>([
       ['@deepseek-ai/dsh-fs-local', LocalFileSystem],
       ['@deepseek-ai/dsh-experimental-novel-repository-local', LocalNovelRepository],
+      ['@deepseek-ai/dsh-experimental-novel-context', NovelContextResolver],
       [remotePackageName, NovelRepositoryRemote],
     ])
     ctx.loader.internal = {
@@ -80,7 +95,7 @@ describe('Novel Studio real composition', () => {
     const agentId = 'agent-loader' as Agent['id']
     const agent = {
       id: agentId,
-      session: { id: agentId, header: { cwd: root } },
+      session: { id: agentId, header: { cwd: root }, events: [] },
       ctx,
     } as unknown as Agent
     const disposeAgent = ctx.agents.register(agent)
@@ -95,6 +110,21 @@ describe('Novel Studio real composition', () => {
       manifestDisplayPath: join(canonicalRoot, 'novel.yaml'),
       contentRootDisplayPaths: { manuscript: join(canonicalRoot, 'manuscript') },
     })
+    const [asset] = await ctx.novelRepositoryRemote.assets(agent, abort.signal)
+    const chapter = await ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-loader'), null, abort.signal)
+    const selection = await ctx.novelRepositoryRemote.captureSelection(agent, {
+      assetId: AssetId('chapter-loader'),
+      revisionId: chapter.revisionId,
+      startUtf16: 0,
+      endUtf16: 2,
+    }, abort.signal)
+    expect(selection.mention).toContain('dsh-novel:')
+    await expect(ctx.novelContextResolver.resolveReferences(agent, [{
+      projectId: asset!.projectId,
+      assetId: asset!.id,
+      revisionId: asset!.revisionId,
+      selector: { ...selection.selector, quoteHash: selection.selector.quoteHash as ContentHash },
+    }], abort.signal)).resolves.toMatchObject({ references: [{ text: '白港' }] })
 
     disposeAgent()
     expect(ctx.agents.get(agentId)).toBeUndefined()

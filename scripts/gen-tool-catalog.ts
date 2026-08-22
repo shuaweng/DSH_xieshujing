@@ -60,6 +60,9 @@ import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
 import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
+import NovelContextResolver from '@deepseek-ai/dsh-experimental-novel-context'
+import LocalNovelRepository from '@deepseek-ai/dsh-experimental-novel-repository-local'
+import * as ToolNovel from '@deepseek-ai/dsh-experimental-tool-novel'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
@@ -560,6 +563,21 @@ const TOOL_PACKAGES: ToolPackage[] = [
     scope: ctx => catalogChildScopes.get(ctx) as Agent,
     note:
       'All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-novel',
+    dir: 'tool-novel',
+    source: 'packages/experimental/tool-novel/src/index.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.novelContextResolver', 'ctx.novelRepository', 'an owning Agent Session at execution time'],
+    writes: ['tool/call', 'durable proposal-only ChangeSet from novel_propose_changes', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(LocalFileSystem)
+      await ctx.plugin(LocalNovelRepository)
+      await ctx.plugin(NovelContextResolver)
+      await ctx.plugin(ToolNovel)
+    },
+    note:
+      'The Novel Studio Preset ships these two stable tools without generic filesystem mutation. `novel_get` resolves exact retained Revisions; `novel_propose_changes` only creates a reviewable ChangeSet and never publishes authored files.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

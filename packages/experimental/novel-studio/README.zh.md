@@ -4,34 +4,35 @@
 
 ## 用途
 
-这个实验包是用于 Host 与浏览器项目发现的显式 Novel Studio Profile 组合包。调用方可以借此把 Novel Repository Service Definition、本地提供方、只读发现 Remote 与独立 Client adapter 加入 Web 组合，同时不改变已发布的 `web` 或 `headless` Profile template。
+这个实验包是显式 Novel Studio Profile overlay。它组合文件优先 Novel Repository、持久上下文、安全模型工具、浏览器 Remote 和 Agent 原生工作台，而不修改已发布的 `web` 或 `headless` Profile template。
 
 ## 行为
 
-- 应在现有 base 与 Web App 组合包之后组合本包；其 patch 会插入 `@deepseek-ai/dsh-experimental-novel-repository-local` 提供方、`@deepseek-ai/dsh-experimental-novel-repository-remote` Host Consumer 与 `@deepseek-ai/dsh-experimental-novel-repository-client`。
-- 显式 Novel 组合可以通过 `ctx.novelRepository` 发现作者创建的有效 `novel.yaml`。Host Consumer 发布严格的 `novelRepository/discover` Remote，Client adapter 挂载其生成的 contribution；返回值仅包含浏览器安全的 descriptor。
-- 默认 `web` 与 `headless` 组合不会装载 Novel repository 提供方。
-- 本包不注册 `novel-studio` Profile template，也不替换 `ui-layout`；Novel 组合仍保留与普通 Web Profile 相同的 Web App frame。
+- 应在现有 base 与 Web App 组合包之后组合本 overlay。它插入 `novel-repository-local`、`novel-context`、`novel-repository-remote`、独立 Client adapter 和 `novel-workbench`。
+- overlay 只禁用普通 `ui-layout` entry，并把 Novel workbench 安装为唯一根占位者。原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染和 Session service 仍安装在该根声明的插槽中。
+- 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，且只包含 `novel_get` 和 `novel_propose_changes`；不包含通用 shell 或文件系统修改工具。
+- `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
+- 默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。本包仍不添加已发布的全局 Profile template；调用方通过 Cordis overlay 显式启用。
 
 ## 模型体验
 
-### Profile bundle 组合
+### Novel Workbench Preset
 
 #### 模型看到的内容
 
-本组合包向浏览器调用方暴露 `novelRepository/discover`，但返回的 descriptor 不会加入模型上下文；它不贡献提示词或面向模型的工具。
+模型看到 Novel persona、稳定的 `novel_get` 与 `novel_propose_changes` Schema，以及仅在用户发送规范工作台引用时加入的精确资料。浏览器 discovery 和布局状态永远不会进入模型上下文。
 
 #### Token 影响
 
-组合包本身不会增加提示词或工具 schema token。
+Preset 会加入 persona、简短 Novel 工具说明和两个工具 Schema。被引用创作文本会在配置的上下文预算内增加本次请求 token。
 
 #### KV Cache 影响
 
-本组合包不会改变消息顺序或可复用的 KV-cache 前缀。
+Preset 组合在页面和选区变化时保持稳定。请求局部 Novel 上下文跟在直接用户消息之后，因此不改变更早的可复用前缀。
 
 ## 已知限制与暂缓事项
 
-- **没有已发布的 Profile 入口**：调用方必须在 base 与 Web App 组合包之后显式组合本包；没有内置 `novel-studio` template 或命令。
-- **没有 Novel 工作台 UI**：本包保留普通 Web layout；Client adapter 只挂载项目发现能力，不注册专用 Novel runtime、编辑器、资产导航或 Context Tray。
-- **没有面向模型的 Novel 集成**：`novelRepository/discover` 只面向浏览器；Novel 工具、提示词上下文、Session Log 记录与 ChangeSet 呈现均已延后。
-- **没有资产或持久化层**：本组合包不实现 SQLite、索引、Revision、ChangeSet、文件监听或崩溃恢复。
+- **没有已发布 Profile 入口**：调用方必须在 base 与 Web App 之后显式组合本 overlay；没有内建 `novel-studio` CLI template 或路由切换器。
+- **MVP 资产范围**：只支持 `manuscript.chapter`、一个活动文本选区和单操作 ChangeSet。
+- **没有搜索或实时文件事件**：资产搜索、关系、文件监听和浏览器失效事件流尚未实现。
+- **没有编排**：Role Profile、Task Blackboard、`novel_delegate` 和多 Agent 工作流尚未实现。

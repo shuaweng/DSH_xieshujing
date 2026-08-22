@@ -1,13 +1,22 @@
 import { Context } from '@deepseek-ai/cordis'
 import { FsError } from '@deepseek-ai/dsh-fs'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
-import { AssetId, ProjectId, RevisionId } from '@deepseek-ai/dsh-experimental-novel-repository'
+import {
+  AssetId,
+  ChangeSetId,
+  ProjectId,
+  RevisionId,
+  type ChangeSet,
+  type ContentHash,
+} from '@deepseek-ai/dsh-experimental-novel-repository'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import LocalNovelRepository from '../src/index.ts'
+import { installApplyFault, type ApplyFaultStage } from '../src/apply-fault.ts'
 import { containsUnpairedSurrogate, parseChapter, splitsSurrogatePair } from '../src/content.ts'
 import { NOVEL_HISTORY_APPLICATION_ID, openHistory } from '../src/history.ts'
 import { parseProjectManifest } from '../src/manifest.ts'
@@ -712,6 +721,526 @@ describe('LocalNovelRepository', () => {
       endUtf16: 1,
     })
     expect(leading.selector.suffix).toBeUndefined()
+  })
+
+  it('retains proposals without touching files and requires the owning Session to decide them', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await writeFile(join(dir, 'novel.yaml'), manifest())
+    const path = join(dir, 'manuscript', 'one.md')
+    const original = chapter('chapter-one', 'One', '白港下雨了。')
+    await writeFile(path, original)
+    const ctx = await boot(dir)
+    const novel = await project(ctx)
+    const [asset] = await ctx.novelRepository.listAssets(novel)
+    const selection = await ctx.novelRepository.captureSelection(novel, {
+      assetId: asset!.asset.id,
+      revisionId: asset!.revisionId,
+      startUtf16: 2,
+      endUtf16: 4,
+    })
+    const owner = SessionId('novel-owner')
+    const proposed = await ctx.novelRepository.proposeChangeSet(novel, {
+      assetId: asset!.asset.id,
+      baseRevisionId: asset!.revisionId,
+      operations: [{ kind: 'replace-text', selector: selection.selector, replacement: '放晴' }],
+      actor: { kind: 'agent', sessionId: owner },
+      summary: '把天气改为放晴',
+    })
+
+    expect(proposed.status).toBe('proposed')
+    expect(await readFile(path, 'utf8')).toBe(original)
+    await expect(ctx.novelRepository.applyChangeSet(
+      novel,
+      proposed.id,
+      { sessionId: SessionId('another-session') },
+    )).rejects.toMatchObject({ code: 'NOVEL_CHANGESET_UNAUTHORIZED' })
+    const applied = await ctx.novelRepository.applyChangeSet(novel, proposed.id, { sessionId: owner })
+    expect(applied.status).toBe('applied')
+    expect(applied.resultRevisionId).toMatch(/^revision_/u)
+    expect((await ctx.novelRepository.readAsset(novel, asset!.asset.id)).body).toBe('白港放晴了。')
+    await expect(ctx.novelRepository.applyChangeSet(novel, proposed.id, { sessionId: owner }))
+      .resolves.toEqual(applied)
+  })
+
+  it('rejects proposals idempotently and converts stale proposals into durable conflicts', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await writeFile(join(dir, 'novel.yaml'), manifest())
+    await writeFile(join(dir, 'manuscript', 'one.md'), chapter('chapter-one', 'One', '旧正文'))
+    const ctx = await boot(dir)
+    const novel = await project(ctx)
+    const [asset] = await ctx.novelRepository.listAssets(novel)
+    const selection = await ctx.novelRepository.captureSelection(novel, {
+      assetId: asset!.asset.id,
+      revisionId: asset!.revisionId,
+      startUtf16: 0,
+      endUtf16: 1,
+    })
+    const owner = SessionId('novel-owner')
+    const request = {
+      assetId: asset!.asset.id,
+      baseRevisionId: asset!.revisionId,
+      operations: [{ kind: 'replace-text' as const, selector: selection.selector, replacement: '新' }],
+      actor: { kind: 'agent' as const, sessionId: owner },
+      summary: '修改首字',
+    }
+    const rejected = await ctx.novelRepository.proposeChangeSet(novel, request)
+    await expect(ctx.novelRepository.rejectChangeSet(novel, rejected.id, { sessionId: owner }))
+      .resolves.toMatchObject({ status: 'rejected' })
+    await expect(ctx.novelRepository.rejectChangeSet(novel, rejected.id, { sessionId: owner }))
+      .resolves.toMatchObject({ status: 'rejected' })
+
+    const stale = await ctx.novelRepository.proposeChangeSet(novel, request)
+    await ctx.novelRepository.saveChapterBody(novel, {
+      assetId: asset!.asset.id,
+      baseRevisionId: asset!.revisionId,
+      body: '作者的新正文',
+    })
+    await expect(ctx.novelRepository.applyChangeSet(novel, stale.id, { sessionId: owner }))
+      .resolves.toMatchObject({ status: 'conflicted' })
+    await expect(ctx.novelRepository.readChangeSet(novel, stale.id))
+      .resolves.toMatchObject({ status: 'conflicted' })
+  })
+
+  it.each<ApplyFaultStage>(['after-journal', 'after-file'])(
+    'recovers an interrupted apply at the %s durability boundary',
+    async (faultStage) => {
+      const dir = await tempDir()
+      await mkdir(join(dir, 'manuscript'))
+      await writeFile(join(dir, 'novel.yaml'), manifest())
+      await writeFile(join(dir, 'manuscript', 'one.md'), chapter('chapter-one', 'One', '白港下雨'))
+      const first = await boot(dir)
+      const firstProject = await project(first)
+      const [asset] = await first.novelRepository.listAssets(firstProject)
+      const selection = await first.novelRepository.captureSelection(firstProject, {
+        assetId: asset!.asset.id,
+        revisionId: asset!.revisionId,
+        startUtf16: 2,
+        endUtf16: 4,
+      })
+      const owner = SessionId('novel-owner')
+      const proposed = await first.novelRepository.proposeChangeSet(firstProject, {
+        assetId: asset!.asset.id,
+        baseRevisionId: asset!.revisionId,
+        operations: [{ kind: 'replace-text', selector: selection.selector, replacement: '放晴' }],
+        actor: { kind: 'agent', sessionId: owner },
+        summary: '恢复可发布修改',
+      })
+      const removeFault = installApplyFault(first.root, (stage) => {
+        if (stage === faultStage) throw new Error(`simulated crash ${stage}`)
+      })
+      await expect(first.novelRepository.applyChangeSet(firstProject, proposed.id, { sessionId: owner }))
+        .rejects.toThrow(`simulated crash ${faultStage}`)
+      removeFault()
+      if (faultStage === 'after-journal') {
+        await expect(first.novelRepository.rejectChangeSet(firstProject, proposed.id, { sessionId: owner }))
+          .rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
+      }
+      await first.fiber.dispose()
+
+      const restarted = await boot(dir)
+      const restartedProject = await project(restarted)
+      await restarted.novelRepository.listAssets(restartedProject)
+      const recovered = await restarted.novelRepository.readChangeSet(restartedProject, proposed.id)
+      expect(recovered.status).toBe('applied')
+      expect(recovered.resultRevisionId).toMatch(/^revision_/u)
+      expect((await restarted.novelRepository.readAsset(restartedProject, asset!.asset.id)).body)
+        .toBe('白港放晴')
+    },
+  )
+
+  it('migrates an identified version-one history database to ChangeSet schema two', async () => {
+    const dir = await tempDir()
+    const path = join(dir, 'history.sqlite')
+    const { DatabaseSync } = await import('node:sqlite')
+    const seed = new DatabaseSync(path)
+    seed.exec(`PRAGMA application_id = ${NOVEL_HISTORY_APPLICATION_ID}; PRAGMA user_version = 1`)
+    seed.close()
+
+    const history = await openHistory(path, 100)
+    history.close()
+    const migrated = new DatabaseSync(path)
+    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2)
+    const tables = migrated.prepare(`
+      SELECT name FROM sqlite_master
+      WHERE type = 'table' AND name IN ('change_sets', 'apply_journal')
+      ORDER BY name
+    `).all() as Array<{ name: string }>
+    expect(tables.map(row => row.name)).toEqual(['apply_journal', 'change_sets'])
+    migrated.close()
+  })
+
+  it('validates proposal summaries, operations, UTF-16 ranges, quote hashes, and missing ids', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await writeFile(join(dir, 'novel.yaml'), manifest())
+    const path = join(dir, 'manuscript', 'one.md')
+    await writeFile(path, chapter('chapter-one', 'One', 'A😀BC'))
+    const ctx = await boot(dir)
+    const novel = await project(ctx)
+    const [asset] = await ctx.novelRepository.listAssets(novel)
+    const frozen = await ctx.novelRepository.captureSelection(novel, {
+      assetId: asset!.asset.id,
+      revisionId: asset!.revisionId,
+      startUtf16: 0,
+      endUtf16: 1,
+    })
+    const valid = {
+      assetId: asset!.asset.id,
+      baseRevisionId: asset!.revisionId,
+      operations: [{ kind: 'replace-text' as const, selector: frozen.selector, replacement: 'Z' }],
+      actor: { kind: 'user' as const },
+      summary: 'Replace the first letter',
+    }
+    for (const summary of ['', ' padded ', 'x'.repeat(501)]) {
+      await expect(ctx.novelRepository.proposeChangeSet(novel, { ...valid, summary }))
+        .rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
+    }
+    for (const operations of [[], [...valid.operations, ...valid.operations]]) {
+      await expect(ctx.novelRepository.proposeChangeSet(novel, { ...valid, operations }))
+        .rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
+    }
+    await expect(ctx.novelRepository.proposeChangeSet(novel, {
+      ...valid,
+      operations: [{ ...valid.operations[0]!, replacement: '\uD83D' }],
+    })).rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
+
+    const invalidSelectors = [
+      { startUtf16: Number.NaN, endUtf16: 1 },
+      { startUtf16: 0, endUtf16: Number.NaN },
+      { startUtf16: -1, endUtf16: 1 },
+      { startUtf16: 1, endUtf16: 1 },
+      { startUtf16: 0, endUtf16: 99 },
+      { startUtf16: 2, endUtf16: 3 },
+      { startUtf16: 0, endUtf16: 2 },
+    ]
+    for (const offsets of invalidSelectors) {
+      await expect(ctx.novelRepository.proposeChangeSet(novel, {
+        ...valid,
+        operations: [{
+          ...valid.operations[0]!,
+          selector: { ...frozen.selector, ...offsets },
+        }],
+      })).rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
+    }
+    await expect(ctx.novelRepository.proposeChangeSet(novel, {
+      ...valid,
+      operations: [{
+        ...valid.operations[0]!, selector: { ...frozen.selector, quoteHash: `sha256:${'0'.repeat(64)}` as ContentHash },
+      }],
+    })).rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
+
+    const boundedDir = await tempDir()
+    await mkdir(join(boundedDir, 'manuscript'))
+    await writeFile(join(boundedDir, 'novel.yaml'), manifest())
+    const boundedText = chapter('chapter-bounded', 'Bounded', 'A')
+    await writeFile(join(boundedDir, 'manuscript', 'one.md'), boundedText)
+    const bounded = await boot(boundedDir, { assetMaxBytes: Buffer.byteLength(boundedText) })
+    const boundedProject = await project(bounded)
+    const [boundedAsset] = await bounded.novelRepository.listAssets(boundedProject)
+    const boundedSelection = await bounded.novelRepository.captureSelection(boundedProject, {
+      assetId: boundedAsset!.asset.id,
+      revisionId: boundedAsset!.revisionId,
+      startUtf16: 0,
+      endUtf16: 1,
+    })
+    await expect(bounded.novelRepository.proposeChangeSet(boundedProject, {
+      assetId: boundedAsset!.asset.id,
+      baseRevisionId: boundedAsset!.revisionId,
+      operations: [{ kind: 'replace-text', selector: boundedSelection.selector, replacement: 'far too large' }],
+      actor: { kind: 'user' },
+      summary: 'Exceed the serialized Asset budget',
+    })).rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
+
+    const ownedByUser = await ctx.novelRepository.proposeChangeSet(novel, valid)
+    await expect(ctx.novelRepository.readChangeSet(novel, ownedByUser.id))
+      .resolves.toMatchObject({ actor: { kind: 'user' } })
+    const userSession = await ctx.novelRepository.proposeChangeSet(novel, {
+      ...valid, actor: { kind: 'user', sessionId: SessionId('user-session') }, summary: 'User Session proposal',
+    })
+    await expect(ctx.novelRepository.readChangeSet(novel, userSession.id))
+      .resolves.toMatchObject({ actor: { kind: 'user', sessionId: 'user-session' } })
+
+    const missing = ChangeSetId('missing-change-set')
+    await expect(ctx.novelRepository.readChangeSet(novel, missing))
+      .rejects.toMatchObject({ code: 'NOVEL_CHANGESET_NOT_FOUND' })
+    await expect(ctx.novelRepository.applyChangeSet(novel, missing, { sessionId: SessionId('user-session') }))
+      .rejects.toMatchObject({ code: 'NOVEL_CHANGESET_NOT_FOUND' })
+    await expect(ctx.novelRepository.rejectChangeSet(novel, missing, { sessionId: SessionId('user-session') }))
+      .rejects.toMatchObject({ code: 'NOVEL_CHANGESET_NOT_FOUND' })
+
+    const removed = await ctx.novelRepository.proposeChangeSet(novel, { ...valid, summary: 'Asset disappears' })
+    await rm(path)
+    await expect(ctx.novelRepository.applyChangeSet(novel, removed.id, { sessionId: SessionId('any-session') }))
+      .resolves.toMatchObject({ status: 'conflicted' })
+  })
+
+  it('converts guarded apply races to conflicts and recovers unrelated pre-write failures', async () => {
+    async function fixture(summary: string): Promise<{
+      ctx: Context
+      novel: Awaited<ReturnType<typeof project>>
+      proposed: ChangeSet
+    }> {
+      const dir = await tempDir()
+      await mkdir(join(dir, 'manuscript'))
+      await writeFile(join(dir, 'novel.yaml'), manifest())
+      await writeFile(join(dir, 'manuscript', 'one.md'), chapter('chapter-one', 'One', '旧正文'))
+      const ctx = await boot(dir)
+      const novel = await project(ctx)
+      const [asset] = await ctx.novelRepository.listAssets(novel)
+      const selected = await ctx.novelRepository.captureSelection(novel, {
+        assetId: asset!.asset.id, revisionId: asset!.revisionId, startUtf16: 0, endUtf16: 1,
+      })
+      const proposed = await ctx.novelRepository.proposeChangeSet(novel, {
+        assetId: asset!.asset.id,
+        baseRevisionId: asset!.revisionId,
+        operations: [{ kind: 'replace-text', selector: selected.selector, replacement: '新' }],
+        actor: { kind: 'agent', sessionId: SessionId('owner') },
+        summary,
+      })
+      return { ctx, novel, proposed }
+    }
+
+    const stale = await fixture('Stale guarded write')
+    const staleWrite = stale.ctx.fs.writeText.bind(stale.ctx.fs)
+    stale.ctx.fs.writeText = () => Promise.reject(new FsError('stale', 'FS_STALE_VERSION'))
+    await expect(stale.ctx.novelRepository.applyChangeSet(
+      stale.novel, stale.proposed.id, { sessionId: SessionId('owner') },
+    )).resolves.toMatchObject({ status: 'conflicted' })
+    stale.ctx.fs.writeText = staleWrite
+
+    const offline = await fixture('Recover after storage error')
+    const offlineWrite = offline.ctx.fs.writeText.bind(offline.ctx.fs)
+    offline.ctx.fs.writeText = () => Promise.reject(new Error('storage offline during apply'))
+    await expect(offline.ctx.novelRepository.applyChangeSet(
+      offline.novel, offline.proposed.id, { sessionId: SessionId('owner') },
+    )).rejects.toThrow('storage offline during apply')
+    offline.ctx.fs.writeText = offlineWrite
+    await expect(offline.ctx.novelRepository.applyChangeSet(
+      offline.novel, offline.proposed.id, { sessionId: SessionId('owner') },
+    )).resolves.toMatchObject({ status: 'applied' })
+  })
+
+  it('fails closed for every corrupted persisted ChangeSet field and rolls back schema setup failures', async () => {
+    const dir = await tempDir()
+    const path = join(dir, 'history.sqlite')
+    const bytes = new TextEncoder().encode(chapter('asset-one', 'One', 'body'))
+    const hash = `sha256:${createHash('sha256').update(bytes).digest('hex')}` as ContentHash
+    const baseRevision = {
+      id: RevisionId('revision-base'),
+      projectId: ProjectId('project-one'),
+      assetId: AssetId('asset-one'),
+      serializedUtf8: bytes,
+      contentHash: hash,
+      origin: 'initial-scan' as const,
+      createdAt: new Date(0).toISOString(),
+    }
+    const validOperation = {
+      kind: 'replace-text' as const,
+      selector: { kind: 'text-range' as const, startUtf16: 0, endUtf16: 1, quoteHash: hash },
+      replacement: 'B',
+    }
+    const changeSet: ChangeSet = {
+      id: ChangeSetId('changeset-corrupt'),
+      projectId: baseRevision.projectId,
+      assetId: baseRevision.assetId,
+      baseRevisionId: baseRevision.id,
+      operations: [validOperation],
+      actor: { kind: 'user' },
+      summary: 'proposal',
+      status: 'proposed',
+    }
+    const history = await openHistory(path, 100)
+    history.commitRevision(baseRevision, 'manuscript/one.md')
+    history.proposeChangeSet(changeSet)
+    expect(history.rejectChangeSet(ChangeSetId('missing'))).toBeUndefined()
+    const { DatabaseSync } = await import('node:sqlite')
+    const db = new DatabaseSync(path)
+    const validOperationsJson = JSON.stringify(changeSet.operations)
+    const validActorJson = JSON.stringify(changeSet.actor)
+    const invalidOperations = [
+      '{',
+      '{}',
+      '[]',
+      '[null]',
+      JSON.stringify([{ ...validOperation, kind: 'other' }]),
+      JSON.stringify([{ ...validOperation, replacement: 1 }]),
+      JSON.stringify([{ ...validOperation, selector: null }]),
+      JSON.stringify([{ ...validOperation, selector: { ...validOperation.selector, kind: 'other' } }]),
+      JSON.stringify([{ ...validOperation, selector: { ...validOperation.selector, startUtf16: 0.5 } }]),
+      JSON.stringify([{ ...validOperation, selector: { ...validOperation.selector, endUtf16: 1.5 } }]),
+      JSON.stringify([{ ...validOperation, selector: { ...validOperation.selector, quoteHash: 1 } }]),
+      JSON.stringify([{ ...validOperation, selector: { ...validOperation.selector, prefix: 1 } }]),
+      JSON.stringify([{ ...validOperation, selector: { ...validOperation.selector, suffix: 1 } }]),
+    ]
+    for (const operations of invalidOperations) {
+      db.prepare('UPDATE change_sets SET operations_json = ? WHERE id = ?').run(operations, changeSet.id)
+      expect(() => history.changeSet(changeSet.id)).toThrow(expect.objectContaining({ code: 'NOVEL_HISTORY_CORRUPT' }))
+    }
+    db.prepare('UPDATE change_sets SET operations_json = ? WHERE id = ?').run(validOperationsJson, changeSet.id)
+    for (const actor of ['{', 'null', '{"kind":"other"}', '{"kind":"agent"}', '{"kind":"user","sessionId":1}']) {
+      db.prepare('UPDATE change_sets SET actor_json = ? WHERE id = ?').run(actor, changeSet.id)
+      expect(() => history.changeSet(changeSet.id)).toThrow(expect.objectContaining({ code: 'NOVEL_HISTORY_CORRUPT' }))
+    }
+    db.prepare('UPDATE change_sets SET actor_json = ? WHERE id = ?').run(validActorJson, changeSet.id)
+    db.exec('PRAGMA ignore_check_constraints = ON')
+    db.prepare('UPDATE change_sets SET status = ? WHERE id = ?').run('unknown', changeSet.id)
+    expect(() => history.changeSet(changeSet.id)).toThrow(expect.objectContaining({ code: 'NOVEL_HISTORY_CORRUPT' }))
+    db.prepare('UPDATE change_sets SET status = ? WHERE id = ?').run('proposed', changeSet.id)
+
+    const rejected = history.rejectChangeSet(changeSet.id)!
+    expect(rejected.status).toBe('rejected')
+    expect(history.rejectChangeSet(changeSet.id)).toEqual(rejected)
+    const journal = {
+      changeSetId: changeSet.id,
+      authorizedSessionId: SessionId('owner'),
+      projectRelativePath: 'manuscript/one.md',
+      beforeHash: hash,
+      afterHash: hash,
+      afterUtf8: bytes,
+      resultRevisionId: RevisionId('revision-result'),
+      createdAt: new Date(1).toISOString(),
+    }
+    expect(() => history.startApply(changeSet.id, journal))
+      .toThrow(expect.objectContaining({ code: 'NOVEL_HISTORY_CORRUPT' }))
+
+    const finalizeId = ChangeSetId('changeset-finalize-invalid')
+    history.proposeChangeSet({ ...changeSet, id: finalizeId, status: 'proposed' })
+    expect(() => history.finalizeApply(finalizeId, {
+      ...baseRevision,
+      id: RevisionId('revision-finalize'),
+      parentRevisionId: baseRevision.id,
+      origin: 'agent-apply',
+    }, 'manuscript/one.md')).toThrow(expect.objectContaining({ code: 'NOVEL_HISTORY_CORRUPT' }))
+    expect(history.revision(RevisionId('revision-finalize'))).toBeUndefined()
+
+    const vanishedId = ChangeSetId('changeset-vanished')
+    history.proposeChangeSet({ ...changeSet, id: vanishedId, status: 'proposed' })
+    db.exec(`
+      CREATE TRIGGER remove_conflicted_change_set
+      AFTER UPDATE OF status ON change_sets
+      WHEN NEW.id = 'changeset-vanished' AND NEW.status = 'conflicted'
+      BEGIN DELETE FROM change_sets WHERE id = NEW.id; END
+    `)
+    expect(() => history.conflictApply(vanishedId))
+      .toThrow(expect.objectContaining({ code: 'NOVEL_HISTORY_CORRUPT' }))
+    db.close()
+    history.close()
+
+    const brokenPath = join(dir, 'broken.sqlite')
+    const broken = new DatabaseSync(brokenPath)
+    broken.exec(`
+      PRAGMA application_id = ${NOVEL_HISTORY_APPLICATION_ID};
+      PRAGMA user_version = 1;
+      CREATE TABLE change_sets(dummy TEXT) STRICT;
+    `)
+    broken.close()
+    await expect(openHistory(brokenPath, 100)).rejects.toThrow()
+    const after = new DatabaseSync(brokenPath)
+    expect((after.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(1)
+    expect((after.prepare("SELECT count(*) AS count FROM sqlite_master WHERE name = 'revisions'").get() as { count: number }).count).toBe(0)
+    after.close()
+  })
+
+  it('recovers or rejects every interrupted-apply restart state deterministically', async () => {
+    type RecoveryMode =
+      | 'status-mismatch'
+      | 'missing-file'
+      | 'moved-file'
+      | 'external-drift'
+      | 'corrupt-payload-id'
+      | 'corrupt-payload-hash'
+      | 'stale-recovery-write'
+      | 'failed-recovery-write'
+      | 'non-stale-fs-recovery-write'
+
+    async function interrupted(mode: RecoveryMode) {
+      const dir = await tempDir()
+      await mkdir(join(dir, 'manuscript'))
+      await writeFile(join(dir, 'novel.yaml'), manifest())
+      const path = join(dir, 'manuscript', 'one.md')
+      await writeFile(path, chapter('chapter-one', 'One', '白港下雨'))
+      const first = await boot(dir)
+      const firstProject = await project(first)
+      const [asset] = await first.novelRepository.listAssets(firstProject)
+      const selection = await first.novelRepository.captureSelection(firstProject, {
+        assetId: asset!.asset.id,
+        revisionId: asset!.revisionId,
+        startUtf16: 2,
+        endUtf16: 4,
+      })
+      const proposed = await first.novelRepository.proposeChangeSet(firstProject, {
+        assetId: asset!.asset.id,
+        baseRevisionId: asset!.revisionId,
+        operations: [{ kind: 'replace-text', selector: selection.selector, replacement: '放晴' }],
+        actor: { kind: 'agent', sessionId: SessionId('owner') },
+        summary: `Recovery ${mode}`,
+      })
+      const removeFault = installApplyFault(first.root, (stage) => {
+        if (stage === 'after-journal') throw new Error('interrupt after journal')
+      })
+      await expect(first.novelRepository.applyChangeSet(firstProject, proposed.id, { sessionId: SessionId('owner') }))
+        .rejects.toThrow('interrupt after journal')
+      removeFault()
+      await first.fiber.dispose()
+
+      const historyPath = join(dir, '.novel', 'history.sqlite')
+      const { DatabaseSync } = await import('node:sqlite')
+      if (mode === 'status-mismatch') {
+        const db = new DatabaseSync(historyPath)
+        db.prepare('UPDATE change_sets SET status = ? WHERE id = ?').run('rejected', proposed.id)
+        db.close()
+      } else if (mode === 'missing-file') {
+        await rm(path)
+      } else if (mode === 'moved-file') {
+        await rename(path, join(dir, 'manuscript', 'moved.md'))
+      } else if (mode === 'external-drift') {
+        await writeFile(path, chapter('chapter-one', 'One', '完全不同的外部版本'))
+      } else if (mode === 'corrupt-payload-id' || mode === 'corrupt-payload-hash') {
+        const db = new DatabaseSync(historyPath)
+        const corrupted = mode === 'corrupt-payload-id'
+          ? chapter('other-asset', 'Other', '白港放晴')
+          : chapter('chapter-one', 'One', '有效身份但错误摘要')
+        db.prepare('UPDATE apply_journal SET after_utf8 = ? WHERE change_set_id = ?')
+          .run(Buffer.from(corrupted), proposed.id)
+        db.close()
+      }
+
+      const restarted = await boot(dir)
+      const restartedProject = await project(restarted)
+      const originalWrite = restarted.fs.writeText.bind(restarted.fs)
+      if (mode === 'stale-recovery-write') {
+        restarted.fs.writeText = () => Promise.reject(new FsError('stale', 'FS_STALE_VERSION'))
+      } else if (mode === 'failed-recovery-write') {
+        restarted.fs.writeText = () => Promise.reject(new Error('recovery storage offline'))
+      } else if (mode === 'non-stale-fs-recovery-write') {
+        restarted.fs.writeText = () => Promise.reject(new FsError('denied', 'FS_IO_ERROR'))
+      }
+      return { restarted, restartedProject, proposed, originalWrite }
+    }
+
+    for (const mode of ['missing-file', 'moved-file', 'external-drift', 'stale-recovery-write'] as const) {
+      const state = await interrupted(mode)
+      await state.restarted.novelRepository.listAssets(state.restartedProject)
+      await expect(state.restarted.novelRepository.readChangeSet(state.restartedProject, state.proposed.id))
+        .resolves.toMatchObject({ status: 'conflicted' })
+      state.restarted.fs.writeText = state.originalWrite
+    }
+    for (const mode of ['status-mismatch', 'corrupt-payload-id', 'corrupt-payload-hash'] as const) {
+      const state = await interrupted(mode)
+      await expect(state.restarted.novelRepository.listAssets(state.restartedProject))
+        .rejects.toMatchObject({ code: 'NOVEL_HISTORY_CORRUPT' })
+    }
+    const offline = await interrupted('failed-recovery-write')
+    await expect(offline.restarted.novelRepository.listAssets(offline.restartedProject))
+      .rejects.toThrow('recovery storage offline')
+    offline.restarted.fs.writeText = offline.originalWrite
+
+    const denied = await interrupted('non-stale-fs-recovery-write')
+    await expect(denied.restarted.novelRepository.listAssets(denied.restartedProject))
+      .rejects.toMatchObject({ code: 'FS_IO_ERROR' })
+    denied.restarted.fs.writeText = denied.originalWrite
   })
 })
 

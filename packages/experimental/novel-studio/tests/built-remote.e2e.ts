@@ -22,6 +22,7 @@ const requiredArtifacts = [
   'packages/typert/registry/lib/index.js',
   'packages/experimental/novel-repository/lib/index.js',
   'packages/experimental/novel-repository-local/lib/index.js',
+  'packages/experimental/novel-context/lib/index.js',
   'packages/experimental/novel-repository-remote/lib/index.js',
   'packages/experimental/novel-repository-remote/lib/typert.host.js',
   'packages/experimental/novel-repository-client/lib/client.js',
@@ -133,16 +134,28 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
           startUtf16: 0,
           endUtf16: 2,
         })
-        const saved = await client.remote.novelRepository.saveChapter(agentId, {
+        if (selection.ok !== true) throw new Error('selection failed: ' + JSON.stringify(selection))
+        const project = await host.novelRepository.discoverProject(await host.fs.resolve(projectRoot))
+        if (project === undefined) throw new Error('expected Novel Project')
+        const proposed = await host.novelRepository.proposeChangeSet(project, {
           assetId: 'chapter-built',
           baseRevisionId: chapter.value.revisionId,
-          body: '白港放晴了。',
+          operations: [{
+            kind: 'replace-text',
+            selector: selection.value.selector,
+            replacement: '新港',
+          }],
+          actor: { kind: 'agent', sessionId: agentId },
+          summary: '更新地名',
         })
+        const changeSet = await client.remote.novelRepository.changeSet(agentId, proposed.id)
+        const applied = await client.remote.novelRepository.applyChangeSet(agentId, proposed.id)
+        const after = await client.remote.novelRepository.asset(agentId, 'chapter-built', null)
         await novelFiber.dispose()
         const withdrawn = client.remote.novelRepository === undefined
         const retainedAfterDispose = await retained(agentId)
 
-        console.log(JSON.stringify({ response, assets, chapter, selection, saved, withdrawn, retainedAfterDispose }))
+        console.log(JSON.stringify({ response, assets, chapter, selection, changeSet, applied, after, withdrawn, retainedAfterDispose }))
         await client.fiber.dispose()
         await host.fiber.dispose()
       `
@@ -153,8 +166,10 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         response: { ok: boolean; value?: { id?: string; title?: string } }
         assets: { ok: boolean; value?: Array<{ id?: string; title?: string }> }
         chapter: { ok: boolean; value?: { body?: string } }
-        selection: { ok: boolean; value?: { preview?: string } }
-        saved: { ok: boolean; value?: { body?: string } }
+        selection: { ok: boolean; value?: { preview?: string; mention?: string } }
+        changeSet: { ok: boolean; value?: { status?: string } }
+        applied: { ok: boolean; value?: { status?: string } }
+        after: { ok: boolean; value?: { body?: string } }
         withdrawn: boolean
         retainedAfterDispose: { ok: boolean; error?: { message?: string } }
       }
@@ -163,10 +178,13 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         assets: { ok: true, value: [{ id: 'chapter-built', title: 'Built Chapter' }] },
         chapter: { ok: true, value: { body: '白港下雨了。' } },
         selection: { ok: true, value: { preview: '白港' } },
-        saved: { ok: true, value: { body: '白港放晴了。' } },
+        changeSet: { ok: true, value: { status: 'proposed' } },
+        applied: { ok: true, value: { status: 'applied' } },
+        after: { ok: true, value: { body: '新港下雨了。' } },
         withdrawn: true,
         retainedAfterDispose: { ok: false },
       })
+      expect(output.selection.value?.mention).toContain('dsh-novel:')
       expect(output.retainedAfterDispose.error?.message).toContain('is no longer mounted')
       expect(readFileSync(artifact(clientDeclaration), 'utf8')).toContain(
         "export type {} from '@deepseek-ai/dsh-experimental-novel-repository-remote/remote';",

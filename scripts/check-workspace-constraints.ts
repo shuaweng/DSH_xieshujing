@@ -162,6 +162,9 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh-session-persistence-sqlite': ['resources/sql/**/*.sql'],
   '@deepseek-ai/dsh-skill-badge': ['assets'],
   '@deepseek-ai/dsh-subprocess-local': ['scripts/ensure-spawn-helper.mjs'],
+  // The private Novel Studio overlay discovers its safe Agent Preset from a
+  // package-owned root at runtime; keep the declarative YAML beside the patch.
+  '@deepseek-ai/dsh-experimental-novel-studio': ['presets/**/*'],
 }
 
 function sameStringList(actual: readonly string[] | undefined, expected: readonly string[]): boolean {

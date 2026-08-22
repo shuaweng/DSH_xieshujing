@@ -1078,6 +1078,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'novelContextResolver',
+    summary: 'Exact-read Consumer that freezes canonical references before a model step.',
+    description: 'Exact-read Consumer that freezes canonical references before a model step.',
+    methods: [
+      {
+        signature: 'async resolveReferences( agent: Agent, references: readonly NovelReferenceInput[], signal?: AbortSignal, ): Promise<ResolvedNovelReferences>',
+        description: 'Resolve exact retained Revisions for Novel tools and prompt preparation.',
+        parameters: [{ name: 'agent', description: 'owning Agent whose Session and working directory bound the request.' }, { name: 'references', description: 'canonical exact Asset Revision references to resolve.' }, { name: 'signal', description: 'optional cancellation for repository and filesystem work.' }],
+        returns: 'the validated project plus exact retained reference snapshots.',
+      },
+      {
+        signature: 'async prepare( agent: Agent, content: readonly ContentBlock[], references: readonly NovelReferenceInput[], signal?: AbortSignal, ): Promise<PreparedNovelMessage>',
+        description: 'Prepare readable direct content plus one durable model-visible context message.',
+        parameters: [{ name: 'agent', description: 'owning Agent whose Session receives the frozen context.' }, { name: 'content', description: 'human-authored direct message content to preserve.' }, { name: 'references', description: 'exact Asset Revision references to append as untrusted context.' }, { name: 'signal', description: 'optional cancellation for reference resolution.' }],
+        returns: 'preserved direct content and, when referenced, one durable context message.',
+      },
+    ],
+  },
+  {
     key: 'novelRepository',
     summary: 'Provider-neutral access to validated Novel Project declarations.',
     description: 'Provider-neutral access to validated Novel Project declarations.',
@@ -1088,6 +1107,56 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'root', description: 'Canonical candidate project directory from the active filesystem provider.' }, { name: 'signal', description: 'Optional cancellation for all provider I/O.' }],
         returns: 'the validated project, or `undefined` when `novel.yaml` is absent.',
         throws: ['{NovelRepositoryError} when the root or present manifest is invalid or unsupported.'],
+      },
+      {
+        signature: 'abstract listAssets(project: NovelProjectSnapshot, signal?: AbortSignal): Promise<readonly AssetSummary[]>',
+        description: 'Rebuild the current authored catalog and reconcile exact file bytes into immutable Revisions.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'signal', description: 'optional cancellation for filesystem and history work.' }],
+        returns: 'current chapter rows in deterministic project-path order.',
+      },
+      {
+        signature: 'abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, ): Promise<AssetSnapshot>',
+        description: 'Read either the reconciled current head or one retained immutable Revision.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'assetId', description: 'stable authored asset identity.' }, { name: 'revisionId', description: 'exact retained Revision; omission reconciles and returns the current file head.' }, { name: 'signal', description: 'optional cancellation for filesystem and history work.' }],
+        returns: 'exact serialized bytes and parsed chapter values.',
+        throws: ['{NovelRepositoryError} when the asset or Revision is absent or invalid.'],
+      },
+      {
+        signature: 'abstract saveChapterBody( project: NovelProjectSnapshot, request: SaveChapterBodyRequest, signal?: AbortSignal, ): Promise<AssetSnapshot>',
+        description: 'Guardedly publish a user-authored chapter body and retain its exact new Revision.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'target, current base Revision, and full replacement body.' }, { name: 'signal', description: 'optional cancellation before filesystem publication.' }],
+        returns: 'the committed exact new head.',
+        throws: ['{NovelRepositoryError} when the base is stale or the resulting asset is invalid.'],
+      },
+      {
+        signature: 'abstract captureSelection( project: NovelProjectSnapshot, request: CaptureSelectionRequest, signal?: AbortSignal, ): Promise<SelectionRef>',
+        description: 'Freeze one exact non-empty UTF-16 body range without rereading mutable latest content.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'retained Revision and body offsets to validate.' }, { name: 'signal', description: 'optional cancellation for the history read.' }],
+        returns: 'immutable selection identity, quote hash, and bounded diagnostics.',
+      },
+      {
+        signature: 'abstract proposeChangeSet( project: NovelProjectSnapshot, request: ProposeChangeSetRequest, signal?: AbortSignal, ): Promise<ChangeSet>',
+        description: 'Retain one validated proposal without publishing it to authored files.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'exact base Revision, typed operation, actor, and review summary.' }, { name: 'signal', description: 'optional cancellation before durable proposal retention.' }],
+        returns: 'the durable proposal-only ChangeSet.',
+      },
+      {
+        signature: 'abstract readChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, signal?: AbortSignal, ): Promise<ChangeSet>',
+        description: 'Read one durable proposal or terminal ChangeSet.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'changeSetId', description: 'durable ChangeSet identity within the Project.' }, { name: 'signal', description: 'optional cancellation for history access.' }],
+        returns: 'the validated durable ChangeSet.',
+      },
+      {
+        signature: 'abstract applyChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, authorization: ChangeSetAuthorization, signal?: AbortSignal, ): Promise<ChangeSet>',
+        description: 'Apply one authorized proposal through the crash-recoverable publication protocol.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'changeSetId', description: 'durable proposal identity within the Project.' }, { name: 'authorization', description: 'explicit Session identity accepting the proposal.' }, { name: 'signal', description: 'optional cancellation before authored-file publication begins.' }],
+        returns: 'the applied, conflicted, or already terminal ChangeSet.',
+      },
+      {
+        signature: 'abstract rejectChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, authorization: ChangeSetAuthorization, signal?: AbortSignal, ): Promise<ChangeSet>',
+        description: 'Reject one authorized proposal without changing authored files.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'changeSetId', description: 'durable proposal identity within the Project.' }, { name: 'authorization', description: 'explicit Session identity rejecting the proposal.' }, { name: 'signal', description: 'optional cancellation before durable rejection.' }],
+        returns: 'the rejected or already terminal ChangeSet.',
       },
     ],
   },
@@ -1102,6 +1171,60 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'agent', description: 'addressed Agent whose working directory bounds discovery.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'browser-safe project values, or `undefined` when `novel.yaml` is absent.',
         throws: ['{NovelRepositoryError} when the Session has no working directory or discovery fails.'],
+      },
+      {
+        signature: '@Remote(\'assets\') async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]>',
+        description: 'List the reconciled chapter catalog for the addressed Session project.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'browser-safe current Asset descriptors.',
+      },
+      {
+        signature: '@Remote(\'asset\') async asset( agent: Agent, assetId: AssetId, revisionId: RevisionId | null, signal: AbortSignal, ): Promise<NovelChapterDocument>',
+        description: 'Read one current or retained chapter body.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'assetId', description: 'stable chapter identity.' }, { name: 'revisionId', description: 'exact retained Revision, or `null` for current.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'a browser-safe Revision-bound chapter document.',
+      },
+      {
+        signature: '@Remote(\'saveChapter\') async saveChapter( agent: Agent, request: SaveNovelChapterRequest, signal: AbortSignal, ): Promise<NovelChapterDocument>',
+        description: 'Guardedly save an authored chapter body.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'request', description: 'stable target, base Revision, and complete replacement body.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the new browser-safe Revision-bound chapter document.',
+      },
+      {
+        signature: '@Remote(\'captureSelection\') async captureSelection( agent: Agent, request: CaptureNovelSelectionRequest, signal: AbortSignal, ): Promise<NovelSelectionDescriptor>',
+        description: 'Freeze one exact selection over a retained chapter Revision.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'request', description: 'exact Revision and UTF-16 body offsets.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'a durable browser-safe SelectionRef.',
+      },
+      {
+        signature: '@Remote(\'changeSet\') async changeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor>',
+        description: 'Read one durable ChangeSet for browser review.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'changeSetId', description: 'durable ChangeSet identity to review.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'a browser-safe ChangeSet descriptor.',
+      },
+      {
+        signature: '@Remote(\'applyChangeSet\') async applyChangeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor>',
+        description: 'Explicitly accept one Session-owned ChangeSet.',
+        parameters: [{ name: 'agent', description: 'addressed Agent authorizing publication through its Session identity.' }, { name: 'changeSetId', description: 'durable proposal identity to apply.' }, { name: 'signal', description: 'caller cancellation before publication begins.' }],
+        returns: 'the browser-safe terminal or applying result.',
+      },
+      {
+        signature: '@Remote(\'rejectChangeSet\') async rejectChangeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor>',
+        description: 'Explicitly reject one Session-owned ChangeSet.',
+        parameters: [{ name: 'agent', description: 'addressed Agent authorizing rejection through its Session identity.' }, { name: 'changeSetId', description: 'durable proposal identity to reject.' }, { name: 'signal', description: 'caller cancellation before durable rejection.' }],
+        returns: 'the browser-safe rejected or already terminal result.',
+      },
+    ],
+  },
+  {
+    key: 'novelStudioPaths',
+    summary: 'Absolute package-owned roots consumed by later Profile rows.',
+    description: 'Absolute package-owned roots consumed by later Profile rows.',
+    methods: [
+      {
+        signature: 'readonly presetRoot: string = fileURLToPath(new URL(\'../presets\', import.meta.url))',
+        description: 'Absolute directory containing this package\'s shipped Agent Presets.',
+        parameters: [],
       },
     ],
   },
@@ -2966,6 +3089,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AssembledSection {\n    name: string;\n    text: string;\n}',
   },
   {
+    name: 'Asset',
+    declaration: 'export interface Asset {\n    readonly id: AssetId;\n    readonly projectId: ProjectId;\n    readonly type: NovelAssetType;\n    readonly projectRelativePath: string;\n}',
+  },
+  {
+    name: 'AssetId',
+    declaration: 'export type AssetId = Branded<\'NovelAssetId\'>;',
+  },
+  {
+    name: 'AssetSnapshot',
+    declaration: 'export interface AssetSnapshot {\n    readonly asset: Asset;\n    readonly revisionId: RevisionId;\n    readonly serializedUtf8: Uint8Array;\n    readonly contentHash: ContentHash;\n    readonly frontmatter: Readonly<Record<string, unknown>>;\n    readonly body: string;\n}',
+  },
+  {
+    name: 'AssetSummary',
+    declaration: 'export interface AssetSummary {\n    readonly asset: Asset;\n    readonly revisionId: RevisionId;\n    readonly contentHash: ContentHash;\n    readonly title: string;\n}',
+  },
+  {
     name: 'AssistantMessage',
     declaration: 'export interface AssistantMessage extends Message {\n    readonly role: \'assistant\';\n    readonly source: ModelMessageSource;\n}',
   },
@@ -3048,6 +3187,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CancelOptions',
     declaration: 'export interface CancelOptions {\n    keepInbox?: boolean | undefined;\n}',
+  },
+  {
+    name: 'CaptureNovelSelectionRequest',
+    declaration: 'export interface CaptureNovelSelectionRequest {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly startUtf16: number;\n    readonly endUtf16: number;\n}',
+  },
+  {
+    name: 'CaptureSelectionRequest',
+    declaration: 'export interface CaptureSelectionRequest {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly startUtf16: number;\n    readonly endUtf16: number;\n}',
+  },
+  {
+    name: 'ChangeSet',
+    declaration: 'export interface ChangeSet {\n    readonly id: ChangeSetId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly operations: readonly NovelOperation[];\n    readonly actor: {\n        readonly kind: \'agent\';\n        readonly sessionId: SessionId;\n    } | {\n        readonly kind: \'user\';\n        readonly sessionId?: SessionId;\n    };\n    readonly summary: string;\n    readonly status: \'proposed\' | \'applying\' | \'applied\' | \'rejected\' | \'conflicted\';\n    readonly resultRevisionId?: RevisionId;\n}',
+  },
+  {
+    name: 'ChangeSetAuthorization',
+    declaration: 'export interface ChangeSetAuthorization {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'ChangeSetId',
+    declaration: 'export type ChangeSetId = Branded<\'NovelChangeSetId\'>;',
   },
   {
     name: 'ClientResponse',
@@ -3148,6 +3307,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ContentBlockType',
     declaration: 'export type ContentBlockType = keyof ContentBlockMap;',
+  },
+  {
+    name: 'ContentHash',
+    declaration: 'export type ContentHash = `sha256:${string}`;',
   },
   {
     name: 'ContextFormed',
@@ -3826,12 +3989,40 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n}',
   },
   {
+    name: 'NovelAssetDescriptor',
+    declaration: 'export interface NovelAssetDescriptor {\n    readonly id: AssetId;\n    readonly projectId: ProjectId;\n    readonly type: NovelAssetType;\n    readonly projectRelativePath: string;\n    readonly revisionId: RevisionId;\n    readonly contentHash: string;\n    readonly title: string;\n}',
+  },
+  {
+    name: 'NovelAssetType',
+    declaration: 'export type NovelAssetType = \'manuscript.chapter\';',
+  },
+  {
+    name: 'NovelChangeSetDescriptor',
+    declaration: 'export interface NovelChangeSetDescriptor {\n    readonly id: ChangeSetId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly summary: string;\n    readonly status: \'proposed\' | \'applying\' | \'applied\' | \'rejected\' | \'conflicted\';\n    readonly resultRevisionId?: RevisionId;\n    readonly operation: {\n        readonly kind: \'replace-text\';\n        readonly startUtf16: number;\n        readonly endUtf16: number;\n        readonly quoteHash: string;\n        readonly replacement: string;\n    };\n}',
+  },
+  {
+    name: 'NovelChapterDocument',
+    declaration: 'export interface NovelChapterDocument extends NovelAssetDescriptor {\n    readonly body: string;\n}',
+  },
+  {
+    name: 'NovelOperation',
+    declaration: 'export type NovelOperation = ReplaceTextOperation;',
+  },
+  {
     name: 'NovelProjectDescriptor',
     declaration: 'export interface NovelProjectDescriptor {\n    readonly schema: 1;\n    readonly id: ProjectId;\n    readonly title: string;\n    readonly rootDisplayPath: string;\n    readonly manifestDisplayPath: string;\n    readonly contentRootDisplayPaths: Readonly<Record<string, string>>;\n}',
   },
   {
     name: 'NovelProjectSnapshot',
     declaration: 'export interface NovelProjectSnapshot {\n    readonly schema: 1;\n    readonly id: ProjectId;\n    readonly title: string;\n    readonly root: FsTarget;\n    readonly manifest: FsTarget;\n    readonly contentRoots: Readonly<Record<string, FsTarget>>;\n}',
+  },
+  {
+    name: 'NovelReferenceInput',
+    declaration: 'export interface NovelReferenceInput {\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector?: TextRangeSelector;\n    readonly label?: string;\n}',
+  },
+  {
+    name: 'NovelSelectionDescriptor',
+    declaration: 'export interface NovelSelectionDescriptor {\n    readonly version: 1;\n    readonly id: SelectionRefId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: {\n        readonly kind: \'text-range\';\n        readonly startUtf16: number;\n        readonly endUtf16: number;\n        readonly quoteHash: string;\n        readonly prefix?: string;\n        readonly suffix?: string;\n    };\n    readonly preview?: string;\n    readonly mention: string;\n}',
   },
   {
     name: 'ObjectJsonSchema',
@@ -3856,6 +4047,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PreparedLlmCall',
     declaration: 'export interface PreparedLlmCall {\n    readonly config: LlmCallConfig;\n    readonly retryPolicy: ResolvedRetryPolicy;\n    readonly context?: LlmModelContext;\n    readonly inputModalities?: readonly ModelModality[];\n    readonly adapterDefaults: LlmCallConfigAdapterDefaults;\n    stream(options: GenerateOptions): AsyncIterable<StreamChunk>;\n}',
+  },
+  {
+    name: 'PreparedNovelMessage',
+    declaration: 'export interface PreparedNovelMessage {\n    readonly content: ContentBlock[];\n    readonly additionalContext?: UserMessage;\n}',
   },
   {
     name: 'PreparedReferencedMessage',
@@ -3922,6 +4117,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PromptSection {\n    readonly name: string;\n    readonly order: number;\n    readonly text: string | ((context: AssembleContext) => string);\n    readonly complete?: boolean;\n}',
   },
   {
+    name: 'ProposeChangeSetRequest',
+    declaration: 'export interface ProposeChangeSetRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly operations: readonly NovelOperation[];\n    readonly actor: {\n        readonly kind: \'agent\';\n        readonly sessionId: SessionId;\n    } | {\n        readonly kind: \'user\';\n        readonly sessionId?: SessionId;\n    };\n    readonly summary: string;\n}',
+  },
+  {
     name: 'ProviderRequestId',
     declaration: 'export type ProviderRequestId = Branded<\'ProviderRequestId\'>;',
   },
@@ -3952,6 +4151,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RedactedSecret',
     declaration: 'export interface RedactedSecret {\n    path: string[];\n    set: boolean;\n}',
+  },
+  {
+    name: 'ReplaceTextOperation',
+    declaration: 'export interface ReplaceTextOperation {\n    readonly kind: \'replace-text\';\n    readonly selector: TextRangeSelector;\n    readonly replacement: string;\n}',
   },
   {
     name: 'ReplayEnvelope',
@@ -3990,6 +4193,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ResolvedNormalRetryPolicy extends ResolvedRetryBackoff {\n    readonly mode: \'normal\';\n    readonly maxRetries: number;\n    readonly retryableCodes: readonly string[];\n}',
   },
   {
+    name: 'ResolvedNovelReference',
+    declaration: 'export interface ResolvedNovelReference {\n    readonly input: Required<Pick<NovelReferenceInput, \'projectId\' | \'assetId\' | \'revisionId\' | \'label\'>> & Pick<NovelReferenceInput, \'selector\'>;\n    readonly snapshot: AssetSnapshot;\n    readonly text: string;\n}',
+  },
+  {
+    name: 'ResolvedNovelReferences',
+    declaration: 'export interface ResolvedNovelReferences {\n    readonly project: NovelProjectSnapshot;\n    readonly references: readonly ResolvedNovelReference[];\n}',
+  },
+  {
     name: 'ResolvedRetryBackoff',
     declaration: 'export interface ResolvedRetryBackoff {\n    readonly initialDelayMs: number;\n    readonly maxDelayMs: number;\n    readonly jitterRatio: number;\n}',
   },
@@ -4008,6 +4219,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResumeAgentOptions',
     declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
+  },
+  {
+    name: 'RevisionId',
+    declaration: 'export type RevisionId = Branded<\'NovelRevisionId\'>;',
   },
   {
     name: 'RpcError',
@@ -4058,8 +4273,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
   },
   {
+    name: 'SaveChapterBodyRequest',
+    declaration: 'export interface SaveChapterBodyRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly body: string;\n}',
+  },
+  {
     name: 'SaveImageAttachment',
     declaration: 'export interface SaveImageAttachment {\n    data: Uint8Array;\n    mediaType: ImageMediaType;\n    name?: string;\n}',
+  },
+  {
+    name: 'SaveNovelChapterRequest',
+    declaration: 'export interface SaveNovelChapterRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly body: string;\n}',
   },
   {
     name: 'SaveTextSpill',
@@ -4100,6 +4323,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SearchResultView',
     declaration: 'export type SearchResultView = SearchMatchesResultView | SearchPathsResultView;',
+  },
+  {
+    name: 'SelectionRef',
+    declaration: 'export interface SelectionRef {\n    readonly version: 1;\n    readonly id: SelectionRefId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: TextRangeSelector;\n    readonly preview?: string;\n}',
+  },
+  {
+    name: 'SelectionRefId',
+    declaration: 'export type SelectionRefId = Branded<\'NovelSelectionRefId\'>;',
   },
   {
     name: 'SendTeamMessageRequest',
@@ -4764,6 +4995,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TerminalWaitReason',
     declaration: 'export type TerminalWaitReason = \'stdin_read\' | \'inferred_idle\' | \'timeout\' | \'session_exit\';',
+  },
+  {
+    name: 'TextRangeSelector',
+    declaration: 'export interface TextRangeSelector {\n    readonly kind: \'text-range\';\n    readonly startUtf16: number;\n    readonly endUtf16: number;\n    readonly quoteHash: ContentHash;\n    readonly prefix?: string;\n    readonly suffix?: string;\n}',
   },
   {
     name: 'TodoItem',

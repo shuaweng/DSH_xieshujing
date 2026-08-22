@@ -2,6 +2,7 @@
 
 import type {
   AssetId,
+  ChangeSetId,
   ProjectId,
   RevisionId,
   SelectionRefId,
@@ -73,4 +74,24 @@ export interface NovelSelectionDescriptor {
     readonly suffix?: string
   }
   readonly preview?: string
+  /** Canonical mention inserted into the Agent composer after the commit barrier. */
+  readonly mention: string
+}
+
+/** Browser-safe review projection of one durable ChangeSet. */
+export interface NovelChangeSetDescriptor {
+  readonly id: ChangeSetId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly baseRevisionId: RevisionId
+  readonly summary: string
+  readonly status: 'proposed' | 'applying' | 'applied' | 'rejected' | 'conflicted'
+  readonly resultRevisionId?: RevisionId
+  readonly operation: {
+    readonly kind: 'replace-text'
+    readonly startUtf16: number
+    readonly endUtf16: number
+    readonly quoteHash: string
+    readonly replacement: string
+  }
 }

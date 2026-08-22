@@ -11,7 +11,8 @@
 - `NovelRepositoryRemote` 使用 Host service key `novelRepositoryRemote` 注册，消费 `ctx.novelRepository` 与 `ctx.fs`，并导出 wire namespace `novelRepository`。
 - `novelRepository/discover` 解析被寻址 Agent Session 的工作目录，将校验委托给当前 Novel Repository 提供方，并且只在提供方找不到 `novel.yaml` 时返回 `undefined`。
 - `NovelProjectDescriptor` 包含稳定项目 id、schema、标题与显示路径。它不会向浏览器暴露文件系统 target key 或可变的提供方对象。
-- `assets`、`asset`、`saveChapter` 与 `captureSelection` 只投影浏览器安全的 id、元数据、章节正文文本与冻结选区值。精确文件序列化字节、`FsTarget`、`FsVersion`、SQLite handle 与可变提供方对象仍只存在于 Host。
+- `assets`、`asset` 和 `saveChapter` 只投影浏览器安全的 id、元数据和章节正文。`captureSelection` 还会返回包含规范 `dsh-novel:` 引用的可读 Markdown mention。
+- `changeSet`、`applyChangeSet` 和 `rejectChangeSet` 暴露浏览器审阅。应用和拒绝把被寻址 Agent Session id 作为显式授权，并返回持久终态或冲突状态。
 - `responseMaxBytes` 默认是 8 MiB，对所有非发现 JSON 完整响应设置边界；超出预算时明确失败，不截断也不静默漏掉数据。
 - 现有 Gateway 身份策略负责解析被寻址的 Agent；本包不增加授权机制。`descriptorMaxBytes` 限制以 UTF-8 编码的完整 descriptor JSON，默认值为 256 KiB，且不能超过运行时最大字符串长度。
 - 生成的 `./remote` contribution 对浏览器安全，由独立的 `@deepseek-ai/dsh-experimental-novel-repository-client` 包负责挂载；这个 Host 包不会进入 Client 编译 aggregate。
@@ -35,7 +36,7 @@ Remote descriptor 与浏览器结果不会增加提示词或工具 schema token�
 
 ## 已知限制与暂缓事项
 
-- **尚无 ChangeSet 方法**：提案、审阅、应用、拒绝与恢复将在下一阶段实现。
-- **没有工作台 UI**：本包会发布类型化浏览器约定，但不会渲染资源管理器、编辑器、上下文托盘或错误状态。
-- **没有 Session Log 或模型上下文集成**：发现会使用现有 Gateway 身份策略选定的 Agent Session 工作目录，但结果不会进入 Session Log 或模型上下文；未来的上下文 Consumer 必须负责该持久投影。
+- **没有提案端点**：模型提案通过独立 Novel 工具进入；浏览器 Remote 只能读取、接受或拒绝已有 ChangeSet。
+- **没有工作台 UI**：本包发布类型化浏览器 API，但不渲染资产浏览器、编辑器、Context Tray 或审阅卡片。
+- **不拥有 Session Log**：独立 Novel context Consumer 拥有持久模型上下文；浏览器 discovery 响应本身不会进入 Session Log。
 - **需要显式组合**：Host 服务不属于默认 Web Profile；Novel Studio 组合必须将其与 Repository 提供方及独立 Client adapter 一起安装。

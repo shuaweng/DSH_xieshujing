@@ -35,3 +35,9 @@ harness 的用途，且这两个包本来就在 Host 图中。另外，chat 场�
 偶然而非保证——一旦它离开该图，就像其余情形那样镜像该 helper。
 
 没有任何机制强制这条规则；靠 review 守住它。
+
+## Novel Studio overlay 场景
+
+`novel-workbench.e2e.ts` 启动普通 Web App 和显式实验性 Novel Studio overlay。scaffold 的可选 `extraModuleFallbackAnchors` 只为该场景放行额外的树外包闭包；普通 Web 测试仍使用已发布包闭包。
+
+这个无密钥场景通过真实 DSH 侧栏打开已写入的 Session，渲染一个作者章节和持久 ChangeSet 卡片，接受提案，编辑并选择新正文，验证脏草稿在捕获选区前保存，并记录规范 `dsh-novel:` Composer mention。golden 只遮蔽不透明的编码引用 payload；可见正文、Diff 状态、上下文披露和原生 DSH chrome 保持精确。

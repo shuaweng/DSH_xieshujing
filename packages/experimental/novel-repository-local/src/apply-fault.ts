@@ -1,0 +1,26 @@
+/** Test-only fault seam for proving apply-journal crash recovery. */
+
+/** Durable publication boundaries exercised by restart tests. */
+export type ApplyFaultStage = 'after-journal' | 'after-file'
+
+const faults = new WeakMap<object, (stage: ApplyFaultStage) => void>()
+
+/**
+ * Install one synchronous crash probe for the lifetime of a repository instance.
+ * @param target - repository instance whose publication boundary should be probed.
+ * @param fault - synchronous callback invoked at each durable apply boundary.
+ * @returns a disposer that removes this probe.
+ */
+export function installApplyFault(target: object, fault: (stage: ApplyFaultStage) => void): () => void {
+  faults.set(target, fault)
+  return () => { faults.delete(target) }
+}
+
+/**
+ * Trigger the installed crash probe, if any.
+ * @param target - repository instance being published.
+ * @param stage - durable publication boundary just reached.
+ */
+export function hitApplyFault(target: object, stage: ApplyFaultStage): void {
+  faults.get(target)?.(stage)
+}

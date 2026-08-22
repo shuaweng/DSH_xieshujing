@@ -1,12 +1,12 @@
-# 小说工作台基础
+# Agent 原生小说工作台 MVP
 
 [English](novel-workbench.md) | 中文
 
-实验性小说工作台基础声明 Novel Project（小说项目），通过 `ctx.novelRepository` 暴露项目发现能力，并在显式 Profile 层中组合本地文件系统提供方、只读 Host Remote Consumer 与 Client-only 挂载。它不会自动把 Novel 内容加入模型上下文，也不注册 Novel 专属的面向模型工具、提示词 contribution 或 Session 事件。Client adapter 为浏览器挂载项目发现能力，但不贡献专用工作台 UI。完整的权威划分与提交决策由[小说工作台 Agent Note（Agent 决策记录）](../../.agents/notes/proposed/architecture/2026-08-22-novel-workbench-domain-and-commit-protocol.zh.md)负责。
+实验性小说工作台 MVP 让作者与 Agent 通过同一个稳定语义身份读取和修改一章正文。它在显式隔离的 Profile overlay 中组合文件化 Asset、不可变 SQLite Revision、精确选区、持久 Session 上下文、只提案的模型工具、可审阅 ChangeSet 与专用浏览器工作台。权威划分和崩溃恢复决策由[小说工作台 Agent Note（Agent 决策记录）](../../.agents/notes/proposed/architecture/2026-08-22-novel-workbench-domain-and-commit-protocol.zh.md)负责。
 
 ## 项目声明
 
-Novel Project 是包含普通 UTF-8 `novel.yaml` 文件的 Workspace 根目录。该清单是项目标识、格式版本、标题和命名内容根目录的权威；它不是资产清单，也不枚举作者文件。
+Novel Project 是包含普通 UTF-8 `novel.yaml` 文件的 Workspace 根目录。该清单是项目标识、格式版本、标题和命名内容根目录的权威；它不是 Asset 清单，也不枚举作者文件。
 
 ```yaml
 kind: novel-project
@@ -17,29 +17,47 @@ contentRoots:
   manuscript: manuscript
 ```
 
-Schema 版本 1 要求 `kind: novel-project`、整数 `schema: 1`、没有首尾空白的非空 id、非空标题，以及包含 `manuscript` 且不超过 32 个条目的 `contentRoots` mapping（映射）。内容根目录名称使用小写 kebab case（短横线命名），每个值都是非空路径字符串；每个声明的内容根必须已经作为目录存在。本地提供方拒绝所有 YAML 解析错误或 warning（警告），包括重复键和 alias（别名），也拒绝无效 UTF-8、编码前或解码后的控制字符、不支持的 schema 版本、超过大小限制的清单、悬空或不是普通文件的标记、缺失或非目录内容根、悬空链接，以及逃出项目根目录的规范化内容根。缺少 `novel.yaml` 表示该目录不是 Novel Project，此时返回 `undefined`；清单存在但声明无效时，系统抛出具有稳定错误码的 `NovelRepositoryError`。
+Schema 版本 1 要求 `kind: novel-project`、整数 `schema: 1`、非空 `id` 和 `title`，以及包含 `manuscript` 的 `contentRoots` mapping。本地提供方拒绝格式错误或有歧义的 YAML、无效 UTF-8、不支持的 schema、缺失根目录、悬空链接，以及逃出 Project 根目录的规范路径。
 
-## `ctx.novelRepository`
+## Asset 与 Revision 权威
 
-[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) 定义与提供方无关的 `NovelRepository` 服务。`discoverProject(root, signal?)` 接收一个 [`FsTarget`](filesystem.zh.md)，校验一个候选根目录，并返回 `NovelProjectSnapshot`，其中包含声明的 schema、品牌化项目 id、标题、规范的根目录与清单目标，以及每个内容根目录的规范目标。
+[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) 定义与提供方无关的 `ctx.novelRepository` seam。[`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) 在声明的 `manuscript` 根目录下扫描有边界的 Markdown 文件。只有严格 YAML Frontmatter 声明 `novel.schema: 1`、稳定 `novel.id`、`novel.type: manuscript.chapter` 与标题时，章节才成为 Asset。
 
-[`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) 是本地提供方。它通过 `ctx.fs` 完成全部路径解析和 containment（范围包含）检查；仅有进程 `cwd` 不能证明路径处于项目内。`manifestMaxBytes` 可配置，默认值为 64 KiB，且不能超过运行时最大 buffer 长度与最大字符串长度中的较小值。项目发现是无状态的只读操作：提供方既不缓存项目目录，也不创建项目文件。
+```markdown
+---
+novel:
+  schema: 1
+  id: chapter_001
+  type: manuscript.chapter
+  title: Chapter One
+---
 
-[`@deepseek-ai/dsh-experimental-novel-repository-remote`](../../packages/experimental/novel-repository-remote) 是实验性只读 Host Consumer。其 `ctx.novelRepositoryRemote` 服务发布严格的 `novelRepository/discover` Remote。现有 Gateway 身份策略负责解析被寻址的 Agent；本包不增加授权机制。该 Remote 通过 `ctx.fs` 解析这个 Agent Session 的工作目录，再把校验委托给 `ctx.novelRepository`。Session 没有工作目录时会以项目根目录无效失败。清单不存在时返回 `undefined`；发现项目时返回对浏览器安全的 `NovelProjectDescriptor`，其中包含 schema、稳定项目 id、标题，以及根目录、清单和各命名内容根目录的显示路径。`descriptorMaxBytes` 限制以 UTF-8 编码的完整 descriptor JSON，默认值为 256 KiB，且不能超过运行时最大字符串长度。显示路径只用于定位和展示内容，绝不取代清单持有的项目 id，也不授予写入权限。
+Authored manuscript body.
+```
 
-[`@deepseek-ai/dsh-experimental-novel-repository-client`](../../packages/experimental/novel-repository-client) 是 Client-only adapter。它通过 `ctx.remote.$mount()` 挂载 Host 包生成的 `./remote` contribution，并随自身 Cordis fiber 撤销该 contribution。独立挂载避免 Host 专属 Agent 与文件系统类型进入 Client 编译 aggregate。
+项目文件是当前作者内容的权威。`.novel/history.sqlite` 保存精确的不可变 Revision 字节、Asset head、ChangeSet 与 apply journal；它不会取代文件成为当前真相源。文件改名保留 Asset 身份，外部字节变化在 reconcile 时创建 `external-edit` Revision。用户保存只替换已解析正文，保留完全相同的 Frontmatter 前缀，并要求画面上的 base Revision 与文件系统版本仍然为当前值。
 
-## 当前限制
+## 选区与 Session 上下文
 
-`novel.yaml` 是当前基础读取的唯一 Novel 专属作者值。发现过程不执行写入，也不创建 `.novel` 目录、数据库、目录索引、缓存或其他项目状态。未来的权威划分与提交语义仍是上文 Agent Note 中的提议设计，并非该已实现子系统的约定。
+第一版把非空范围冻结为正文 UTF-16 offset、精确 quote hash 和有边界的前后文诊断。选区绑定一个已保留 Revision，绝不静默前移到可变的最新内容。浏览器 context barrier 先保存脏草稿，再捕获新 Revision 上的精确选区，最后把规范 `dsh-novel:` mention 插入普通 DSH Composer。
 
-Repository 尚不扫描内容根目录，不解析资产 Frontmatter，不分配 Asset 或 Revision 标识，不持久化历史，不创建或应用 ChangeSet，不冻结选区，不向 Session 日志加入模型上下文，也不暴露 Novel 工具或专用 Client UI。因此，发现项目不会让其中的任何正文文件自动成为可寻址 Novel Asset。
+[`@deepseek-ai/dsh-experimental-novel-context`](../../packages/experimental/novel-context) 在 `agent/pre-step` 解析这些 mention。它保留人类可读消息，并附加一个 source kind 为 `novel-context` 的不可变 `user/message`。该消息以确定性、明确不受信任的 JSON 保存精确 Revision，让 Session replay 能重建模型实际看到的内容。引用数量和 UTF-8 总字节数都有上限，而且第一次 Novel context 会把该 Session 绑定到一个 Project。
+
+## 提案、审阅与恢复
+
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中只暴露 `novel_get` 与 `novel_propose_changes`。精确读取解析已保留 Revision。提案会校验一个带 quote hash 的 `replace-text` 操作，并持久创建 ChangeSet，但不改作者文件；模型没有 apply 工具，也不能宣称已经发布修改。
+
+浏览器把 ChangeSet 读成行内 Diff 卡片。接受或拒绝都是显式、归 Session 所有的 Remote 操作。Apply 在接触文件前，把精确前后字节、hash、授权与预期结果 Revision 以 `applying` 状态写入 journal。项目重开时，after hash 会完成提交，before hash 会重试受保护写入，任何第三种 hash 都会变成 `conflicted`，且不覆盖作者文件。
 
 ## Profile 隔离
 
-[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 bundle，用作显式初始化 Profile 的第三层，位于 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。其 patch 插入本地 Novel Repository 提供方、Host Remote Consumer 与 Client adapter，不替换 `ui-layout`，也不更改现有的 Session 级 `novel` Agent Preset。
+[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 overlay，组合在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。它只禁用普通 `ui-layout` 根占位者，改为安装 [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench)。Novel 根仍保留原生侧栏、对话、详情、设置、模型选择、工具渲染和 overlay surface，并增加正文 explorer 与 canvas 插槽。
 
-默认 `web` 与 `headless` Profile 模板不包含实验性 Novel 包。源码工作区或显式准备的 Profile 必须让私有 bundle 可解析，并按上述顺序列出三层；缺少第三层时，普通 Web 组合没有 `ctx.novelRepository` 提供方。
+默认 `web` 与 `headless` Profile 模板不包含这些实验性包。overlay 还拥有安全的 `novel-workbench` Preset，其稳定工具集不包含 shell 或通用文件系统修改能力。因此 MVP 能与 DSH 深度集成，而不改变普通 DSH 的运行方式。
+
+## 当前限制
+
+MVP 支持一个 `manuscript.chapter` 编辑器、一个活动 UTF-16 选区，以及单 Asset ChangeSet 中的一个 `replace-text` 操作。持久 block id、大纲、人物、灵感、搜索、关系、文件监听、自动 rebase、多 Asset 事务、更丰富的编辑器与多 Agent 编排仍暂缓。Repository 只在调用边界 reconcile，支持的写入模型是单 Host 进程。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -48,6 +66,37 @@ Repository 尚不扫描内容根目录，不解析资产 Frontmatter，不分配
 ## Cordis API
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxnovelcontextresolver--novelcontextresolver"></a>
+
+### `ctx.novelContextResolver` — `NovelContextResolver`
+
+Exact-read Consumer that freezes canonical references before a model step.
+
+```ts cordis-catalog
+/**
+ * Resolve exact retained Revisions for Novel tools and prompt preparation.
+ * @param agent - owning Agent whose Session and working directory bound the request.
+ * @param references - canonical exact Asset Revision references to resolve.
+ * @param signal - optional cancellation for repository and filesystem work.
+ * @returns the validated project plus exact retained reference snapshots.
+ */
+async resolveReferences( agent: Agent, references: readonly NovelReferenceInput[], signal?: AbortSignal, ): Promise<ResolvedNovelReferences>
+
+/**
+ * Prepare readable direct content plus one durable model-visible context message.
+ * @param agent - owning Agent whose Session receives the frozen context.
+ * @param content - human-authored direct message content to preserve.
+ * @param references - exact Asset Revision references to append as untrusted context.
+ * @param signal - optional cancellation for reference resolution.
+ * @returns preserved direct content and, when referenced, one durable context message.
+ */
+async prepare( agent: Agent, content: readonly ContentBlock[], references: readonly NovelReferenceInput[], signal?: AbortSignal, ): Promise<PreparedNovelMessage>
+```
+
+Types: [Agent](core.zh.md) · [ContentBlock](llm-streaming.zh.md)
+
+Source: [`packages/experimental/novel-context/src/index.ts`](../../packages/experimental/novel-context/src/index.ts)
 
 <a id="ctxnovelrepository--novelrepository-abstract-seam"></a>
 
@@ -64,6 +113,82 @@ Provider-neutral access to validated Novel Project declarations.
  * @throws {NovelRepositoryError} when the root or present manifest is invalid or unsupported.
  */
 abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelProjectSnapshot | undefined>
+
+/**
+ * Rebuild the current authored catalog and reconcile exact file bytes into immutable Revisions.
+ * @param project - validated Project declaration returned by this provider.
+ * @param signal - optional cancellation for filesystem and history work.
+ * @returns current chapter rows in deterministic project-path order.
+ */
+abstract listAssets(project: NovelProjectSnapshot, signal?: AbortSignal): Promise<readonly AssetSummary[]>
+
+/**
+ * Read either the reconciled current head or one retained immutable Revision.
+ * @param project - validated Project declaration returned by this provider.
+ * @param assetId - stable authored asset identity.
+ * @param revisionId - exact retained Revision; omission reconciles and returns the current file head.
+ * @param signal - optional cancellation for filesystem and history work.
+ * @returns exact serialized bytes and parsed chapter values.
+ * @throws {NovelRepositoryError} when the asset or Revision is absent or invalid.
+ */
+abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, ): Promise<AssetSnapshot>
+
+/**
+ * Guardedly publish a user-authored chapter body and retain its exact new Revision.
+ * @param project - validated Project declaration returned by this provider.
+ * @param request - target, current base Revision, and full replacement body.
+ * @param signal - optional cancellation before filesystem publication.
+ * @returns the committed exact new head.
+ * @throws {NovelRepositoryError} when the base is stale or the resulting asset is invalid.
+ */
+abstract saveChapterBody( project: NovelProjectSnapshot, request: SaveChapterBodyRequest, signal?: AbortSignal, ): Promise<AssetSnapshot>
+
+/**
+ * Freeze one exact non-empty UTF-16 body range without rereading mutable latest content.
+ * @param project - validated Project declaration returned by this provider.
+ * @param request - retained Revision and body offsets to validate.
+ * @param signal - optional cancellation for the history read.
+ * @returns immutable selection identity, quote hash, and bounded diagnostics.
+ */
+abstract captureSelection( project: NovelProjectSnapshot, request: CaptureSelectionRequest, signal?: AbortSignal, ): Promise<SelectionRef>
+
+/**
+ * Retain one validated proposal without publishing it to authored files.
+ * @param project - validated Project declaration returned by this provider.
+ * @param request - exact base Revision, typed operation, actor, and review summary.
+ * @param signal - optional cancellation before durable proposal retention.
+ * @returns the durable proposal-only ChangeSet.
+ */
+abstract proposeChangeSet( project: NovelProjectSnapshot, request: ProposeChangeSetRequest, signal?: AbortSignal, ): Promise<ChangeSet>
+
+/**
+ * Read one durable proposal or terminal ChangeSet.
+ * @param project - validated Project declaration returned by this provider.
+ * @param changeSetId - durable ChangeSet identity within the Project.
+ * @param signal - optional cancellation for history access.
+ * @returns the validated durable ChangeSet.
+ */
+abstract readChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, signal?: AbortSignal, ): Promise<ChangeSet>
+
+/**
+ * Apply one authorized proposal through the crash-recoverable publication protocol.
+ * @param project - validated Project declaration returned by this provider.
+ * @param changeSetId - durable proposal identity within the Project.
+ * @param authorization - explicit Session identity accepting the proposal.
+ * @param signal - optional cancellation before authored-file publication begins.
+ * @returns the applied, conflicted, or already terminal ChangeSet.
+ */
+abstract applyChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, authorization: ChangeSetAuthorization, signal?: AbortSignal, ): Promise<ChangeSet>
+
+/**
+ * Reject one authorized proposal without changing authored files.
+ * @param project - validated Project declaration returned by this provider.
+ * @param changeSetId - durable proposal identity within the Project.
+ * @param authorization - explicit Session identity rejecting the proposal.
+ * @param signal - optional cancellation before durable rejection.
+ * @returns the rejected or already terminal ChangeSet.
+ */
+abstract rejectChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, authorization: ChangeSetAuthorization, signal?: AbortSignal, ): Promise<ChangeSet>
 ```
 
 Types: [FsTarget](filesystem.zh.md)
@@ -85,9 +210,80 @@ Project browser projection consuming the provider-neutral repository service.
  * @throws {NovelRepositoryError} when the Session has no working directory or discovery fails.
  */
 @Remote('discover') async discover(agent: Agent, signal: AbortSignal): Promise<NovelProjectDescriptor | undefined>
+
+/**
+ * List the reconciled chapter catalog for the addressed Session project.
+ * @param agent - addressed Agent whose Session selects the project root.
+ * @param signal - caller cancellation.
+ * @returns browser-safe current Asset descriptors.
+ */
+@Remote('assets') async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]>
+
+/**
+ * Read one current or retained chapter body.
+ * @param agent - addressed Agent whose Session selects the project root.
+ * @param assetId - stable chapter identity.
+ * @param revisionId - exact retained Revision, or `null` for current.
+ * @param signal - caller cancellation.
+ * @returns a browser-safe Revision-bound chapter document.
+ */
+@Remote('asset') async asset( agent: Agent, assetId: AssetId, revisionId: RevisionId | null, signal: AbortSignal, ): Promise<NovelChapterDocument>
+
+/**
+ * Guardedly save an authored chapter body.
+ * @param agent - addressed Agent whose Session selects the project root.
+ * @param request - stable target, base Revision, and complete replacement body.
+ * @param signal - caller cancellation.
+ * @returns the new browser-safe Revision-bound chapter document.
+ */
+@Remote('saveChapter') async saveChapter( agent: Agent, request: SaveNovelChapterRequest, signal: AbortSignal, ): Promise<NovelChapterDocument>
+
+/**
+ * Freeze one exact selection over a retained chapter Revision.
+ * @param agent - addressed Agent whose Session selects the project root.
+ * @param request - exact Revision and UTF-16 body offsets.
+ * @param signal - caller cancellation.
+ * @returns a durable browser-safe SelectionRef.
+ */
+@Remote('captureSelection') async captureSelection( agent: Agent, request: CaptureNovelSelectionRequest, signal: AbortSignal, ): Promise<NovelSelectionDescriptor>
+
+/**
+ * Read one durable ChangeSet for browser review.
+ * @param agent - addressed Agent whose Session selects the project root.
+ * @param changeSetId - durable ChangeSet identity to review.
+ * @param signal - caller cancellation.
+ * @returns a browser-safe ChangeSet descriptor.
+ */
+@Remote('changeSet') async changeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor>
+
+/**
+ * Explicitly accept one Session-owned ChangeSet.
+ * @param agent - addressed Agent authorizing publication through its Session identity.
+ * @param changeSetId - durable proposal identity to apply.
+ * @param signal - caller cancellation before publication begins.
+ * @returns the browser-safe terminal or applying result.
+ */
+@Remote('applyChangeSet') async applyChangeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor>
+
+/**
+ * Explicitly reject one Session-owned ChangeSet.
+ * @param agent - addressed Agent authorizing rejection through its Session identity.
+ * @param changeSetId - durable proposal identity to reject.
+ * @param signal - caller cancellation before durable rejection.
+ * @returns the browser-safe rejected or already terminal result.
+ */
+@Remote('rejectChangeSet') async rejectChangeSet(agent: Agent, changeSetId: ChangeSetId, signal: AbortSignal): Promise<NovelChangeSetDescriptor>
 ```
 
 Types: [Agent](core.zh.md)
 
 Source: [`packages/experimental/novel-repository-remote/src/index.ts`](../../packages/experimental/novel-repository-remote/src/index.ts)
+
+<a id="ctxnovelstudiopaths--novelstudiopaths"></a>
+
+### `ctx.novelStudioPaths` — `NovelStudioPaths`
+
+Absolute package-owned roots consumed by later Profile rows.
+
+Source: [`packages/experimental/novel-studio/src/index.ts`](../../packages/experimental/novel-studio/src/index.ts)
 <!-- END GENERATED cordis-surface -->

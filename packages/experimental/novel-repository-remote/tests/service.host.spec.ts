@@ -2,13 +2,17 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import NovelRepository, {
   AssetId,
+  ChangeSetId,
   ProjectId,
   RevisionId,
   SelectionRefId,
   type AssetSnapshot,
   type AssetSummary,
   type CaptureSelectionRequest,
+  type ChangeSet,
+  type ChangeSetAuthorization,
   type NovelProjectSnapshot,
+  type ProposeChangeSetRequest,
   type SaveChapterBodyRequest,
   type SelectionRef,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
@@ -21,6 +25,8 @@ class StubNovelRepository extends NovelRepository {
   assets: readonly AssetSummary[] = []
   snapshot: AssetSnapshot | undefined
   selection: SelectionRef | undefined
+  changeSetValue: ChangeSet | undefined
+  authorizations: ChangeSetAuthorization[] = []
 
   override discoverProject(_root: FsTarget): Promise<NovelProjectSnapshot | undefined> {
     return Promise.resolve(this.project)
@@ -43,6 +49,38 @@ class StubNovelRepository extends NovelRepository {
   override captureSelection(_project: NovelProjectSnapshot, _request: CaptureSelectionRequest): Promise<SelectionRef> {
     if (this.selection === undefined) throw new Error('selection not configured')
     return Promise.resolve(this.selection)
+  }
+
+  override proposeChangeSet(
+    _project: NovelProjectSnapshot,
+    _request: ProposeChangeSetRequest,
+  ): Promise<ChangeSet> {
+    return Promise.reject(new Error('changeset not configured'))
+  }
+
+  override readChangeSet(): Promise<ChangeSet> {
+    if (this.changeSetValue === undefined) throw new Error('changeset not configured')
+    return Promise.resolve(this.changeSetValue)
+  }
+
+  override applyChangeSet(
+    _project: NovelProjectSnapshot,
+    _changeSetId: ReturnType<typeof ChangeSetId>,
+    _authorization: ChangeSetAuthorization,
+  ): Promise<ChangeSet> {
+    if (this.changeSetValue === undefined) throw new Error('changeset not configured')
+    this.authorizations.push(_authorization)
+    return Promise.resolve({ ...this.changeSetValue, status: 'applied', resultRevisionId: RevisionId('revision-2') })
+  }
+
+  override rejectChangeSet(
+    _project: NovelProjectSnapshot,
+    _changeSetId: ReturnType<typeof ChangeSetId>,
+    _authorization: ChangeSetAuthorization,
+  ): Promise<ChangeSet> {
+    if (this.changeSetValue === undefined) throw new Error('changeset not configured')
+    this.authorizations.push(_authorization)
+    return Promise.resolve({ ...this.changeSetValue, status: 'rejected' })
   }
 }
 
@@ -194,6 +232,20 @@ describe('NovelRepositoryRemote Host service', () => {
       },
       preview: '旧',
     }
+    repository.changeSetValue = {
+      id: ChangeSetId('changeset-1'),
+      projectId: ProjectId('project-1'),
+      assetId: AssetId('chapter-1'),
+      baseRevisionId: RevisionId('revision-1'),
+      operations: [{
+        kind: 'replace-text',
+        selector: repository.selection.selector,
+        replacement: '新',
+      }],
+      actor: { kind: 'agent', sessionId: 'agent-1' as ChangeSetAuthorization['sessionId'] },
+      summary: '修改首字',
+      status: 'proposed',
+    }
     const remoteFiber = ctx.plugin(NovelRepositoryRemote)
     await remoteFiber
     const agent = testAgent('/story')
@@ -220,7 +272,34 @@ describe('NovelRepositoryRemote Host service', () => {
       revisionId: RevisionId('revision-1'),
       startUtf16: 0,
       endUtf16: 1,
-    }, signal)).resolves.toMatchObject({ id: 'selection-1', preview: '旧' })
+    }, signal)).resolves.toMatchObject({
+      id: 'selection-1', preview: '旧', mention: expect.stringMatching(/^@\[旧\]\(dsh-novel:/u),
+    })
+    const { preview: _preview, ...selectionWithoutPreview } = repository.selection
+    repository.selection = selectionWithoutPreview
+    await expect(ctx.novelRepositoryRemote.captureSelection(agent, {
+      assetId: AssetId('chapter-1'), revisionId: RevisionId('revision-1'), startUtf16: 0, endUtf16: 1,
+    }, signal)).resolves.toMatchObject({ mention: expect.stringMatching(/^@\[chapter-1\]\(dsh-novel:/u) })
+    await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))
+      .resolves.toMatchObject({ id: 'changeset-1', status: 'proposed', operation: { replacement: '新' } })
+    await expect(ctx.novelRepositoryRemote.applyChangeSet(agent, ChangeSetId('changeset-1'), signal))
+      .resolves.toMatchObject({ status: 'applied', resultRevisionId: 'revision-2' })
+    await expect(ctx.novelRepositoryRemote.rejectChangeSet(agent, ChangeSetId('changeset-1'), signal))
+      .resolves.toMatchObject({ status: 'rejected' })
+    expect(repository.authorizations).toEqual([{ sessionId: 'agent-1' }, { sessionId: 'agent-1' }])
+
+    repository.changeSetValue = { ...repository.changeSetValue!, operations: [] }
+    await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))
+      .rejects.toMatchObject({ code: 'NOVEL_HISTORY_CORRUPT' })
+    repository.changeSetValue = {
+      ...repository.changeSetValue!,
+      operations: [
+        { kind: 'replace-text', selector: repository.selection.selector, replacement: '一' },
+        { kind: 'replace-text', selector: repository.selection.selector, replacement: '二' },
+      ],
+    }
+    await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))
+      .rejects.toMatchObject({ code: 'NOVEL_HISTORY_CORRUPT' })
 
     await remoteFiber.dispose()
     await repositoryFiber.dispose()

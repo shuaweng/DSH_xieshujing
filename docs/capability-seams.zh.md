@@ -155,11 +155,16 @@ flowchart LR
   svc_fs["ctx.fs<br/>Filesystem provider seam"]
   pkg_fs_local["fs-local"]
   pkg_fs_observation_policy["fs-observation-policy"]
+  pkg_novel_context["novel-context"]
+  svc_novelContextResolver["ctx.novelContextResolver<br/>Experimental exact Novel context resolver"]
+  pkg_tool_novel["tool-novel"]
   pkg_novel_repository["novel-repository"]
   svc_novelRepository["ctx.novelRepository<br/>Experimental Novel Project repository seam"]
   pkg_novel_repository_local["novel-repository-local"]
   pkg_novel_repository_remote["novel-repository-remote"]
   svc_novelRepositoryRemote["ctx.novelRepositoryRemote<br/>Experimental Novel Project Remote Consumer"]
+  pkg_novel_studio["novel-studio"]
+  svc_novelStudioPaths["ctx.novelStudioPaths<br/>Experimental Novel Studio composition paths"]
   pkg_compaction["compaction"]
   svc_compaction["ctx.compaction<br/>Compaction seam"]
   pkg_subagent["subagent"]
@@ -254,9 +259,11 @@ flowchart LR
   pkg_lsp_local --> svc_lsp
   pkg_message_feedback --> svc_messageFeedback
   pkg_modules --> svc_clientModules
+  pkg_novel_context --> svc_novelContextResolver
   pkg_novel_repository --> svc_novelRepository
   pkg_novel_repository_local --> svc_novelRepository
   pkg_novel_repository_remote --> svc_novelRepositoryRemote
+  pkg_novel_studio --> svc_novelStudioPaths
   pkg_permission_presets --> svc_permissionPresets
   pkg_plan_mode --> svc_planMode
   pkg_pwsh_local --> svc_shell
@@ -352,8 +359,12 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_novelContextResolver --> pkg_tool_novel
+  svc_novelRepository --> pkg_novel_context
   svc_novelRepository --> pkg_novel_repository_remote
+  svc_novelRepository --> pkg_tool_novel
   svc_novelRepositoryRemote --> pkg_api_gateway
+  svc_novelStudioPaths --> pkg_agent_presets
   svc_sandbox --> pkg_bash_sandbox
   svc_sandbox --> pkg_terminal_bash
   svc_sandboxPolicy --> pkg_bash_sandbox
@@ -482,8 +493,10 @@ flowchart LR
 | `ctx.permissionPresets` | `core` | [`permission-presets`](../packages/interaction/permission-presets) | - | - | - | 面向用户的预设表（`workspace-write`／`danger-full-access`），将沙箱模式与审批策略选项组合在一起；一次切换会写入一个 `permission/preset` 事件，并贯通到两个选项事件。 |
 | `ctx.codeRuntime` | `seam` | [`code-runtime`](../packages/code-runtime/code-runtime) | `code-runtime-worker` | [`tools`](../packages/core/tools) | - | 使用 Host 提供的异步绑定运行一段由模型编写的程序；各后端采用不同的基础环境和语言（工具注册表在 Code Mode 下消费该服务）。 |
 | `ctx.fs` | `seam` | [`fs`](../packages/fs/fs) | [`fs-local`](../packages/fs/fs-local), [`fs-sandbox`](../packages/fs/fs-sandbox), [`fs-e2b`](../packages/e2b/fs-e2b) | [`tool-fs`](../packages/fs/tool-fs) | [`fs-observation-policy`](../packages/fs/fs-observation-policy) | tool-fs 通过 ctx.fs 执行读取／写入／编辑；fs-sandbox 按共享沙箱模式限制变更；fs-observation-policy 通过 fs/* 事件门禁贡献基于观测状态的检查。 |
-| `ctx.novelRepository` | `seam` | `novel-repository` | `novel-repository-local` | `novel-repository-remote` | - | 本地提供方校验一个有大小限制的 novel.yaml 与已存在的规范内容根目录；受支持的 Novel Studio 组合加载 Host Consumer 和 Client adapter，而默认 Profile 均不加载。 |
-| `ctx.novelRepositoryRemote` | `core` | `novel-repository-remote` | - | [`api-gateway`](../packages/api/gateway) | - | 使用由现有 Gateway 身份策略解析的 Agent，把有界发现委托给 ctx.novelRepository，并通过 novelRepository wire namespace 只投影可安全展示的值；独立 Client-only adapter 负责挂载生成的 contribution。 |
+| `ctx.novelContextResolver` | `core` | `novel-context` | - | `tool-novel` | - | 解析绑定 Revision 的规范引用，执行单 Project Session 绑定与上下文预算，并在模型执行前把冻结且不受信任的 Novel 上下文附加到 Session 日志。 |
+| `ctx.novelRepository` | `seam` | `novel-repository` | `novel-repository-local` | `novel-context`, `novel-repository-remote`, `tool-novel` | - | 本地提供方把章节文件 reconcile 为不可变 SQLite Revision，并通过可崩溃恢复的 journal 发布显式 ChangeSet；默认 Profile 不加载该 seam 或其 consumer。 |
+| `ctx.novelRepositoryRemote` | `core` | `novel-repository-remote` | - | [`api-gateway`](../packages/api/gateway) | - | 使用由现有 Gateway 身份策略解析的 Agent，并通过 novelRepository wire namespace 暴露有界发现、章节保存、选区捕获和显式 ChangeSet 审阅；独立 Client-only adapter 负责挂载生成的 contribution。 |
+| `ctx.novelStudioPaths` | `bundle` | `novel-studio` | - | [`agent-presets`](../packages/preset/agent-presets) | - | 发布私有 overlay 包的 Preset 根，让隔离的 Novel Studio 组合无需仓库相对路径即可选择安全、只提案的 Agent。 |
 | `ctx.compaction` | `seam` | [`compaction`](../packages/compaction/compaction) | [`compaction-basic`](../packages/compaction/compaction-basic) | [`compaction-basic`](../packages/compaction/compaction-basic) | - | 基础后端消费步骤后的压力事件和请求错误恢复事件；不存在面向模型的压缩工具。 |
 | `ctx.subagents` | `seam` | [`subagent`](../packages/subagent/subagent) | [`subagent-spawn-in-process`](../packages/subagent/subagent-spawn-in-process), [`subagent-fork-in-process`](../packages/subagent/subagent-fork-in-process), [`subagent-acp`](../packages/subagent/subagent-acp), [`subagent-codex`](../packages/subagent/subagent-codex), [`subagent-claude-code`](../packages/subagent/subagent-claude-code), [`subagent-dsh-sdk`](../packages/subagent/subagent-dsh-sdk) | [`tool-subagent`](../packages/subagent/tool-subagent), [`tool-subagent-control`](../packages/subagent/tool-subagent-control), [`tool-ralph`](../packages/workflow/tool-ralph) | - | 提供方实现传输；该服务还负责可选的、基于 Activation 的延续编排，tool-subagent 选择一次性或可延续委派，tool-subagent-control 传递后续消息，而 tool-ralph 要求一条全新的结构化输出路由。 |
 | `ctx.agentTeams` | `core` | `agent-team` | - | `tool-agent-team` | - | 负责隐式 Root roster、持久 peer mailbox、共享任务 DAG 与 continuable child 生命周期；tool-agent-team 提供作用域化模型策略和控制工具。 |

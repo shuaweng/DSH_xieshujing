@@ -49,6 +49,7 @@ export type NovelRepositoryErrorCode =
   | 'NOVEL_SELECTION_INVALID'
   | 'NOVEL_CHANGESET_NOT_FOUND'
   | 'NOVEL_CHANGESET_INVALID'
+  | 'NOVEL_CHANGESET_CONFLICT'
   | 'NOVEL_CHANGESET_UNAUTHORIZED'
 
 /** One validated version-one Novel Project declaration. */
@@ -150,6 +151,22 @@ export interface ReplaceTextOperation {
 
 /** Typed operations supported by the first ChangeSet format. */
 export type NovelOperation = ReplaceTextOperation
+
+/** Request to retain one proposal without changing authored files. */
+export interface ProposeChangeSetRequest {
+  readonly assetId: AssetId
+  readonly baseRevisionId: RevisionId
+  readonly operations: readonly NovelOperation[]
+  readonly actor:
+    | { readonly kind: 'agent'; readonly sessionId: SessionId }
+    | { readonly kind: 'user'; readonly sessionId?: SessionId }
+  readonly summary: string
+}
+
+/** Explicit user authority for one terminal ChangeSet decision. */
+export interface ChangeSetAuthorization {
+  readonly sessionId: SessionId
+}
 
 /** Durable, reviewable single-asset proposal. */
 export interface ChangeSet {

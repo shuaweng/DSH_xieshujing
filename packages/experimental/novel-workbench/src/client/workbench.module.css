@@ -1,0 +1,51 @@
+.frame {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  color: var(--ds-color-text-primary);
+  background: var(--ds-color-bg-page);
+}
+
+.dshSidebar, .explorer, .agent { min-width: 0; overflow: hidden; border-right: 1px solid var(--ds-color-border-subtle); background: var(--ds-color-bg-secondary); }
+.agent { display: grid; grid-template-rows: minmax(0, 1fr) auto; border-right: 0; border-left: 1px solid var(--ds-color-border-subtle); background: var(--ds-color-bg-primary); }
+.frame[data-details-open] .agent { grid-template-rows: minmax(240px, 1fr) minmax(180px, 42%); }
+.agentConversation, .agentDetails { min-width: 0; min-height: 0; }
+.canvas { min-width: 0; overflow: hidden; }
+.overlay { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+.explorerInner { display: flex; height: 100%; flex-direction: column; padding: 18px 12px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 6px 22px; }
+.mark { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: white; background: #7c5cff; font-weight: 750; }
+.sectionTitle { padding: 0 8px 8px; color: var(--ds-color-text-secondary); font-size: 12px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+.assetList { display: flex; flex-direction: column; gap: 3px; overflow: auto; }
+.assetButton { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 10px; border: 0; border-radius: 9px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.assetButton:hover, .assetButton[data-active] { background: var(--ds-color-bg-hover); }
+.assetButton small, .muted { overflow: hidden; color: var(--ds-color-text-tertiary); text-overflow: ellipsis; white-space: nowrap; }
+.editorShell { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100%; background: var(--ds-color-bg-primary); }
+.editorHeader { display: flex; align-items: center; justify-content: space-between; padding: 22px 34px 18px; border-bottom: 1px solid var(--ds-color-border-subtle); }
+.editorHeader h1 { margin: 4px 0 0; font-family: ui-serif, Georgia, serif; font-size: 25px; font-weight: 650; }
+.editorHeader small { color: var(--ds-color-text-tertiary); }
+.editorActions { display: flex; align-items: center; gap: 8px; color: var(--ds-color-text-tertiary); font-size: 12px; }
+.editorActions button, .changeCard button { padding: 7px 11px; border: 1px solid var(--ds-color-border-subtle); border-radius: 8px; color: inherit; background: var(--ds-color-bg-secondary); cursor: pointer; }
+.editorActions button:last-child, .changeCard footer button:last-child { border-color: #7c5cff; color: white; background: #7c5cff; }
+.editorActions button:disabled, .changeCard button:disabled { opacity: .45; cursor: default; }
+.editor { width: min(760px, calc(100% - 64px)); height: 100%; margin: 0 auto; padding: 46px 24px 80px; resize: none; border: 0; outline: 0; color: var(--ds-color-text-primary); background: transparent; font-family: ui-serif, Georgia, 'Noto Serif SC', serif; font-size: 18px; line-height: 1.95; }
+.contextTray { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; margin: 0 28px 22px; padding: 11px 14px; border: 1px solid var(--ds-color-border-subtle); border-radius: 12px; background: var(--ds-color-bg-secondary); font-size: 12px; }
+.contextTray > span { overflow: hidden; color: var(--ds-color-text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.contextTray small { color: var(--ds-color-text-tertiary); }
+.contextChip { padding: 4px 8px; border-radius: 7px; background: color-mix(in srgb, #7c5cff 13%, transparent); }
+.empty { display: grid; height: 100%; place-items: center; color: var(--ds-color-text-tertiary); }
+.error { color: var(--ds-color-text-error, #d14343); }
+.changeCard { margin: 7px 0; padding: 12px; border: 1px solid var(--ds-color-border-subtle); border-radius: 12px; background: var(--ds-color-bg-secondary); }
+.changeCard header { display: flex; flex-direction: column; gap: 4px; }
+.changeCard header span { color: var(--ds-color-text-secondary); font-size: 13px; }
+.diff { display: grid; gap: 6px; margin: 10px 0; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; }
+.diff del, .diff ins { padding: 8px; border-radius: 7px; text-decoration: none; }
+.diff del { background: color-mix(in srgb, #d14343 12%, transparent); }
+.diff ins { background: color-mix(in srgb, #2b9a66 14%, transparent); }
+.changeCard footer { display: flex; justify-content: flex-end; gap: 8px; }
+
+@media (max-width: 1050px) {
+  .frame { grid-template-columns: 56px 190px minmax(360px, 1fr) 340px !important; }
+}

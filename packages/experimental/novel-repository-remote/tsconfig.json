@@ -30,6 +30,9 @@
       "path": "../novel-repository"
     },
     {
+      "path": "../novel-context"
+    },
+    {
       "path": "../../typert/protocol"
     },
     {

@@ -18,7 +18,9 @@ Status: proposed
 
 当前作者内容以项目文件为权威。`.novel/history.sqlite` 是不可变 Revision 快照、ChangeSet 和应用日志的权威。首版目录与搜索投影从项目文件和历史重建到内存；如果以后增加持久搜索索引，它使用独立、可丢弃的 `.novel/index.sqlite`，绝不与历史数据库混用。DSH Session 历史仍然是模型实际看到的精确冻结上下文的权威。仅浏览器使用的布局、标签页、光标和草稿视图状态保留在客户端状态中。
 
-现有 `novel` Agent Preset 继续作为 Session 级写作能力，并提供 persona 和 skill 行为，但不拥有工作台领域。后续安全 Novel Preset 使用 Novel 工具，并从正式资产根目录的能力中移除原始修改工具；研究和开发 Preset 可以保留通用文件系统与 shell 工具，但不会因此取得提交 Novel ChangeSet 的权限。
+现有 `novel` Agent Preset 继续作为 Session 级写作能力，并提供 persona 和 skill 行为，但不拥有工作台领域。MVP 增加独立的包内 `novel-workbench` Preset，它使用 Novel 工具，并从正式资产根目录的能力中移除原始修改工具；研究和开发 Preset 可以保留通用文件系统与 shell 工具，但不会因此取得提交 Novel ChangeSet 的权限。
+
+PR1、PR2 和下文所述 PR3 MVP 已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照和编排能力。
 
 本提案扩展现有 Profile、文件系统、Session 历史、Remote 和客户端展示决策，不取代其中任何一项。
 
@@ -37,6 +39,18 @@ PR2 在同一能力 seam 上加入第一种作者资产 `manuscript.chapter`。�
 第一版持久 `.novel/history.sqlite` schema 保存完整的不可变 Revision 字节和协调后的当前 head。初次观察、受保护的浏览器保存与外部字节分歧分别记为 `initial-scan`、`user-edit` 和 `external-edit`；`agent-apply` 为 PR3 预留。未知、无版本、外来或损坏的数据库会明确失败，绝不会被重置。数据库使用私有文件、WAL、外键、`trusted_schema = OFF`、`synchronous = FULL`、DSH Novel application id 与 strict tables。
 
 浏览器 Consumer 增加有边界的项目级资产列表、章节读取、仅正文的版本保护保存与选区冻结方法。正文保存保留精确解析出的 Frontmatter 前缀，校验生成后的完整文件，同时要求当前基础 Revision 与 Provider 内部 `FsVersion` 一致，并且只在文件系统发布成功后记录新 Revision。SelectionRef 在一个已保留 Revision 上按 Unicode code-point 边界冻结非空 UTF-16 范围；引用哈希、有边界的上下文和预览均从该不可变正文派生。PR2 不加入提示上下文、模型工具、ChangeSet 持久化或工作台布局。
+
+## PR3 Agent 原生 MVP 切片
+
+PR3 增加历史 Schema 版本二，其中包含持久单资产 ChangeSet 和 apply journal。面向模型的 `novel_propose_changes` 工具可以创建一个绑定精确 Revision 的 `replace-text` 提案，但不能应用它。应用与拒绝是只面向浏览器的 Remote 决策，并由被寻址 Session 授权。应用会在带保护文件发布前写入 journal，之后记录 `agent-apply` Revision，并在项目重开时通过比较精确 before、after 或第三种分歧 hash 恢复 `applying` 记录。
+
+第一版 SelectionRef 策略仍是绑定 Revision 的正文 UTF-16 偏移、quote hash、可选有界 prefix 与 suffix，不使用持久 Block id。Client 通过 Repository 保存脏章节后再捕获选区，从而实现 Context Commit Barrier。它把包含规范 `dsh-novel:` URI 的可读 Markdown mention 放入普通 Composer。
+
+`NovelContextResolver` 在 `agent/pre-step` 运行，从直接用户消息解析规范 mention，只解析已保留的精确 Revision，并返回可读直接消息以及紧随其后、来源类型为 `novel-context` 的不可变 `user/message`。该消息包含安全序列化的不可信创作资料，并由普通 Agent loop 追加，因此回放不会重新读取可变文件。一个 Session 绑定到第一个被引用 Project。
+
+显式 Novel Studio overlay 只在该组合中禁用普通 `ui-layout` 根占位者。`novel-workbench` 成为唯一根占位者，并声明原生 DSH 侧栏、对话、详情、overlay、章节浏览器和正文画布插槽。已发布 `web` 与 `headless` 组合不包含这些包。浏览器 MVP 渲染一个章节编辑器、可见 Context Tray，以及带接受和拒绝动作的持久 ChangeSet Diff 卡片。
+
+PR3 不添加文件 watcher 或浏览器失效事件流。Repository 调用会协调外部文件，接受 ChangeSet 后会显式重新获取工作台数据。Block id、自动保存节奏、搜索、更多资产类型、多资产变更、自动合并、已发布 CLI Profile template 和多 Agent 编排均暂缓。
 
 ## 范围与不变量
 

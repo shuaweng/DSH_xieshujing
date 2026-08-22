@@ -1,20 +1,24 @@
-/** Durable immutable Revision store for one local Novel Project. */
+/** Durable Revision, ChangeSet, and apply-journal store for one Novel Project. */
 
 import { open, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { DatabaseSync } from 'node:sqlite'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   AssetId,
+  ChangeSetId,
   NovelRepositoryError,
   ProjectId,
   RevisionId,
   type AssetRevision,
+  type ChangeSet,
   type ContentHash,
+  type NovelOperation,
   type RevisionOrigin,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 
-/** First physical schema of `.novel/history.sqlite`. */
-export const NOVEL_HISTORY_SCHEMA_VERSION = 1
+/** Physical schema containing revisions, proposals, and recoverable apply intent. */
+export const NOVEL_HISTORY_SCHEMA_VERSION = 2
 /** SQLite application id reserved for DSH Novel history. */
 export const NOVEL_HISTORY_APPLICATION_ID = 0x44534E48
 
@@ -35,6 +39,41 @@ interface HeadRow {
   project_relative_path: string
 }
 
+interface ChangeSetRow {
+  id: string
+  project_id: string
+  asset_id: string
+  base_revision_id: string
+  operations_json: string
+  actor_json: string
+  summary: string
+  status: string
+  result_revision_id: string | null
+}
+
+interface ApplyJournalRow {
+  change_set_id: string
+  authorized_session_id: string
+  project_relative_path: string
+  before_hash: string
+  after_hash: string
+  after_utf8: Uint8Array
+  result_revision_id: string
+  created_at: string
+}
+
+/** Exact durable intent needed to finish or reject an interrupted publication. */
+export interface ApplyJournal {
+  readonly changeSetId: ChangeSetId
+  readonly authorizedSessionId: SessionId
+  readonly projectRelativePath: string
+  readonly beforeHash: ContentHash
+  readonly afterHash: ContentHash
+  readonly afterUtf8: Uint8Array
+  readonly resultRevisionId: RevisionId
+  readonly createdAt: string
+}
+
 async function createPrivateFile(path: string): Promise<void> {
   const handle = await open(path, 'a', 0o600)
   try {
@@ -46,9 +85,9 @@ async function createPrivateFile(path: string): Promise<void> {
 
 /**
  * Open and validate one Novel history database without resetting unknown data.
- * @param path - canonical local database path.
- * @param busyTimeoutMs - SQLite lock wait bound.
- * @returns configured database handle.
+ * @param path - absolute SQLite database path owned by the Novel Project.
+ * @param busyTimeoutMs - maximum SQLite lock wait in milliseconds.
+ * @returns a validated history connection with current schema.
  */
 export async function openHistory(path: string, busyTimeoutMs: number): Promise<NovelHistory> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 })
@@ -89,7 +128,7 @@ function configure(db: DatabaseSync, path: string): void {
       'NOVEL_HISTORY_CORRUPT',
     )
   }
-  if (version !== 0 && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
     throw new NovelRepositoryError(
       `novel repository: history database "${path}" uses unsupported schema ${version}`,
       'NOVEL_HISTORY_SCHEMA_UNSUPPORTED',
@@ -101,31 +140,60 @@ function configure(db: DatabaseSync, path: string): void {
       'NOVEL_HISTORY_CORRUPT',
     )
   }
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS revisions (
-      id                    TEXT PRIMARY KEY,
-      project_id            TEXT NOT NULL,
-      asset_id              TEXT NOT NULL,
-      parent_revision_id    TEXT REFERENCES revisions(id),
-      project_relative_path TEXT NOT NULL,
-      serialized_utf8       BLOB NOT NULL,
-      content_hash          TEXT NOT NULL,
-      origin                TEXT NOT NULL CHECK(origin IN ('initial-scan', 'user-edit', 'agent-apply', 'external-edit')),
-      created_at            TEXT NOT NULL
-    ) STRICT;
-    CREATE INDEX IF NOT EXISTS revisions_asset_created
-      ON revisions(project_id, asset_id, created_at, id);
-    CREATE TABLE IF NOT EXISTS asset_heads (
-      project_id            TEXT NOT NULL,
-      asset_id              TEXT NOT NULL,
-      revision_id           TEXT NOT NULL REFERENCES revisions(id),
-      project_relative_path TEXT NOT NULL,
-      PRIMARY KEY(project_id, asset_id)
-    ) STRICT;
-  `)
-  if (version === 0) {
-    db.exec(`PRAGMA application_id = ${NOVEL_HISTORY_APPLICATION_ID}`)
-    db.exec(`PRAGMA user_version = ${NOVEL_HISTORY_SCHEMA_VERSION}`)
+
+  db.exec('BEGIN IMMEDIATE')
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS revisions (
+        id                    TEXT PRIMARY KEY,
+        project_id            TEXT NOT NULL,
+        asset_id              TEXT NOT NULL,
+        parent_revision_id    TEXT REFERENCES revisions(id),
+        project_relative_path TEXT NOT NULL,
+        serialized_utf8       BLOB NOT NULL,
+        content_hash          TEXT NOT NULL,
+        origin                TEXT NOT NULL CHECK(origin IN ('initial-scan', 'user-edit', 'agent-apply', 'external-edit')),
+        created_at            TEXT NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS revisions_asset_created
+        ON revisions(project_id, asset_id, created_at, id);
+      CREATE TABLE IF NOT EXISTS asset_heads (
+        project_id            TEXT NOT NULL,
+        asset_id              TEXT NOT NULL,
+        revision_id           TEXT NOT NULL REFERENCES revisions(id),
+        project_relative_path TEXT NOT NULL,
+        PRIMARY KEY(project_id, asset_id)
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS change_sets (
+        id                 TEXT PRIMARY KEY,
+        project_id         TEXT NOT NULL,
+        asset_id           TEXT NOT NULL,
+        base_revision_id   TEXT NOT NULL REFERENCES revisions(id),
+        operations_json    TEXT NOT NULL,
+        actor_json         TEXT NOT NULL,
+        summary            TEXT NOT NULL,
+        status             TEXT NOT NULL CHECK(status IN ('proposed', 'applying', 'applied', 'rejected', 'conflicted')),
+        result_revision_id TEXT REFERENCES revisions(id)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS change_sets_asset
+        ON change_sets(project_id, asset_id, id);
+      CREATE TABLE IF NOT EXISTS apply_journal (
+        change_set_id         TEXT PRIMARY KEY REFERENCES change_sets(id),
+        authorized_session_id TEXT NOT NULL,
+        project_relative_path TEXT NOT NULL,
+        before_hash           TEXT NOT NULL,
+        after_hash            TEXT NOT NULL,
+        after_utf8            BLOB NOT NULL,
+        result_revision_id    TEXT NOT NULL,
+        created_at            TEXT NOT NULL
+      ) STRICT;
+    `)
+    if (version === 0) db.exec(`PRAGMA application_id = ${NOVEL_HISTORY_APPLICATION_ID}`)
+    if (version < NOVEL_HISTORY_SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${NOVEL_HISTORY_SCHEMA_VERSION}`)
+    db.exec('COMMIT')
+  } catch (error: unknown) {
+    db.exec('ROLLBACK')
+    throw error
   }
 }
 
@@ -140,9 +208,9 @@ export class NovelHistory {
 
   /**
    * Read the reconciled head row for one Asset.
-   * @param projectId - owning Novel Project.
-   * @param assetId - stable Asset identity.
-   * @returns the current Revision and path, or `undefined` when unseen.
+   * @param projectId - stable Novel Project identity.
+   * @param assetId - stable authored Asset identity.
+   * @returns the current Revision and mutable path projection, when indexed.
    */
   head(projectId: ProjectId, assetId: AssetId): HeadRow | undefined {
     return this.db.prepare(`
@@ -153,8 +221,8 @@ export class NovelHistory {
 
   /**
    * Read one immutable retained Revision.
-   * @param revisionId - exact Revision identity.
-   * @returns retained bytes and path, or `undefined` when absent.
+   * @param revisionId - exact retained Revision identity.
+   * @returns the immutable Revision and its path at commit time, when retained.
    */
   revision(revisionId: RevisionId): { revision: AssetRevision; projectRelativePath: string } | undefined {
     const row = this.db.prepare(`
@@ -180,45 +248,183 @@ export class NovelHistory {
 
   /**
    * Insert one immutable Revision and advance its Asset head atomically.
-   * @param revision - complete validated Revision record.
-   * @param projectRelativePath - current authored path for the head projection.
+   * @param revision - exact immutable Revision bytes and metadata to retain.
+   * @param projectRelativePath - authored Project path associated with the Revision.
    */
   commitRevision(revision: AssetRevision, projectRelativePath: string): void {
-    this.db.exec('BEGIN IMMEDIATE')
-    try {
-      this.db.prepare(`
-        INSERT INTO revisions (
-          id, project_id, asset_id, parent_revision_id, project_relative_path,
-          serialized_utf8, content_hash, origin, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        revision.id,
-        revision.projectId,
-        revision.assetId,
-        revision.parentRevisionId ?? null,
-        projectRelativePath,
-        Buffer.from(revision.serializedUtf8),
-        revision.contentHash,
-        revision.origin,
-        revision.createdAt,
-      )
+    this.transaction(() => {
+      this.insertRevision(revision, projectRelativePath)
       this.putHead(revision.projectId, revision.assetId, revision.id, projectRelativePath)
-      this.db.exec('COMMIT')
-    } catch (error: unknown) {
-      this.db.exec('ROLLBACK')
-      throw error
-    }
+    })
   }
 
   /**
    * Update only the mutable path projection after an authored file rename.
-   * @param projectId - owning Novel Project.
-   * @param assetId - stable Asset identity.
-   * @param revisionId - unchanged current Revision.
-   * @param path - new project-relative authored path.
+   * @param projectId - stable Novel Project identity.
+   * @param assetId - stable authored Asset identity.
+   * @param revisionId - current retained Revision identity.
+   * @param path - new Project-relative authored path.
    */
   updateHeadPath(projectId: ProjectId, assetId: AssetId, revisionId: RevisionId, path: string): void {
     this.putHead(projectId, assetId, revisionId, path)
+  }
+
+  /**
+   * Insert one validated proposal.
+   * @param changeSet - proposal-only ChangeSet to retain durably.
+   */
+  proposeChangeSet(changeSet: ChangeSet): void {
+    this.db.prepare(`
+      INSERT INTO change_sets (
+        id, project_id, asset_id, base_revision_id, operations_json,
+        actor_json, summary, status, result_revision_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      changeSet.id,
+      changeSet.projectId,
+      changeSet.assetId,
+      changeSet.baseRevisionId,
+      JSON.stringify(changeSet.operations),
+      JSON.stringify(changeSet.actor),
+      changeSet.summary,
+      changeSet.status,
+      changeSet.resultRevisionId ?? null,
+    )
+  }
+
+  /**
+   * Read one ChangeSet, validating its persisted JSON contract.
+   * @param changeSetId - durable ChangeSet identity.
+   * @returns the validated ChangeSet, when retained.
+   */
+  changeSet(changeSetId: ChangeSetId): ChangeSet | undefined {
+    const row = this.db.prepare(`
+      SELECT id, project_id, asset_id, base_revision_id, operations_json,
+             actor_json, summary, status, result_revision_id
+      FROM change_sets WHERE id = ?
+    `).get(changeSetId) as ChangeSetRow | undefined
+    return row === undefined ? undefined : changeSetFromRow(row)
+  }
+
+  /**
+   * Mark a proposal rejected; terminal calls are idempotent.
+   * @param changeSetId - durable ChangeSet identity.
+   * @returns the current terminal or newly rejected ChangeSet, when retained.
+   */
+  rejectChangeSet(changeSetId: ChangeSetId): ChangeSet | undefined {
+    const current = this.changeSet(changeSetId)
+    if (current === undefined || current.status !== 'proposed') return current
+    this.db.prepare("UPDATE change_sets SET status = 'rejected' WHERE id = ? AND status = 'proposed'").run(changeSetId)
+    return this.changeSet(changeSetId)
+  }
+
+  /**
+   * Durably record exact publication intent before touching the authored file.
+   * @param changeSetId - proposal entering the applying state.
+   * @param journal - exact authorized bytes and hashes needed for recovery.
+   * @returns the applying ChangeSet.
+   */
+  startApply(changeSetId: ChangeSetId, journal: ApplyJournal): ChangeSet {
+    this.transaction(() => {
+      const changed = this.db.prepare(
+        "UPDATE change_sets SET status = 'applying' WHERE id = ? AND status = 'proposed'",
+      ).run(changeSetId)
+      if (changed.changes !== 1) throw corrupt('ChangeSet could not enter applying state')
+      this.db.prepare(`
+        INSERT INTO apply_journal (
+          change_set_id, authorized_session_id, project_relative_path,
+          before_hash, after_hash, after_utf8, result_revision_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        journal.changeSetId,
+        journal.authorizedSessionId,
+        journal.projectRelativePath,
+        journal.beforeHash,
+        journal.afterHash,
+        Buffer.from(journal.afterUtf8),
+        journal.resultRevisionId,
+        journal.createdAt,
+      )
+    })
+    return requiredChangeSet(this.changeSet(changeSetId))
+  }
+
+  /**
+   * Finish an applying ChangeSet and publish its prepared Revision atomically in SQLite.
+   * @param changeSetId - applying ChangeSet to finalize.
+   * @param revision - immutable published Revision prepared before file publication.
+   * @param projectRelativePath - current authored path for the new head.
+   * @returns the applied ChangeSet linked to its result Revision.
+   */
+  finalizeApply(changeSetId: ChangeSetId, revision: AssetRevision, projectRelativePath: string): ChangeSet {
+    this.transaction(() => {
+      this.insertRevision(revision, projectRelativePath)
+      this.putHead(revision.projectId, revision.assetId, revision.id, projectRelativePath)
+      const changed = this.db.prepare(`
+        UPDATE change_sets SET status = 'applied', result_revision_id = ?
+        WHERE id = ? AND status = 'applying'
+      `).run(revision.id, changeSetId)
+      if (changed.changes !== 1) throw corrupt('ChangeSet could not finish applying')
+      this.db.prepare('DELETE FROM apply_journal WHERE change_set_id = ?').run(changeSetId)
+    })
+    return requiredChangeSet(this.changeSet(changeSetId))
+  }
+
+  /**
+   * Convert an unpublishable apply intent into a durable conflict.
+   * @param changeSetId - proposed or applying ChangeSet that cannot publish safely.
+   * @returns the terminal conflicted ChangeSet.
+   */
+  conflictApply(changeSetId: ChangeSetId): ChangeSet {
+    this.transaction(() => {
+      this.db.prepare(`
+        UPDATE change_sets SET status = 'conflicted'
+        WHERE id = ? AND status IN ('proposed', 'applying')
+      `).run(changeSetId)
+      this.db.prepare('DELETE FROM apply_journal WHERE change_set_id = ?').run(changeSetId)
+    })
+    return requiredChangeSet(this.changeSet(changeSetId))
+  }
+
+  /**
+   * Enumerate incomplete publications in deterministic creation order.
+   * @returns exact durable apply journals awaiting recovery.
+   */
+  applyJournals(): readonly ApplyJournal[] {
+    const rows = this.db.prepare(`
+      SELECT change_set_id, authorized_session_id, project_relative_path,
+             before_hash, after_hash, after_utf8, result_revision_id, created_at
+      FROM apply_journal ORDER BY created_at, change_set_id
+    `).all() as unknown as ApplyJournalRow[]
+    return rows.map(row => ({
+      changeSetId: ChangeSetId(row.change_set_id),
+      authorizedSessionId: row.authorized_session_id as SessionId,
+      projectRelativePath: row.project_relative_path,
+      beforeHash: row.before_hash as ContentHash,
+      afterHash: row.after_hash as ContentHash,
+      afterUtf8: new Uint8Array(row.after_utf8),
+      resultRevisionId: RevisionId(row.result_revision_id),
+      createdAt: row.created_at,
+    }))
+  }
+
+  private insertRevision(revision: AssetRevision, projectRelativePath: string): void {
+    this.db.prepare(`
+      INSERT INTO revisions (
+        id, project_id, asset_id, parent_revision_id, project_relative_path,
+        serialized_utf8, content_hash, origin, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      revision.id,
+      revision.projectId,
+      revision.assetId,
+      revision.parentRevisionId ?? null,
+      projectRelativePath,
+      Buffer.from(revision.serializedUtf8),
+      revision.contentHash,
+      revision.origin,
+      revision.createdAt,
+    )
   }
 
   private putHead(projectId: ProjectId, assetId: AssetId, revisionId: RevisionId, path: string): void {
@@ -229,5 +435,104 @@ export class NovelHistory {
         revision_id = excluded.revision_id,
         project_relative_path = excluded.project_relative_path
     `).run(projectId, assetId, revisionId, path)
+  }
+
+  private transaction(operation: () => void): void {
+    this.db.exec('BEGIN IMMEDIATE')
+    try {
+      operation()
+      this.db.exec('COMMIT')
+    } catch (error: unknown) {
+      this.db.exec('ROLLBACK')
+      throw error
+    }
+  }
+}
+
+function requiredChangeSet(value: ChangeSet | undefined): ChangeSet {
+  if (value === undefined) throw corrupt('ChangeSet disappeared during a transaction')
+  return value
+}
+
+function corrupt(detail: string, cause?: unknown): NovelRepositoryError {
+  return new NovelRepositoryError(
+    `novel repository: corrupt history: ${detail}`,
+    'NOVEL_HISTORY_CORRUPT',
+    cause === undefined ? undefined : { cause },
+  )
+}
+
+function parseJson(value: string, label: string): unknown {
+  try {
+    return JSON.parse(value) as unknown
+  } catch (error: unknown) {
+    throw corrupt(`${label} is not valid JSON`, error)
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function parseOperations(value: unknown): readonly NovelOperation[] {
+  if (!Array.isArray(value) || value.length !== 1) throw corrupt('operations must contain exactly one item')
+  const operation: unknown = value[0]
+  if (!isRecord(operation) || operation['kind'] !== 'replace-text' || typeof operation['replacement'] !== 'string') {
+    throw corrupt('operation is not a replace-text operation')
+  }
+  const selector = operation['selector']
+  if (
+    !isRecord(selector)
+    || selector['kind'] !== 'text-range'
+    || !Number.isSafeInteger(selector['startUtf16'])
+    || !Number.isSafeInteger(selector['endUtf16'])
+    || typeof selector['quoteHash'] !== 'string'
+    || (selector['prefix'] !== undefined && typeof selector['prefix'] !== 'string')
+    || (selector['suffix'] !== undefined && typeof selector['suffix'] !== 'string')
+  ) {
+    throw corrupt('replace-text selector is invalid')
+  }
+  const prefix = selector['prefix']
+  const suffix = selector['suffix']
+  return [{
+    kind: 'replace-text',
+    selector: {
+      kind: 'text-range',
+      startUtf16: selector['startUtf16'] as number,
+      endUtf16: selector['endUtf16'] as number,
+      quoteHash: selector['quoteHash'] as ContentHash,
+      ...(prefix === undefined ? {} : { prefix }),
+      ...(suffix === undefined ? {} : { suffix }),
+    },
+    replacement: operation['replacement'],
+  }]
+}
+
+function parseActor(value: unknown): ChangeSet['actor'] {
+  if (!isRecord(value) || (value['kind'] !== 'agent' && value['kind'] !== 'user')) throw corrupt('actor is invalid')
+  if (value['kind'] === 'agent') {
+    if (typeof value['sessionId'] !== 'string') throw corrupt('agent actor session is invalid')
+    return { kind: 'agent', sessionId: value['sessionId'] as SessionId }
+  }
+  if (value['sessionId'] !== undefined && typeof value['sessionId'] !== 'string') throw corrupt('user actor session is invalid')
+  return value['sessionId'] === undefined
+    ? { kind: 'user' }
+    : { kind: 'user', sessionId: value['sessionId'] as SessionId }
+}
+
+function changeSetFromRow(row: ChangeSetRow): ChangeSet {
+  if (!['proposed', 'applying', 'applied', 'rejected', 'conflicted'].includes(row.status)) {
+    throw corrupt(`ChangeSet status ${JSON.stringify(row.status)} is invalid`)
+  }
+  return {
+    id: ChangeSetId(row.id),
+    projectId: ProjectId(row.project_id),
+    assetId: AssetId(row.asset_id),
+    baseRevisionId: RevisionId(row.base_revision_id),
+    operations: parseOperations(parseJson(row.operations_json, 'operations')),
+    actor: parseActor(parseJson(row.actor_json, 'actor')),
+    summary: row.summary,
+    status: row.status as ChangeSet['status'],
+    ...(row.result_revision_id === null ? {} : { resultRevisionId: RevisionId(row.result_revision_id) }),
   }
 }

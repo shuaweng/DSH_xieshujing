@@ -44,3 +44,9 @@ That reachability is incidental, not a guarantee — if it ever leaves the graph
 mirror the helper like the rest.
 
 Nothing mechanically enforces this rule; keep it in review.
+
+## Novel Studio overlay scenario
+
+`novel-workbench.e2e.ts` boots the ordinary Web App plus the explicit experimental Novel Studio overlay. The scaffold's optional `extraModuleFallbackAnchors` admits only the additional out-of-tree package closure for that scenario; ordinary Web tests retain the shipped package closure.
+
+The keyless scenario opens a seeded Session through the real DSH sidebar, renders one authored chapter and durable ChangeSet card, accepts the proposal, edits and selects new prose, verifies the dirty draft is saved before selection capture, and records the canonical `dsh-novel:` Composer mention. Its golden masks only the opaque encoded reference payload; visible manuscript text, Diff state, context disclosure, and native DSH chrome remain exact.

@@ -11,6 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { FsError, type FsTarget, type FsVersion } from '@deepseek-ai/dsh-fs'
 import NovelRepository, {
+  ChangeSetId,
   NovelRepositoryError,
   RevisionId,
   SelectionRefId,
@@ -20,8 +21,11 @@ import NovelRepository, {
   type AssetSnapshot,
   type AssetSummary,
   type CaptureSelectionRequest,
+  type ChangeSet,
+  type ChangeSetAuthorization,
   type NovelProjectSnapshot,
   type ProjectId,
+  type ProposeChangeSetRequest,
   type RevisionId as RevisionIdValue,
   type RevisionOrigin,
   type SaveChapterBodyRequest,
@@ -34,7 +38,8 @@ import {
   splitsSurrogatePair,
   type ParsedChapter,
 } from './content.ts'
-import { NovelHistory, openHistory } from './history.ts'
+import { hitApplyFault } from './apply-fault.ts'
+import { NovelHistory, openHistory, type ApplyJournal } from './history.ts'
 import { parseProjectManifest } from './manifest.ts'
 
 const PROJECT_MANIFEST = 'novel.yaml'
@@ -82,6 +87,14 @@ interface ObservedAsset {
   readonly parsed: ParsedChapter
   readonly snapshot: AssetSnapshot
   readonly summary: AssetSummary
+}
+
+interface ScannedAssetFile {
+  readonly target: FsTarget
+  readonly version: FsVersion
+  readonly projectRelativePath: string
+  readonly parsed: ParsedChapter
+  readonly bytes: Uint8Array
 }
 
 interface ProjectState {
@@ -333,12 +346,150 @@ export class LocalNovelRepository extends NovelRepository {
     })
   }
 
+  override async proposeChangeSet(
+    project: NovelProjectSnapshot,
+    request: ProposeChangeSetRequest,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const base = this.snapshotFromHistory(project, state, request.assetId, request.baseRevisionId)
+      materializeOperations(base, request.operations, this.config.assetMaxBytes)
+      const summary = request.summary.trim()
+      if (summary.length === 0 || summary.length > 500 || request.summary !== summary) {
+        throw invalidChangeSet('summary must be 1 to 500 characters without surrounding whitespace')
+      }
+      const changeSet: ChangeSet = {
+        id: ChangeSetId(`changeset_${randomUUID()}`),
+        projectId: project.id,
+        assetId: request.assetId,
+        baseRevisionId: request.baseRevisionId,
+        operations: structuredClone(request.operations),
+        actor: { ...request.actor },
+        summary,
+        status: 'proposed',
+      }
+      state.history.proposeChangeSet(changeSet)
+      return cloneChangeSet(changeSet)
+    })
+  }
+
+  override async readChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      return cloneChangeSet(this.changeSetForProject(state, project.id, changeSetId))
+    })
+  }
+
+  override async applyChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    authorization: ChangeSetAuthorization,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet> {
+    return await this.withProject(project, async (state) => {
+      signal?.throwIfAborted()
+      await this.scan(project, state, signal)
+      let changeSet = this.changeSetForProject(state, project.id, changeSetId)
+      authorizeChangeSet(changeSet, authorization)
+      if (changeSet.status !== 'proposed') return cloneChangeSet(changeSet)
+
+      const current = state.catalog.get(changeSet.assetId)
+      if (current === undefined) {
+        changeSet = state.history.conflictApply(changeSet.id)
+        return cloneChangeSet(changeSet)
+      }
+      if (current.snapshot.revisionId !== changeSet.baseRevisionId) {
+        changeSet = state.history.conflictApply(changeSet.id)
+        return cloneChangeSet(changeSet)
+      }
+      const materialized = materializeOperations(
+        current.snapshot,
+        changeSet.operations,
+        this.config.assetMaxBytes,
+      )
+      const resultRevisionId = RevisionId(`revision_${randomUUID()}`)
+      const createdAt = new Date().toISOString()
+      const journal: ApplyJournal = {
+        changeSetId,
+        authorizedSessionId: authorization.sessionId,
+        projectRelativePath: current.summary.asset.projectRelativePath,
+        beforeHash: current.snapshot.contentHash,
+        afterHash: contentHash(materialized.bytes),
+        afterUtf8: materialized.bytes,
+        resultRevisionId,
+        createdAt,
+      }
+      state.history.startApply(changeSetId, journal)
+      hitApplyFault(this.ctx.root, 'after-journal')
+
+      let outcome
+      try {
+        outcome = await this.ctx.fs.writeText(
+          current.target,
+          materialized.text,
+          { kind: 'replaceIfVersion', version: current.version },
+        )
+      } catch (error: unknown) {
+        if (!(error instanceof FsError) || error.code !== 'FS_STALE_VERSION') throw error
+        changeSet = state.history.conflictApply(changeSet.id)
+        await this.scan(project, state)
+        return cloneChangeSet(changeSet)
+      }
+      hitApplyFault(this.ctx.root, 'after-file')
+
+      const revision = preparedRevision(
+        resultRevisionId,
+        project.id,
+        changeSet.assetId,
+        changeSet.baseRevisionId,
+        materialized.bytes,
+        createdAt,
+      )
+      changeSet = state.history.finalizeApply(changeSet.id, revision, journal.projectRelativePath)
+      const observed = observedAsset(
+        project,
+        journal.projectRelativePath,
+        current.target,
+        outcome.version,
+        materialized.parsed,
+        revision,
+      )
+      state.catalog.set(changeSet.assetId, observed)
+      return cloneChangeSet(changeSet)
+    })
+  }
+
+  override async rejectChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    authorization: ChangeSetAuthorization,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const current = this.changeSetForProject(state, project.id, changeSetId)
+      authorizeChangeSet(current, authorization)
+      if (current.status === 'applying') throw invalidChangeSet('an applying ChangeSet cannot be rejected')
+      state.history.rejectChangeSet(changeSetId)
+      return cloneChangeSet(this.changeSetForProject(state, project.id, changeSetId))
+    })
+  }
+
   private async scan(
     project: NovelProjectSnapshot,
     state: ProjectState,
     signal?: AbortSignal,
   ): Promise<Map<AssetId, ObservedAsset>> {
-    const files = await this.scanFiles(project, signal)
+    let files = await this.scanFiles(project, signal)
+    if (state.history.applyJournals().length > 0) {
+      const wrote = await this.recoverApplying(project, state, files)
+      if (wrote) files = await this.scanFiles(project, signal)
+    }
     const catalog = new Map<AssetId, ObservedAsset>()
     for (const file of files) {
       if (catalog.has(file.parsed.id)) {
@@ -385,26 +536,14 @@ export class LocalNovelRepository extends NovelRepository {
     return catalog
   }
 
-  private async scanFiles(project: NovelProjectSnapshot, signal?: AbortSignal): Promise<Array<{
-    target: FsTarget
-    version: FsVersion
-    projectRelativePath: string
-    parsed: ParsedChapter
-    bytes: Uint8Array
-  }>> {
+  private async scanFiles(project: NovelProjectSnapshot, signal?: AbortSignal): Promise<ScannedAssetFile[]> {
     const manuscript = project.contentRoots['manuscript']
     if (manuscript === undefined) {
       throw new NovelRepositoryError('novel repository: project has no manuscript content root', 'NOVEL_PROJECT_MANIFEST_INVALID')
     }
     const directories = new Set<string>()
     const files = new Map<string, string>()
-    const result: Array<{
-      target: FsTarget
-      version: FsVersion
-      projectRelativePath: string
-      parsed: ParsedChapter
-      bytes: Uint8Array
-    }> = []
+    const result: ScannedAssetFile[] = []
     const visit = async (directory: FsTarget, depth: number): Promise<void> => {
       signal?.throwIfAborted()
       if (depth > this.config.scanMaxDepth) {
@@ -483,6 +622,79 @@ export class LocalNovelRepository extends NovelRepository {
       throw new NovelRepositoryError('novel repository: retained Revision Frontmatter identity is corrupt', 'NOVEL_HISTORY_CORRUPT')
     }
     return snapshot(project, retained.projectRelativePath, parsed, retained.revision)
+  }
+
+  private changeSetForProject(
+    state: ProjectState,
+    projectId: ProjectId,
+    changeSetId: ChangeSetId,
+  ): ChangeSet {
+    const changeSet = state.history.changeSet(changeSetId)
+    if (changeSet === undefined || changeSet.projectId !== projectId) {
+      throw new NovelRepositoryError(
+        `novel repository: ChangeSet ${JSON.stringify(changeSetId)} was not found in this project`,
+        'NOVEL_CHANGESET_NOT_FOUND',
+      )
+    }
+    return changeSet
+  }
+
+  private async recoverApplying(
+    project: NovelProjectSnapshot,
+    state: ProjectState,
+    files: readonly ScannedAssetFile[],
+  ): Promise<boolean> {
+    let wrote = false
+    for (const journal of state.history.applyJournals()) {
+      const changeSet = this.changeSetForProject(state, project.id, journal.changeSetId)
+      if (changeSet.status !== 'applying') {
+        throw new NovelRepositoryError(
+          'novel repository: apply journal exists without an applying ChangeSet',
+          'NOVEL_HISTORY_CORRUPT',
+        )
+      }
+      const file = files.find(candidate => candidate.parsed.id === changeSet.assetId)
+      if (file === undefined || file.projectRelativePath !== journal.projectRelativePath) {
+        state.history.conflictApply(changeSet.id)
+        continue
+      }
+      const currentHash = contentHash(file.bytes)
+      if (currentHash !== journal.afterHash && currentHash !== journal.beforeHash) {
+        state.history.conflictApply(changeSet.id)
+        continue
+      }
+      const parsed = parseChapter(journal.afterUtf8, journal.projectRelativePath)
+      if (
+        parsed.id !== changeSet.assetId
+        || contentHash(journal.afterUtf8) !== journal.afterHash
+      ) {
+        throw new NovelRepositoryError('novel repository: apply journal payload is corrupt', 'NOVEL_HISTORY_CORRUPT')
+      }
+      if (currentHash === journal.beforeHash) {
+        try {
+          await this.ctx.fs.writeText(
+            file.target,
+            new TextDecoder().decode(journal.afterUtf8),
+            { kind: 'replaceIfVersion', version: file.version },
+          )
+          wrote = true
+        } catch (error: unknown) {
+          if (!(error instanceof FsError) || error.code !== 'FS_STALE_VERSION') throw error
+          state.history.conflictApply(changeSet.id)
+          continue
+        }
+      }
+      const revision = preparedRevision(
+        journal.resultRevisionId,
+        project.id,
+        changeSet.assetId,
+        changeSet.baseRevisionId,
+        journal.afterUtf8,
+        journal.createdAt,
+      )
+      state.history.finalizeApply(changeSet.id, revision, journal.projectRelativePath)
+    }
+    return wrote
   }
 
   private async readBounded(
@@ -622,6 +834,66 @@ function newRevision(
   }
 }
 
+function preparedRevision(
+  id: RevisionIdValue,
+  projectId: ProjectId,
+  assetId: AssetId,
+  parentRevisionId: RevisionIdValue,
+  serializedUtf8: Uint8Array,
+  createdAt: string,
+): AssetRevision {
+  return {
+    id,
+    projectId,
+    assetId,
+    parentRevisionId,
+    serializedUtf8: new Uint8Array(serializedUtf8),
+    contentHash: contentHash(serializedUtf8),
+    origin: 'agent-apply',
+    createdAt,
+  }
+}
+
+function materializeOperations(
+  base: AssetSnapshot,
+  operations: ProposeChangeSetRequest['operations'],
+  assetMaxBytes: number,
+): { text: string; bytes: Uint8Array; parsed: ParsedChapter } {
+  if (operations.length !== 1) throw invalidChangeSet('MVP proposals must contain exactly one operation')
+  const operation = operations[0]
+  /* v8 ignore next -- NovelOperation is currently closed to replace-text. */
+  if (operation === undefined) throw invalidChangeSet('unsupported operation')
+  if (containsUnpairedSurrogate(operation.replacement)) {
+    throw invalidChangeSet('replacement contains an unpaired UTF-16 surrogate')
+  }
+  const { startUtf16, endUtf16, quoteHash } = operation.selector
+  if (
+    !Number.isSafeInteger(startUtf16)
+    || !Number.isSafeInteger(endUtf16)
+    || startUtf16 < 0
+    || endUtf16 <= startUtf16
+    || endUtf16 > base.body.length
+    || splitsSurrogatePair(base.body, startUtf16)
+    || splitsSurrogatePair(base.body, endUtf16)
+  ) {
+    throw invalidChangeSet('replace-text selector is outside the retained body')
+  }
+  const selected = base.body.slice(startUtf16, endUtf16)
+  if (contentHash(new TextEncoder().encode(selected)) !== quoteHash) {
+    throw invalidChangeSet('replace-text quote hash does not match the retained Revision')
+  }
+  const beforeText = new TextDecoder().decode(base.serializedUtf8)
+  const parsedBase = parseChapter(base.serializedUtf8, base.asset.projectRelativePath)
+  const body = `${base.body.slice(0, startUtf16)}${operation.replacement}${base.body.slice(endUtf16)}`
+  const text = `${beforeText.slice(0, parsedBase.bodyStartUtf16)}${body}`
+  const bytes = new TextEncoder().encode(text)
+  if (bytes.byteLength > assetMaxBytes) throw invalidChangeSet(`result exceeds ${assetMaxBytes} bytes`)
+  const parsed = parseChapter(bytes, base.asset.projectRelativePath)
+  /* v8 ignore next -- replace-text addresses only the post-Frontmatter body, so it cannot change the parsed Asset id. */
+  if (parsed.id !== base.asset.id) throw invalidChangeSet('proposal changed the asset identity')
+  return { text, bytes, parsed }
+}
+
 function snapshot(
   project: NovelProjectSnapshot,
   projectRelativePath: string,
@@ -678,6 +950,28 @@ function cloneSnapshot(value: AssetSnapshot): AssetSnapshot {
 
 function cloneSummary(value: AssetSummary): AssetSummary {
   return { ...value, asset: { ...value.asset } }
+}
+
+function cloneChangeSet(value: ChangeSet): ChangeSet {
+  return {
+    ...value,
+    actor: { ...value.actor },
+    operations: structuredClone(value.operations),
+  }
+}
+
+function authorizeChangeSet(value: ChangeSet, authorization: ChangeSetAuthorization): void {
+  const owningSession = value.actor.sessionId
+  if (owningSession !== undefined && owningSession !== authorization.sessionId) {
+    throw new NovelRepositoryError(
+      'novel repository: ChangeSet belongs to another Session',
+      'NOVEL_CHANGESET_UNAUTHORIZED',
+    )
+  }
+}
+
+function invalidChangeSet(detail: string): NovelRepositoryError {
+  return new NovelRepositoryError(`novel repository: invalid ChangeSet: ${detail}`, 'NOVEL_CHANGESET_INVALID')
 }
 
 function assetNotFound(assetId: AssetId): NovelRepositoryError {
