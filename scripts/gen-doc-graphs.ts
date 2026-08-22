@@ -470,6 +470,23 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'tool-fs executes read/write/edit through ctx.fs; fs-sandbox fences mutations by the shared sandbox mode; fs-observation-policy contributes observed-state checks through the fs/* event gate.',
   },
   {
+    key: 'novelRepository',
+    pkg: 'novel-repository',
+    title: 'Experimental Novel Project repository seam',
+    mode: 'seam',
+    implementations: ['novel-repository-local'],
+    consumers: ['novel-repository-remote'],
+    note: 'The local provider validates one bounded novel.yaml and existing canonical content roots; the supported Novel Studio composition loads the Host Consumer and Client adapter, while default Profiles load neither.',
+  },
+  {
+    key: 'novelRepositoryRemote',
+    pkg: 'novel-repository-remote',
+    title: 'Experimental Novel Project Remote Consumer',
+    mode: 'core',
+    consumers: ['api-gateway'],
+    note: 'Uses the Agent resolved by the existing Gateway identity policy, delegates bounded discovery to ctx.novelRepository, and projects only display-safe values through the novelRepository wire namespace; a separate Client-only adapter mounts the generated contribution.',
+  },
+  {
     key: 'compaction',
     pkg: 'compaction',
     title: 'Compaction seam',

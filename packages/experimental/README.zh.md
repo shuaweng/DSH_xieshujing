@@ -7,6 +7,11 @@
 | 包 | 职责 | ctx key |
 |---|---|---|
 | `agent-team/` | 隐式 root Agent Teams roster、持久 peer mailbox、共享任务 DAG 与运行时协调 | `ctx.agentTeams` |
+| `novel-repository/` | 与提供方无关的 Novel Project 发现 seam 和公共 Host 词汇 | `ctx.novelRepository` |
+| `novel-repository-local/` | 有界本地 `novel.yaml` 校验与规范内容根目录解析 | — |
+| `novel-repository-remote/` | 按 Agent 作用域寻址的只读项目发现 Host Remote | `ctx.novelRepositoryRemote` |
+| `novel-repository-client/` | 生成的 Novel Repository Remote 的浏览器挂载 | — |
+| `novel-studio/` | 在 Web App 之后挂载 Novel Project 发现能力的显式私有 Profile bundle | — |
 | `tool-agent-team/` | 按 Agent 作用域提供的 Agent Teams 模型工具与协作指引 | — |
 
 [子树规则](AGENTS.md)规定依赖隔离、发布排除与 promotion。

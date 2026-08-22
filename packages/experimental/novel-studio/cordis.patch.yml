@@ -1,0 +1,12 @@
+# Novel Studio is an explicit third Profile layer after dsh-base and dsh-web-app.
+# This foundation slice mounts only the project repository; later slices own
+# asset tools, mutation Remotes, and the Profile-local layout replacement.
+- insert:
+    - id: novel-repository-local
+      name: '@deepseek-ai/dsh-experimental-novel-repository-local'
+
+    - id: novel-repository-remote
+      name: '@deepseek-ai/dsh-experimental-novel-repository-remote'
+
+    - id: novel-repository-client
+      name: '@deepseek-ai/dsh-experimental-novel-repository-client'

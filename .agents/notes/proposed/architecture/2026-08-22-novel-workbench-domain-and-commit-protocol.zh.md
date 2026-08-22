@@ -22,6 +22,14 @@ Status: proposed
 
 本提案扩展现有 Profile、文件系统、Session 历史、Remote 和客户端展示决策，不取代其中任何一项。
 
+## PR1 基础切片
+
+PR1 以独立包建立最小而完整的 `ctx.novelRepository` 能力 seam：纯 Service Definition、本地 Service Provider、只读 Host Remote Consumer、挂载生成 Remote contribution 的 Client-only adapter，以及显式 Novel Studio 组合 bundle。编译 face 的拆分遵循普通包只进入一个 aggregate 的规则，不会再制造一个 `api/remotes` 特例。现有 Gateway 身份策略负责解析被寻址的 Agent；该 Consumer 不增加授权机制。它使用这个 Agent Session 的工作目录作为候选 Workspace 根目录，判断其中是否包含有效的版本一 Novel Project，并读取经过校验的项目描述；它不能枚举或修改资产。
+
+项目发现只通过 `ctx.fs` 读取根目录下的 `novel.yaml`。本地 Provider 默认将项目清单限制为 64 KiB；其 Config 可以指定另一个正的安全整数作为字节上限，但不能超过运行时最大 buffer 长度与最大字符串长度中的较小值。它执行严格 UTF-8 解码，拒绝所有 YAML 解析错误或 warning、alias 以及编码前或解码后的控制字符，校验版本一文档中不超过 32 个声明内容根，并通过 `ctx.fs` 解析标记文件和内容根目录，再使用 `ctx.fs.contains()` 检查包含关系。悬空或不是普通文件的标记无效。每个声明的内容根必须已作为目录存在；悬空链接、普通文件、缺失目录和 Workspace 根目录外的规范化目标都会被拒绝。Host Consumer 默认将以 UTF-8 编码的完整浏览器 descriptor JSON 限制为 256 KiB；其 Config 可以指定另一个正的安全整数作为字节上限，但不能超过运行时最大字符串长度。
+
+受支持的显式 Novel Studio 组合会在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后加载该切片。默认 `web` 与 `headless` 组合以及 `PROFILE_TEMPLATES` 保持不变；自定义 `cordis.yml` 仍可直接安装这些私有包。打开项目是只读操作：PR1 不创建 `.novel`，不初始化 SQLite，不扫描资产文件，不启动文件监听，不注册 Novel UI 或模型工具，也不实现 ChangeSet。
+
 ## 范围与不变量
 
 - `ProjectId`、`AssetId`、`RevisionId`、`SelectionRefId` 和 `ChangeSetId` 都是不透明品牌 id。路径、标题、顺序或数据库行号绝不成为身份。
@@ -85,13 +93,31 @@ The rain had already hidden the harbor lights.
 Service Definition 拥有词汇；本地 Service Provider 拥有解析、containment、SQLite 和文件系统发布；工具、上下文解析、Remote 方法和浏览器 UI 是 Consumer。
 
 ```ts ignore-check
+type ContentHash = `sha256:${string}`
+
+interface Asset {
+  readonly id: AssetId
+  readonly projectId: ProjectId
+  readonly type: 'manuscript.chapter'
+  readonly projectRelativePath: string
+}
+
+interface AssetSnapshot {
+  readonly asset: Asset
+  readonly revisionId: RevisionId
+  readonly serializedUtf8: Uint8Array
+  readonly contentHash: ContentHash
+  readonly frontmatter: Readonly<Record<string, unknown>>
+  readonly body: string
+}
+
 interface AssetRevision {
   readonly id: RevisionId
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly parentRevisionId?: RevisionId
   readonly serializedUtf8: Uint8Array
-  readonly contentHash: string
+  readonly contentHash: ContentHash
   readonly origin: 'initial-scan' | 'user-edit' | 'agent-apply' | 'external-edit'
   readonly createdAt: string
 }
@@ -110,7 +136,7 @@ interface TextRangeSelector {
   readonly kind: 'text-range'
   readonly startUtf16: number
   readonly endUtf16: number
-  readonly quoteHash: string
+  readonly quoteHash: ContentHash
   readonly prefix?: string
   readonly suffix?: string
 }
@@ -121,13 +147,17 @@ interface ChangeSet {
   readonly assetId: AssetId
   readonly baseRevisionId: RevisionId
   readonly operations: readonly NovelOperation[]
-  readonly actor: { readonly kind: 'agent' | 'user'; readonly sessionId?: string }
+  readonly actor:
+    | { readonly kind: 'agent'; readonly sessionId: SessionId }
+    | { readonly kind: 'user'; readonly sessionId?: SessionId }
   readonly summary: string
   readonly status: 'proposed' | 'applying' | 'applied' | 'rejected' | 'conflicted'
 }
 ```
 
-Revision id 是与内容无关的不透明身份，`contentHash` 用于检测相等性和恢复状态。版本一保留完整序列化快照，因为正确性和还原能力比增量压缩更重要。保留策略、压缩、导出和去重需要后续决策，并明确用户数据策略。
+`Asset` 是当前扫描得到的目录值：路径属于可变的组织数据，而品牌化 id 在重命名后仍保持身份。`AssetSnapshot` 是绑定一个已保留 Revision 的不可变解析读取模型；`frontmatter` 与 `body` 都从 `serializedUtf8` 派生，绝不是独立权威。Repository 会先把当前文件字节核对为 Revision，再暴露绑定 Revision 的 snapshot。提供方本地 `FsVersion` 只保留在用于带守卫发布的内部实时观察中；它既不持久化，也不跨 Remote 发送。
+
+Revision id 是与内容无关的不透明身份。版本一把每个内容哈希和引文哈希编码为 `sha256:` 加恰好 64 位小写十六进制字符，输入是相应字段命名的精确 UTF-8 字节，因此日志比较在重启和不同实现之间保持稳定。系统保留完整序列化快照，因为正确性和还原能力比增量压缩更重要。保留策略、压缩、导出和去重需要后续决策，并明确用户数据策略。
 
 ChangeSet 操作按资产类型区分，由该类型注册的适配器验证。初始 `manuscript.chapter` 操作替换一个精确正文范围。ChangeSet 进入 `applying` 前，Repository 会生成并验证完整候选 after 字节；模型不能提交任意 SQL、把文件路径当作权威，或提交未验证的 JSON Patch。
 

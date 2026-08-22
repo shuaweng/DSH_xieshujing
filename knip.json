@@ -650,6 +650,23 @@
         "tests/**/*.ts"
       ]
     },
+    "packages/experimental/novel-studio": {
+      "entry": [
+        "tests/**/*.e2e.ts"
+      ],
+      "ignoreDependencies": [
+        "@deepseek-ai/dsh-api-gateway",
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-experimental-novel-repository",
+        "@deepseek-ai/dsh-experimental-novel-repository-client",
+        "@deepseek-ai/dsh-experimental-novel-repository-local",
+        "@deepseek-ai/dsh-experimental-novel-repository-remote",
+        "@deepseek-ai/dsh-headless",
+        "@deepseek-ai/dsh-typert-loader",
+        "@deepseek-ai/dsh-typert-registry",
+        "@deepseek-ai/dsh-web-app"
+      ]
+    },
     "packages/bundle/base": {
       "ignoreDependencies": [
         "@deepseek-ai/.+"

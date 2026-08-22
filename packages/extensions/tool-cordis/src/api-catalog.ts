@@ -1078,6 +1078,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'novelRepository',
+    summary: 'Provider-neutral access to validated Novel Project declarations.',
+    description: 'Provider-neutral access to validated Novel Project declarations.',
+    methods: [
+      {
+        signature: 'abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelProjectSnapshot | undefined>',
+        description: 'Discover and validate the Novel Project rooted at one filesystem target.',
+        parameters: [{ name: 'root', description: 'Canonical candidate project directory from the active filesystem provider.' }, { name: 'signal', description: 'Optional cancellation for all provider I/O.' }],
+        returns: 'the validated project, or `undefined` when `novel.yaml` is absent.',
+        throws: ['{NovelRepositoryError} when the root or present manifest is invalid or unsupported.'],
+      },
+    ],
+  },
+  {
+    key: 'novelRepositoryRemote',
+    summary: 'Project browser projection consuming the provider-neutral repository service.',
+    description: 'Project browser projection consuming the provider-neutral repository service.',
+    methods: [
+      {
+        signature: '@Remote(\'discover\') async discover(agent: Agent, signal: AbortSignal): Promise<NovelProjectDescriptor | undefined>',
+        description: 'Discover a project at the addressed Agent\'s Session working directory.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose working directory bounds discovery.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'browser-safe project values, or `undefined` when `novel.yaml` is absent.',
+        throws: ['{NovelRepositoryError} when the Session has no working directory or discovery fails.'],
+      },
+    ],
+  },
+  {
     key: 'permissionPresets',
     summary: 'Owns the deployment\'s permission presets and their write path.',
     description: 'Owns the deployment\'s permission presets and their write path. Requires a confining `ctx.shell` executor and `ctx.approval`; unmatched knob values are reported as CUSTOM_PRESET, not an error.',
@@ -3798,6 +3826,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n}',
   },
   {
+    name: 'NovelProjectDescriptor',
+    declaration: 'export interface NovelProjectDescriptor {\n    readonly schema: 1;\n    readonly id: ProjectId;\n    readonly title: string;\n    readonly rootDisplayPath: string;\n    readonly manifestDisplayPath: string;\n    readonly contentRootDisplayPaths: Readonly<Record<string, string>>;\n}',
+  },
+  {
+    name: 'NovelProjectSnapshot',
+    declaration: 'export interface NovelProjectSnapshot {\n    readonly schema: 1;\n    readonly id: ProjectId;\n    readonly title: string;\n    readonly root: FsTarget;\n    readonly manifest: FsTarget;\n    readonly contentRoots: Readonly<Record<string, FsTarget>>;\n}',
+  },
+  {
     name: 'ObjectJsonSchema',
     declaration: 'export type ObjectJsonSchema = JsonSchemaNode & {\n    type: \'object\';\n};',
   },
@@ -3848,6 +3884,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'PreToolDecision',
     declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n} | {\n    kind: \'ask\';\n    reason?: string;\n};',
+  },
+  {
+    name: 'ProjectId',
+    declaration: 'export type ProjectId = Branded<\'NovelProjectId\'>;',
   },
   {
     name: 'ProjectionChangeListener',

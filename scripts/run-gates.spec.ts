@@ -404,6 +404,7 @@ describe('Node 24 lane ownership', () => {
       expect.arrayContaining([
         'packages/subagent/subagent-codex/tests/loader-composition.e2e.ts',
         'packages/subagent/subagent-claude-code/tests/loader-composition.e2e.ts',
+        'packages/experimental/novel-studio/tests/built-remote.e2e.ts',
       ]),
     )
     expect(subject.find(item => item.id === 'web-snapshot')).toMatchObject({

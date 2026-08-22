@@ -22,6 +22,14 @@ The existing `novel` Agent Preset remains a session-scoped writing capability an
 
 This proposal extends the existing Profile, filesystem, Session-history, Remote, and client-presentation decisions. It supersedes none of them.
 
+## PR1 foundation slice
+
+PR1 establishes the smallest complete `ctx.novelRepository` capability seam as separate packages: a pure Service Definition, a local Service Provider, a read-only Host Remote Consumer, a Client-only adapter that mounts the generated Remote contribution, and the explicit Novel Studio composition bundle. The compiler-face split follows the ordinary one-aggregate rule rather than creating another `api/remotes` exception. The existing Gateway identity policy resolves the addressed Agent; the Consumer adds no authorization mechanism. It uses that Agent Session's working directory as the candidate Workspace root, determines whether it contains a valid version-one Novel Project, and reads its validated project descriptor; it cannot enumerate or mutate assets.
+
+Project discovery reads only the root `novel.yaml` through `ctx.fs`. The local Provider caps the manifest at 64 KiB by default; its Config may select another positive safe-integer byte limit no larger than the smaller of the runtime's maximum buffer and string lengths. It performs strict UTF-8 decoding, rejects every YAML parser error or warning, aliases, and encoded or decoded control characters, validates at most 32 declared content roots in the version-one document, and resolves the marker and content roots through `ctx.fs` before checking them with `ctx.fs.contains()`. A dangling or non-file marker is invalid. Every declared content root must already exist as a directory; dangling links, files, missing roots, and canonical targets outside the Workspace root are rejected. The Host Consumer caps the complete browser descriptor JSON encoded as UTF-8 at 256 KiB by default; its Config may select another positive safe-integer byte limit no larger than the runtime's maximum string length.
+
+The supported explicit Novel Studio composition loads the slice after `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. The default `web` and `headless` compositions and `PROFILE_TEMPLATES` remain unchanged; a custom `cordis.yml` may still install the private packages directly. Opening a project is read-only: PR1 does not create `.novel`, initialize SQLite, scan asset files, start watchers, register Novel UI or model tools, or implement ChangeSets.
+
 ## Scope and invariants
 
 - `ProjectId`, `AssetId`, `RevisionId`, `SelectionRefId`, and `ChangeSetId` are opaque branded ids. A path, title, order, or database row number never becomes identity.
@@ -85,13 +93,31 @@ Moving or renaming a file preserves the Asset because its Frontmatter id is stab
 The Service Definition owns the vocabulary; the local Service Provider owns parsing, containment, SQLite, and filesystem publication; tools, context resolution, Remote methods, and browser UI are Consumers.
 
 ```ts ignore-check
+type ContentHash = `sha256:${string}`
+
+interface Asset {
+  readonly id: AssetId
+  readonly projectId: ProjectId
+  readonly type: 'manuscript.chapter'
+  readonly projectRelativePath: string
+}
+
+interface AssetSnapshot {
+  readonly asset: Asset
+  readonly revisionId: RevisionId
+  readonly serializedUtf8: Uint8Array
+  readonly contentHash: ContentHash
+  readonly frontmatter: Readonly<Record<string, unknown>>
+  readonly body: string
+}
+
 interface AssetRevision {
   readonly id: RevisionId
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly parentRevisionId?: RevisionId
   readonly serializedUtf8: Uint8Array
-  readonly contentHash: string
+  readonly contentHash: ContentHash
   readonly origin: 'initial-scan' | 'user-edit' | 'agent-apply' | 'external-edit'
   readonly createdAt: string
 }
@@ -110,7 +136,7 @@ interface TextRangeSelector {
   readonly kind: 'text-range'
   readonly startUtf16: number
   readonly endUtf16: number
-  readonly quoteHash: string
+  readonly quoteHash: ContentHash
   readonly prefix?: string
   readonly suffix?: string
 }
@@ -121,13 +147,17 @@ interface ChangeSet {
   readonly assetId: AssetId
   readonly baseRevisionId: RevisionId
   readonly operations: readonly NovelOperation[]
-  readonly actor: { readonly kind: 'agent' | 'user'; readonly sessionId?: string }
+  readonly actor:
+    | { readonly kind: 'agent'; readonly sessionId: SessionId }
+    | { readonly kind: 'user'; readonly sessionId?: SessionId }
   readonly summary: string
   readonly status: 'proposed' | 'applying' | 'applied' | 'rejected' | 'conflicted'
 }
 ```
 
-Revision ids are content-independent opaque identities; `contentHash` detects equality and recovery states. Full serialized snapshots are retained in version one because correctness and restoration matter more than delta compression. Retention, compaction, export, and deduplication require a later decision with an explicit user-data policy.
+`Asset` is the current scanned catalog value: its path is mutable organization data, while its branded id remains identity across a rename. `AssetSnapshot` is an immutable parsed read model bound to one retained Revision; `frontmatter` and `body` are derived from `serializedUtf8`, never independent authorities. The Repository reconciles current file bytes into a Revision before exposing a Revision-bound snapshot. Provider-local `FsVersion` stays in the internal live observation used for guarded publication; it is neither durable nor sent across Remote.
+
+Revision ids are content-independent opaque identities. Version one encodes every content and quote hash as `sha256:` followed by exactly 64 lowercase hexadecimal digits over the named exact UTF-8 bytes, so journal comparisons remain stable across restarts and implementations. Full serialized snapshots are retained because correctness and restoration matter more than delta compression. Retention, compaction, export, and deduplication require a later decision with an explicit user-data policy.
 
 ChangeSet operations are discriminated by asset type and validated by its registered adapter. The initial `manuscript.chapter` operation replaces one exact body range. The Repository materializes and validates complete candidate after-bytes before a ChangeSet may enter `applying`; models never submit arbitrary SQL, a filesystem path as authority, or an unvalidated JSON Patch.
 
