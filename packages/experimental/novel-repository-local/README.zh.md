@@ -17,6 +17,7 @@
 - 作者保存只替换解析后的正文，保留精确 Frontmatter 前缀，并同时使用当前 `FsVersion` 和基础 Revision 拒绝陈旧写入。选区引用使用正文 UTF-16 偏移，拒绝切开代理对，并把引用哈希绑定到已保留 Revision。
 - 历史 Schema 版本二保存 ChangeSet 和 apply journal。提案不会写文件；应用要求提案所属 Session、精确的当前基础 Revision 和一个经过验证的 `replace-text` 操作；拒绝同样归 Session 所有并进入终态。
 - 应用会先把精确前后字节与哈希记录为 `applying`，再执行带保护的文件发布，最后记录 `agent-apply` Revision 和终态。项目重开时，after hash 会完成提交，before hash 会重试已授权写入，第三种 hash 会把 ChangeSet 标为 `conflicted` 而不覆盖文件。
+- 保存和 apply 恢复发布会把调用方的逐调用 sandbox policy 传给 `ctx.fs`；提供方不会用自身进程目录替代 Session 工作区边界。
 - 第一版历史数据库会原地迁移到版本二。不支持的较新数据库或损坏数据库仍会明确失败，绝不重置。
 
 ## 模型体验

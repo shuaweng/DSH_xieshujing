@@ -87,13 +87,25 @@ class StubNovelRepository extends NovelRepository {
 function testAgent(cwd?: string): Agent {
   return {
     id: 'agent-1',
-    session: { header: cwd === undefined ? {} : { cwd } },
+    session: { id: 'agent-1', events: [], header: cwd === undefined ? {} : { cwd } },
   } as unknown as Agent
+}
+
+function testContext(): Context {
+  const ctx = new Context()
+  ctx.provide('sandboxPolicy', {
+    resolve: ({ session }: { session?: Agent['session'] } = {}) => ({
+      mode: 'workspace-write',
+      workspaceRoot: session?.header.cwd ?? '/deployment-fallback',
+      ...(session === undefined ? {} : { sessionId: session.id }),
+    }),
+  } as never)
+  return ctx
 }
 
 describe('NovelRepositoryRemote Host service', () => {
   it('projects display-only project values and releases only its Consumer service', async () => {
-    const ctx = new Context()
+    const ctx = testContext()
     const root = { targetKey: 'root', displayPath: '/story' } as FsTarget
     const manifest = { targetKey: 'manifest', displayPath: '/story/novel.yaml' } as FsTarget
     const chapters = { targetKey: 'chapters', displayPath: '/story/manuscript' } as FsTarget
@@ -137,7 +149,7 @@ describe('NovelRepositoryRemote Host service', () => {
   })
 
   it('rejects discovery when the addressed Session has no working directory', async () => {
-    const ctx = new Context()
+    const ctx = testContext()
     const disposeFs = ctx.provide('fs', {
       resolve: vi.fn<FileSystem['resolve']>(),
     } as unknown as FileSystem)
@@ -155,7 +167,7 @@ describe('NovelRepositoryRemote Host service', () => {
   })
 
   it('preserves the repository absence result without inventing a descriptor', async () => {
-    const ctx = new Context()
+    const ctx = testContext()
     const root = { targetKey: 'root', displayPath: '/plain-workspace' } as FsTarget
     const disposeFs = ctx.provide('fs', {
       resolve: vi.fn<FileSystem['resolve']>().mockResolvedValue(root),
@@ -180,7 +192,7 @@ describe('NovelRepositoryRemote Host service', () => {
   })
 
   it('projects chapter catalog, read, guarded save, and frozen selection without filesystem identities', async () => {
-    const ctx = new Context()
+    const ctx = testContext()
     const root = { targetKey: 'root', displayPath: '/story' } as FsTarget
     const manifest = { targetKey: 'manifest', displayPath: '/story/novel.yaml' } as FsTarget
     const chapters = { targetKey: 'chapters', displayPath: '/story/manuscript' } as FsTarget
@@ -267,19 +279,20 @@ describe('NovelRepositoryRemote Host service', () => {
       baseRevisionId: RevisionId('revision-1'),
       body: '新正文',
     }, signal)).resolves.toMatchObject({ title: '第一章', body: '新正文' })
-    await expect(ctx.novelRepositoryRemote.captureSelection(agent, {
+    const captured = await ctx.novelRepositoryRemote.captureSelection(agent, {
       assetId: AssetId('chapter-1'),
       revisionId: RevisionId('revision-1'),
       startUtf16: 0,
       endUtf16: 1,
-    }, signal)).resolves.toMatchObject({
-      id: 'selection-1', preview: '旧', mention: expect.stringMatching(/^@\[旧\]\(dsh-novel:/u),
-    })
+    }, signal)
+    expect(captured).toMatchObject({ id: 'selection-1', preview: '旧' })
+    expect(captured.mention).toMatch(/^@\[旧\]\(dsh-novel:/u)
     const { preview: _preview, ...selectionWithoutPreview } = repository.selection
     repository.selection = selectionWithoutPreview
-    await expect(ctx.novelRepositoryRemote.captureSelection(agent, {
+    const capturedWithoutPreview = await ctx.novelRepositoryRemote.captureSelection(agent, {
       assetId: AssetId('chapter-1'), revisionId: RevisionId('revision-1'), startUtf16: 0, endUtf16: 1,
-    }, signal)).resolves.toMatchObject({ mention: expect.stringMatching(/^@\[chapter-1\]\(dsh-novel:/u) })
+    }, signal)
+    expect(capturedWithoutPreview.mention).toMatch(/^@\[chapter-1\]\(dsh-novel:/u)
     await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))
       .resolves.toMatchObject({ id: 'changeset-1', status: 'proposed', operation: { replacement: '新' } })
     await expect(ctx.novelRepositoryRemote.applyChangeSet(agent, ChangeSetId('changeset-1'), signal))
@@ -288,11 +301,13 @@ describe('NovelRepositoryRemote Host service', () => {
       .resolves.toMatchObject({ status: 'rejected' })
     expect(repository.authorizations).toEqual([{ sessionId: 'agent-1' }, { sessionId: 'agent-1' }])
 
-    repository.changeSetValue = { ...repository.changeSetValue!, operations: [] }
+    const storedChangeSet = repository.changeSetValue
+    if (!storedChangeSet) throw new Error('expected seeded ChangeSet')
+    repository.changeSetValue = { ...storedChangeSet, operations: [] }
     await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))
       .rejects.toMatchObject({ code: 'NOVEL_HISTORY_CORRUPT' })
     repository.changeSetValue = {
-      ...repository.changeSetValue!,
+      ...storedChangeSet,
       operations: [
         { kind: 'replace-text', selector: repository.selection.selector, replacement: '一' },
         { kind: 'replace-text', selector: repository.selection.selector, replacement: '二' },
@@ -321,7 +336,7 @@ describe('NovelRepositoryRemote Host service', () => {
     const exactBytes = new TextEncoder().encode(JSON.stringify(expected)).byteLength
 
     async function discover(descriptorMaxBytes: number): Promise<unknown> {
-      const ctx = new Context()
+      const ctx = testContext()
       const disposeFs = ctx.provide('fs', {
         resolve: vi.fn<FileSystem['resolve']>().mockResolvedValue(root),
       } as unknown as FileSystem)
@@ -373,7 +388,7 @@ describe('NovelRepositoryRemote Host service', () => {
   })
 
   it('fails closed when browser responses exceed their bound or retained title metadata is corrupt', async () => {
-    const ctx = new Context()
+    const ctx = testContext()
     const root = { targetKey: 'root', displayPath: '/story' } as FsTarget
     const manifest = { targetKey: 'manifest', displayPath: '/story/novel.yaml' } as FsTarget
     const chapters = { targetKey: 'chapters', displayPath: '/story/manuscript' } as FsTarget

@@ -9,9 +9,10 @@ This experimental Client Consumer provides the Agent-native Novel Studio root wo
 ## Behavior
 
 - The Novel Studio Profile disables the ordinary `ui-layout` root occupant. This package becomes the sole root occupant and declares the native `sidebar`, `conversation`, `details`, `shell.overlay`, `novel.explorer`, and `novel.canvas` slots.
+- The desktop composition places the Agent conversation on the left and the manuscript explorer plus authored canvas on the right, while preserving the native collapsible DSH Session sidebar at the outer edge.
 - The native DSH sidebar remains available and starts collapsed; it can expand for session search and navigation. Switching Sessions does not replace the root workbench component.
 - The explorer discovers the active Session's Novel Project, lists reconciled `manuscript.chapter` assets, and opens exact Revision-bound chapter documents.
-- The canvas edits only a chapter body. Save uses the displayed base Revision, and “Reference selection to Agent” first saves a dirty draft, then freezes the selected UTF-16 range, then appends the returned Markdown `dsh-novel:` mention to the current Composer.
+- The canvas edits only a chapter body. Save uses the displayed base Revision, preserves the active selection on success, and reports failures in the editor header. “Reference selection to Agent” first saves a dirty draft, stops safely if that save fails, then freezes the selected UTF-16 range and appends the returned Markdown `dsh-novel:` mention to the current Composer.
 - The Context Tray discloses the current frozen selection and states that it enters the Session log when sent.
 - `novel_propose_changes` tool results render a durable inline Diff card. Accept and Reject call Session-owned Remote methods; Accept refreshes the explorer and canvas from authoritative repository state.
 - The workbench resolves the conversation service lazily after its slot owner mounts, avoiding a client-plugin dependency cycle while still using DSH's ordinary Composer draft state.

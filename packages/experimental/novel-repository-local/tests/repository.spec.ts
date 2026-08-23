@@ -924,10 +924,11 @@ describe('LocalNovelRepository', () => {
         }],
       })).rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
     }
+    const invalidQuoteHash: ContentHash = `sha256:${'0'.repeat(64)}`
     await expect(ctx.novelRepository.proposeChangeSet(novel, {
       ...valid,
       operations: [{
-        ...valid.operations[0]!, selector: { ...frozen.selector, quoteHash: `sha256:${'0'.repeat(64)}` as ContentHash },
+        ...valid.operations[0]!, selector: { ...frozen.selector, quoteHash: invalidQuoteHash },
       }],
     })).rejects.toMatchObject({ code: 'NOVEL_CHANGESET_INVALID' })
 
@@ -1026,7 +1027,7 @@ describe('LocalNovelRepository', () => {
     const dir = await tempDir()
     const path = join(dir, 'history.sqlite')
     const bytes = new TextEncoder().encode(chapter('asset-one', 'One', 'body'))
-    const hash = `sha256:${createHash('sha256').update(bytes).digest('hex')}` as ContentHash
+    const hash: ContentHash = `sha256:${createHash('sha256').update(bytes).digest('hex')}`
     const baseRevision = {
       id: RevisionId('revision-base'),
       projectId: ProjectId('project-one'),

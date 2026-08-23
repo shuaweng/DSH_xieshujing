@@ -45,7 +45,7 @@ Authored manuscript body.
 
 ## 提案、审阅与恢复
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中只暴露 `novel_get` 与 `novel_propose_changes`。精确读取解析已保留 Revision。提案会校验一个带 quote hash 的 `replace-text` 操作，并持久创建 ChangeSet，但不改作者文件；模型没有 apply 工具，也不能宣称已经发布修改。
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_get` 与 `novel_propose_changes`。目录发现返回当前 Session 项目的规范精确 Revision 引用，精确读取解析已保留 Revision；提案会校验一个带 quote hash 的 `replace-text` 操作，并持久创建 ChangeSet，但不改作者文件。模型没有 apply 工具，也不能宣称已经发布修改。
 
 浏览器把 ChangeSet 读成行内 Diff 卡片。接受或拒绝都是显式、归 Session 所有的 Remote 操作。Apply 在接触文件前，把精确前后字节、hash、授权与预期结果 Revision 以 `applying` 状态写入 journal。项目重开时，after hash 会完成提交，before hash 会重试受保护写入，任何第三种 hash 都会变成 `conflicted`，且不覆盖作者文件。
 
@@ -53,7 +53,9 @@ Authored manuscript body.
 
 [`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 overlay，组合在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。它只禁用普通 `ui-layout` 根占位者，改为安装 [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench)。Novel 根仍保留原生侧栏、对话、详情、设置、模型选择、工具渲染和 overlay surface，并增加正文 explorer 与 canvas 插槽。
 
-默认 `web` 与 `headless` Profile 模板不包含这些实验性包。overlay 还拥有安全的 `novel-workbench` Preset，其稳定工具集不包含 shell 或通用文件系统修改能力。因此 MVP 能与 DSH 深度集成，而不改变普通 DSH 的运行方式。
+根布局把 Agent 对话放在左侧，把正文浏览器与画布放在右侧。默认 `web` 与 `headless` Profile 模板不包含这些实验性包。overlay 还拥有安全的 `novel-workbench` Preset，其稳定工具集不包含 shell 或通用文件系统修改能力。因此 MVP 能与 DSH 深度集成，而不改变普通 DSH 的运行方式。
+
+浏览器保存与 ChangeSet 应用会解析被寻址 Session 的 sandbox policy，并把它传入 Repository 协调与发布。Novel Project 因此可以位于 Host 进程工作目录之外，同时仍被限制在 Session 工作区边界内。
 
 ## 当前限制
 
@@ -118,9 +120,10 @@ abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelPro
  * Rebuild the current authored catalog and reconcile exact file bytes into immutable Revisions.
  * @param project - validated Project declaration returned by this provider.
  * @param signal - optional cancellation for filesystem and history work.
+ * @param sandboxPolicy - optional per-call write policy used if reconciliation must recover an apply journal.
  * @returns current chapter rows in deterministic project-path order.
  */
-abstract listAssets(project: NovelProjectSnapshot, signal?: AbortSignal): Promise<readonly AssetSummary[]>
+abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSummary[]>
 
 /**
  * Read either the reconciled current head or one retained immutable Revision.
@@ -128,20 +131,22 @@ abstract listAssets(project: NovelProjectSnapshot, signal?: AbortSignal): Promis
  * @param assetId - stable authored asset identity.
  * @param revisionId - exact retained Revision; omission reconciles and returns the current file head.
  * @param signal - optional cancellation for filesystem and history work.
+ * @param sandboxPolicy - optional per-call write policy used if current-head reconciliation must recover an apply journal.
  * @returns exact serialized bytes and parsed chapter values.
  * @throws {NovelRepositoryError} when the asset or Revision is absent or invalid.
  */
-abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, ): Promise<AssetSnapshot>
+abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
 
 /**
  * Guardedly publish a user-authored chapter body and retain its exact new Revision.
  * @param project - validated Project declaration returned by this provider.
  * @param request - target, current base Revision, and full replacement body.
  * @param signal - optional cancellation before filesystem publication.
+ * @param sandboxPolicy - optional per-call policy governing authored-file publication and recovery.
  * @returns the committed exact new head.
  * @throws {NovelRepositoryError} when the base is stale or the resulting asset is invalid.
  */
-abstract saveChapterBody( project: NovelProjectSnapshot, request: SaveChapterBodyRequest, signal?: AbortSignal, ): Promise<AssetSnapshot>
+abstract saveChapterBody( project: NovelProjectSnapshot, request: SaveChapterBodyRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
 
 /**
  * Freeze one exact non-empty UTF-16 body range without rereading mutable latest content.
@@ -176,9 +181,10 @@ abstract readChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId,
  * @param changeSetId - durable proposal identity within the Project.
  * @param authorization - explicit Session identity accepting the proposal.
  * @param signal - optional cancellation before authored-file publication begins.
+ * @param sandboxPolicy - optional per-call policy governing authored-file publication and recovery.
  * @returns the applied, conflicted, or already terminal ChangeSet.
  */
-abstract applyChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, authorization: ChangeSetAuthorization, signal?: AbortSignal, ): Promise<ChangeSet>
+abstract applyChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, authorization: ChangeSetAuthorization, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<ChangeSet>
 
 /**
  * Reject one authorized proposal without changing authored files.
@@ -191,7 +197,7 @@ abstract applyChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId
 abstract rejectChangeSet( project: NovelProjectSnapshot, changeSetId: ChangeSetId, authorization: ChangeSetAuthorization, signal?: AbortSignal, ): Promise<ChangeSet>
 ```
 
-Types: [FsTarget](filesystem.zh.md)
+Types: [FsTarget](filesystem.zh.md) · [SandboxExecutionPolicy](sandbox.zh.md)
 
 Source: [`packages/experimental/novel-repository/src/index.ts`](../../packages/experimental/novel-repository/src/index.ts)
 

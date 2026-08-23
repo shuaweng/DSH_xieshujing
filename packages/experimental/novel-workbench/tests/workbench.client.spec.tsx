@@ -119,7 +119,7 @@ describe('NovelFrame', () => {
     expect(view.container.querySelector('[data-novel-workbench]')).not.toBeNull()
     expect(view.getByLabelText(zh.chapters)).toBeTruthy()
     expect(view.getByLabelText(zh.agent)).toBeTruthy()
-    expect(calls).toEqual(['sidebar', 'novel.explorer', 'novel.canvas', 'conversation', 'details', 'shell.overlay'])
+    expect(calls).toEqual(['sidebar', 'conversation', 'details', 'novel.explorer', 'novel.canvas', 'shell.overlay'])
     expect(view.container.querySelector('[data-details-open]')).toBeNull()
 
     act(() => { frameStore.actions.toggleSidebar(); frameStore.actions.openDetails() })
@@ -175,7 +175,11 @@ describe('Canvas', () => {
     expect(empty.getByText(zh.noChapter)).toBeTruthy()
     empty.unmount()
 
-    act(() => { store.actions.open(chapter()); store.actions.edit('手动保存') })
+    act(() => {
+      store.actions.open(chapter())
+      store.actions.edit('手动保存')
+      store.actions.select(1, 3)
+    })
     const save = vi.fn(async () => chapter({ body: '手动保存', revisionId: 'revision-2' as NovelChapterDocument['revisionId'] }))
     const view = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
@@ -184,6 +188,34 @@ describe('Canvas', () => {
     fireEvent.click(view.getByText(zh.save))
     await waitFor(() => { expect(save).toHaveBeenCalledTimes(1) })
     await waitFor(() => { expect(view.getByText(zh.saved)).toBeTruthy() })
+    expect(store.getSnapshot()).toMatchObject({
+      dirty: false,
+      selection: { start: 1, end: 3 },
+      document: { revisionId: 'revision-2' },
+    })
+    expect((view.getByText(zh.reference).closest('button') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('surfaces save failures and never captures a dirty selection against an old Revision', async () => {
+    const store = createNovelWorkbenchStore().create()
+    act(() => {
+      store.actions.open(chapter())
+      store.actions.edit('尚未保存的新正文')
+      store.actions.select(0, 4)
+    })
+    const capture = vi.fn()
+    const appendMention = vi.fn()
+    const view = render(<Canvas
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      save={async () => { throw new Error('workspace write denied') }} capture={capture} appendMention={appendMention} t={t}
+    />)
+
+    fireEvent.click(view.getByText(zh.reference))
+
+    await waitFor(() => { expect(view.getByRole('alert').textContent).toContain('workspace write denied') })
+    expect(capture).not.toHaveBeenCalled()
+    expect(appendMention).not.toHaveBeenCalled()
+    expect(store.getSnapshot()).toMatchObject({ dirty: true, selection: { start: 0, end: 4 } })
   })
 
   it('keeps clean selections exact, handles editor events, and ignores incomplete context', async () => {
@@ -313,7 +345,7 @@ describe('Explorer', () => {
     act(() => { store.actions.loaded({} as never, [{ ...chapter(), body: undefined }] as never) })
     const open = vi.fn()
     const view = render(<Explorer
-      useStore={hookOf(store) as never} actions={{ ...store.actions, reset: vi.fn() } as never}
+      useStore={hookOf(store)} actions={{ ...store.actions, reset: vi.fn() }}
       useSessions={sessionHook(undefined) as never} useWorkspaces={vi.fn() as never}
       load={vi.fn()} open={open} onRefresh={() => () => {}} t={t}
     />)
@@ -494,6 +526,7 @@ describe('Novel workbench stores and browser assembly', () => {
       store.actions.edit('旧句继续。')
       store.actions.select(1, 2)
       store.actions.referenced(selection())
+      store.actions.saved(chapter({ revisionId: 'revision-2' as never, body: '旧句继续。' }))
       store.actions.fail('failed')
       store.actions.refresh()
     })
@@ -530,9 +563,13 @@ describe('Novel workbench stores and browser assembly', () => {
     const remote = {
       discover: vi.fn(async () => ({ ok: true as const, value: discoverValue })),
       assets: vi.fn(async () => ({ ok: true as const, value: [asset] })),
-      asset: vi.fn(async (_sid, _aid, revision) => failAsset
+      asset: vi.fn(async (
+        _sid: unknown,
+        _aid: unknown,
+        revision: NovelChapterDocument['revisionId'] | undefined,
+      ) => failAsset
         ? { ok: false as const, error: { code: 'REMOTE_FAILED', message: 'offline', name: 'Error' } }
-        : { ok: true as const, value: chapter({ revisionId: revision ?? 'revision-1' }) }),
+        : { ok: true as const, value: chapter({ revisionId: revision ?? chapter().revisionId }) }),
       saveChapter: vi.fn(async () => ({ ok: true as const, value: chapter({ revisionId: 'revision-2' as never }) })),
       captureSelection: vi.fn(async () => ({ ok: true as const, value: selection() })),
       changeSet: vi.fn(async () => ({ ok: true as const, value: changeSet() })),

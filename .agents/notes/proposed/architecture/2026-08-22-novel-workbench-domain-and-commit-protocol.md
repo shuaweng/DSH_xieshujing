@@ -42,13 +42,13 @@ Browser Consumers gain bounded project-scoped asset list, chapter read, body-onl
 
 ## PR3 Agent-native MVP slice
 
-PR3 adds history schema version two with durable single-asset ChangeSets and an apply journal. The model-facing `novel_propose_changes` tool can create one exact-Revision `replace-text` proposal but cannot apply it. Apply and reject are browser-only Remote decisions authorized by the addressed Session. Apply writes the journal before guarded filesystem publication, records an `agent-apply` Revision afterward, and recovers `applying` rows by comparing exact before, after, or divergent hashes on project reopen.
+PR3 adds history schema version two with durable single-asset ChangeSets and an apply journal. Model-facing `novel_list` and `novel_get` provide bounded catalog discovery and exact reads; `novel_propose_changes` can create one exact-Revision `replace-text` proposal but cannot apply it. Apply and reject are browser-only Remote decisions authorized by the addressed Session. Apply writes the journal before guarded filesystem publication, records an `agent-apply` Revision afterward, and recovers `applying` rows by comparing exact before, after, or divergent hashes on project reopen.
 
 The first SelectionRef strategy remains Revision-bound UTF-16 body offsets with a quote hash, optional bounded prefix and suffix, and no persistent block ids. The Client implements the Context Commit Barrier by saving a dirty chapter through the Repository before capturing a selection. It places a readable Markdown mention containing a canonical `dsh-novel:` URI in the ordinary Composer.
 
 `NovelContextResolver` runs at `agent/pre-step`, parses canonical mentions from direct user messages, resolves only retained exact Revisions, and returns the readable direct message followed by one immutable `user/message` with source kind `novel-context`. That message contains safely serialized untrusted authored material and is appended by the ordinary agent loop, so replay does not reread mutable files. One Session is bound to the first referenced Project.
 
-The explicit Novel Studio overlay disables the ordinary `ui-layout` root occupant only in that composition. `novel-workbench` becomes the sole root occupant and declares the native DSH sidebar, conversation, details, overlay, chapter explorer, and manuscript canvas slots. The shipped `web` and `headless` compositions do not contain these packages. The browser MVP renders one chapter editor, a visible Context Tray, and a durable ChangeSet Diff card with Accept and Reject actions.
+The explicit Novel Studio overlay disables the ordinary `ui-layout` root occupant only in that composition. `novel-workbench` becomes the sole root occupant and declares the native DSH sidebar, conversation, details, overlay, chapter explorer, and manuscript canvas slots. The shipped `web` and `headless` compositions do not contain these packages. The browser MVP places Agent conversation on the left, the explorer and manuscript canvas on the right, and renders one chapter editor, a visible Context Tray, and a durable ChangeSet Diff card with Accept and Reject actions.
 
 PR3 does not add a file watcher or browser invalidation stream. Repository calls reconcile external files, and an accepted ChangeSet triggers an explicit workbench refetch. It also defers block ids, autosave cadence, search, additional asset types, multi-asset changes, automatic merge, a shipped CLI Profile template, and multi-Agent orchestration.
 
@@ -229,22 +229,24 @@ The source-checkout development path installs the Web App and Novel bundle into 
 
 The CLI appends its shipped Preset root after every root contributed by the composed Profile. It does not replace bundle-owned roots; otherwise a Profile can select a bundle-owned default Preset that the Session creator cannot resolve.
 
-The first technical slice may register a Novel view inside the existing conversation surface and a Context Tray in its input dock. This is a test harness, not the final product layout. Before the vertical slice is called a Novel workbench, `novel-studio` replaces `ui-layout` with the Profile's sole root occupant, keeps the existing Conversation component in a declared right-side `conversation` slot, and adds project-scoped `novel.explorer` and `novel.canvas` slots. Switching Sessions does not unmount the open manuscript canvas.
+The first technical slice may register a Novel view inside the existing conversation surface and a Context Tray in its input dock. This is a test harness, not the final product layout. Before the vertical slice is called a Novel workbench, `novel-studio` replaces `ui-layout` with the Profile's sole root occupant, keeps the existing Conversation component in a declared left-side `conversation` slot, and adds project-scoped `novel.explorer` and `novel.canvas` slots to its right. Switching Sessions does not unmount the open manuscript canvas.
 
 Version one does not add a generic Router or Workbench registry. Those abstractions require a second concrete workbench consumer. Workbench choice belongs to the Profile; Agent persona and tool composition belong to a Session Preset.
 
 ## Model tools and browser presentation
 
-The first model-facing Consumers are `novel_get` and `novel_propose_changes`. `novel_get` reads validated Asset or Selection references and returns bounded semantic content. `novel_propose_changes` validates one chapter operation, records a ChangeSet, and returns its stable id; it cannot apply the proposal.
+The first model-facing Consumers are `novel_list`, `novel_get`, and `novel_propose_changes`. `novel_list` discovers the current Session Project and returns current chapter metadata with canonical exact-Revision references, but no authored body. `novel_get` reads validated Asset or Selection references and returns bounded semantic content. `novel_propose_changes` validates one chapter operation, records a ChangeSet, and returns its stable id; it cannot apply the proposal.
 
 The ChangeSet id and target summary live in JSON-serializable tool `meta`. The Novel client registers the keyed `tool.call.toolview` entry for `novel_propose_changes`, renders the durable proposal on replay, and calls Novel Remote methods for show, apply, or reject. With the client plugin absent, the ordinary generic tool row remains a readable fallback. Browser invalidation events contain project, asset, Revision, or ChangeSet ids and are explicitly admitted by the Remote-event allowlist; clients refetch after an event or reconnect.
 
 The safe Novel Preset omits raw model-facing `write` and `edit` for formal assets. Research and development Presets may expose `read`, `grep`, shell, or raw mutation tools, but Repository authority, stale checks, and ChangeSet application never depend on `toolFilter` or prompt policy. External or privileged raw writes appear as file divergence at the next reconciliation boundary.
 
+Session-aware Remote Consumers resolve `ctx.sandboxPolicy` with the addressed Agent Session and pass the resulting per-call policy into catalog reconciliation, current-head reads, author saves, and ChangeSet applies. The local Repository forwards that policy to every filesystem publication and apply-journal recovery write. The Host process working directory is only an agentless fallback; it must not deny or widen a Session workspace located elsewhere.
+
 ## Deferred work
 
 - Additional asset types, including outlines, characters, ideas, scenes, timelines, relations, and view definitions.
-- A persistent disposable search index, full-text search, semantic search, inferred mentions, and reverse relations.
+- A persistent disposable search index, full-text search, semantic search, inferred mentions, and reverse relations. `novel_list` is only bounded catalog discovery and does not satisfy these search capabilities.
 - File watching, remote filesystem parity, multiple concurrent Host writers, collaboration, and CRDT positions.
 - Persistent block ids, fuzzy relocation, three-way merge, multi-asset ChangeSets, branches, and cross-project references.
 - Series and multiple Books per Workspace, publishing adapters, import/export, and history retention controls.

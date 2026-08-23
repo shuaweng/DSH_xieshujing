@@ -13,6 +13,7 @@
 - `listAssets()` 把作者文件协调为当前目录项，`readAsset()` 读取当前或指定的已保留不可变 Revision，`saveChapterBody()` 以版本保护方式仅保存正文，`captureSelection()` 冻结正文中的精确 UTF-16 范围。
 - 第一版公共值定义 `manuscript.chapter`、精确 `sha256:` 内容哈希、不可变 Revision 父链、绑定 Revision 的 `SelectionRef`、类型化 `replace-text` 操作和持久单资产 ChangeSet。
 - `proposeChangeSet()` 记录提案但不修改创作文件。`readChangeSet()`、`applyChangeSet()` 和 `rejectChangeSet()` 暴露明确审阅状态转换；应用权威是由获授权 Consumer 提供的 Session id。
+- 可能发布文件或恢复中断 apply 的操作接收可选的逐调用 sandbox policy。感知 Session 的 Consumer 必须传入被寻址 Session 的已解析策略，使位于 Host 进程工作目录之外的 Project 也只能在该 Session 工作区边界内写入。
 - 提供方通过稳定的 `NovelRepositoryError` code 报告非法根目录、格式错误或过大的清单、不支持的 schema 与路径逃逸，而不会猜测如何修复。
 - 本包只负责 Service Definition、与提供方无关的公共值和错误类型。`@deepseek-ai/dsh-experimental-novel-repository-local` 等提供方负责清单 I/O 与校验；任何 Remote 或 UI 投影均由独立 Consumer 负责。
 

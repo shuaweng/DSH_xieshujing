@@ -63,6 +63,7 @@ import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import NovelContextResolver from '@deepseek-ai/dsh-experimental-novel-context'
 import LocalNovelRepository from '@deepseek-ai/dsh-experimental-novel-repository-local'
 import * as ToolNovel from '@deepseek-ai/dsh-experimental-tool-novel'
+import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
@@ -568,16 +569,17 @@ const TOOL_PACKAGES: ToolPackage[] = [
     pkg: '@deepseek-ai/dsh-experimental-tool-novel',
     dir: 'tool-novel',
     source: 'packages/experimental/tool-novel/src/index.ts',
-    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.novelContextResolver', 'ctx.novelRepository', 'an owning Agent Session at execution time'],
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.novelContextResolver', 'ctx.novelRepository', 'ctx.fs', 'ctx.sandboxPolicy', 'an owning Agent Session at execution time'],
     writes: ['tool/call', 'durable proposal-only ChangeSet from novel_propose_changes', 'tool/result'],
     async mount(ctx) {
       await ctx.plugin(LocalFileSystem)
+      await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write' })
       await ctx.plugin(LocalNovelRepository)
       await ctx.plugin(NovelContextResolver)
       await ctx.plugin(ToolNovel)
     },
     note:
-      'The Novel Studio Preset ships these two stable tools without generic filesystem mutation. `novel_get` resolves exact retained Revisions; `novel_propose_changes` only creates a reviewable ChangeSet and never publishes authored files.',
+      'The Novel Studio Preset ships three stable tools without generic filesystem mutation. `novel_list` discovers canonical current chapter references, `novel_get` resolves exact retained Revisions, and `novel_propose_changes` only creates a reviewable ChangeSet and never publishes authored files.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

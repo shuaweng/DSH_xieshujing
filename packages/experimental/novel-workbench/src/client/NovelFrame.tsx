@@ -19,19 +19,19 @@ export function NovelFrame({ renderSlot, t, useStore }: NovelFrameProps) {
       className={css.frame}
       data-novel-workbench
       data-details-open={detailsOpen || undefined}
-      style={{ gridTemplateColumns: `${sidebarWidth}px 230px minmax(420px, 1fr) minmax(340px, 410px)` }}
+      style={{ gridTemplateColumns: `${sidebarWidth}px minmax(340px, 410px) 230px minmax(420px, 1fr)` }}
     >
       <aside className={css.dshSidebar} aria-label="DeepSeek Harness">
         {renderSlot('sidebar', { collapsed: sidebarCollapsed, width: sidebarWidth })}
+      </aside>
+      <aside className={css.agent} aria-label={t('agent')}>
+        <div className={css.agentConversation}>{renderSlot('conversation', {})}</div>
+        <div className={css.agentDetails} hidden={!detailsOpen}>{renderSlot('details', {})}</div>
       </aside>
       <aside className={css.explorer} aria-label={t('chapters')}>
         {renderSlot('novel.explorer', {})}
       </aside>
       <section className={css.canvas}>{renderSlot('novel.canvas', {})}</section>
-      <aside className={css.agent} aria-label={t('agent')}>
-        <div className={css.agentConversation}>{renderSlot('conversation', {})}</div>
-        <div className={css.agentDetails} hidden={!detailsOpen}>{renderSlot('details', {})}</div>
-      </aside>
       <div className={css.overlay}>{renderSlot('shell.overlay', {})}</div>
     </main>
   )

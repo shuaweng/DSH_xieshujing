@@ -663,13 +663,13 @@ export interface Config {
 }
 ```
 
-来源：[`packages/experimental/novel-repository-local/src/index.ts:57`](../packages/experimental/novel-repository-local/src/index.ts)
+来源：[`packages/experimental/novel-repository-local/src/index.ts:58`](../packages/experimental/novel-repository-local/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-novel-repository-remote"></a>
 
 ## `@deepseek-ai/dsh-experimental-novel-repository-remote`
 
-需要：`novelRepository` · `fs`
+需要：`novelRepository` · `fs` · `sandboxPolicy`
 
 ```ts config-catalog
 /** Host projection limits. */
@@ -681,7 +681,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/experimental/novel-repository-remote/src/index.ts:48`](../packages/experimental/novel-repository-remote/src/index.ts)
+来源：[`packages/experimental/novel-repository-remote/src/index.ts:49`](../packages/experimental/novel-repository-remote/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-tool-agent-team"></a>
 
@@ -3336,7 +3336,7 @@ export interface Config {
 - `@deepseek-ai/dsh-experimental-novel-repository-client`（[`packages/experimental/novel-repository-client/src/index.ts`](../packages/experimental/novel-repository-client/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-novel-studio`（[`packages/experimental/novel-studio/src/index.ts`](../packages/experimental/novel-studio/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-novel-workbench`（[`packages/experimental/novel-workbench/src/index.ts`](../packages/experimental/novel-workbench/src/index.ts)）
-- `@deepseek-ai/dsh-experimental-tool-novel` — 需要 `tools` · `systemPrompt` · `novelContextResolver` · `novelRepository`（[`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)）
+- `@deepseek-ai/dsh-experimental-tool-novel` — 需要 `tools` · `systemPrompt` · `novelContextResolver` · `novelRepository` · `fs` · `sandboxPolicy`（[`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)）
 - `@deepseek-ai/dsh-fs-e2b` — 需要 `e2b`（[`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts)）
 - `@deepseek-ai/dsh-fs-observation-policy`（[`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts)）
 - `@deepseek-ai/dsh-goal-round-driver` — 需要 `agents` · `goals` · `sessions`（[`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts)）

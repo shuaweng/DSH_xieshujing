@@ -17,7 +17,8 @@ const requiredArtifacts = [
   'packages/core/agent/lib/index.js',
   'packages/api/gateway/lib/client.js',
   'packages/api/gateway/lib/index.js',
-  'packages/fs/fs-local/lib/index.js',
+  'packages/fs/fs-sandbox/lib/index.js',
+  'packages/sandbox/sandbox-policy/lib/index.js',
   'packages/typert/registry/lib/client.js',
   'packages/typert/registry/lib/index.js',
   'packages/experimental/novel-repository/lib/index.js',
@@ -58,13 +59,14 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         agent: 'packages/core/agent/lib/index.js',
         apiGatewayClient: 'packages/api/gateway/lib/client.js',
         apiGatewayHost: 'packages/api/gateway/lib/index.js',
-        fsLocal: 'packages/fs/fs-local/lib/index.js',
+        fsSandbox: 'packages/fs/fs-sandbox/lib/index.js',
         novelClient: 'packages/experimental/novel-repository-client/lib/client.js',
         novelLocal: 'packages/experimental/novel-repository-local/lib/index.js',
         novelRemote: 'packages/experimental/novel-repository-remote/lib/index.js',
         novelTypert: 'packages/experimental/novel-repository-remote/lib/typert.host.js',
         registryClient: 'packages/typert/registry/lib/client.js',
         registryHost: 'packages/typert/registry/lib/index.js',
+        sandboxPolicy: 'packages/sandbox/sandbox-policy/lib/index.js',
       }).map(([key, path]) => [key, artifactUrl(path)]))
       const script = `
         import * as cordis from '@deepseek-ai/cordis'
@@ -74,14 +76,16 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         const { Context } = cordis
         const { default: AgentRegistry } = await import(urls.agent)
         const { default: TypertGatewayService } = await import(urls.apiGatewayHost)
-        const { default: LocalFileSystem } = await import(urls.fsLocal)
+        const { default: SandboxedFileSystem } = await import(urls.fsSandbox)
         const { default: LocalNovelRepository } = await import(urls.novelLocal)
         const { default: NovelRepositoryRemote } = await import(urls.novelRemote)
         const { TYPERT } = await import(urls.novelTypert)
         const { default: TypertRegistry } = await import(urls.registryHost)
+        const { default: SandboxPolicyService } = await import(urls.sandboxPolicy)
 
         const host = new Context()
-        await host.plugin(LocalFileSystem, { cwd: projectRoot })
+        await host.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: projectRoot })
+        await host.plugin(SandboxedFileSystem, { cwd: projectRoot })
         await host.plugin(LocalNovelRepository)
         await host.plugin(TypertRegistry)
         await host.plugin(AgentRegistry)
@@ -89,7 +93,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         await host.plugin(NovelRepositoryRemote)
         host.typert.register(TYPERT)
         const agentId = 'agent-built'
-        const agent = { id: agentId, session: { id: agentId, header: { cwd: projectRoot } }, ctx: host }
+        const agent = { id: agentId, session: { id: agentId, events: [], header: { cwd: projectRoot } }, ctx: host }
         host.agents.register(agent)
 
         const handoffs = new Map()

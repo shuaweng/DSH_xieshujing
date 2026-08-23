@@ -6,9 +6,10 @@ import AgentRegistry from '@deepseek-ai/dsh-agent'
 import { AssetId, type ContentHash } from '@deepseek-ai/dsh-experimental-novel-repository'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
+import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
+import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -31,8 +32,11 @@ afterEach(async () => {
 describe('Novel Studio real composition', () => {
   it('loads the provider and Host Consumer, then discovers through a registered Agent', async () => {
     root = await mkdtemp(join(tmpdir(), 'dsh-novel-loader-'))
-    await mkdir(join(root, 'manuscript'))
-    await writeFile(join(root, 'novel.yaml'), [
+    const projectRoot = join(root, 'project')
+    const fallbackRoot = join(root, 'deployment-fallback')
+    await mkdir(join(projectRoot, 'manuscript'), { recursive: true })
+    await mkdir(fallbackRoot)
+    await writeFile(join(projectRoot, 'novel.yaml'), [
       'kind: novel-project',
       'schema: 1',
       'id: project-loader',
@@ -41,7 +45,7 @@ describe('Novel Studio real composition', () => {
       '  manuscript: manuscript',
       '',
     ].join('\n'))
-    await writeFile(join(root, 'manuscript', 'chapter.md'), [
+    await writeFile(join(projectRoot, 'manuscript', 'chapter.md'), [
       '---',
       'novel:',
       '  schema: 1',
@@ -53,10 +57,15 @@ describe('Novel Studio real composition', () => {
     ].join('\n'))
     const configPath = join(root, 'cordis.yml')
     await writeFile(configPath, [
-      '- id: fs',
-      "  name: '@deepseek-ai/dsh-fs-local'",
+      '- id: sandbox-policy',
+      "  name: '@deepseek-ai/dsh-sandbox-policy'",
       '  config:',
-      `    cwd: ${JSON.stringify(root)}`,
+      '    mode: workspace-write',
+      `    workspaceRoot: ${JSON.stringify(fallbackRoot)}`,
+      '- id: fs',
+      "  name: '@deepseek-ai/dsh-fs-sandbox'",
+      '  config:',
+      `    cwd: ${JSON.stringify(fallbackRoot)}`,
       '- id: repository',
       "  name: '@deepseek-ai/dsh-experimental-novel-repository-local'",
       '- id: novel-context',
@@ -72,7 +81,8 @@ describe('Novel Studio real composition', () => {
     await ctx.plugin(Loader)
     ctx.loader.builtins.include = Include
     const modules = new Map<string, unknown>([
-      ['@deepseek-ai/dsh-fs-local', LocalFileSystem],
+      ['@deepseek-ai/dsh-sandbox-policy', SandboxPolicyService],
+      ['@deepseek-ai/dsh-fs-sandbox', SandboxedFileSystem],
       ['@deepseek-ai/dsh-experimental-novel-repository-local', LocalNovelRepository],
       ['@deepseek-ai/dsh-experimental-novel-context', NovelContextResolver],
       [remotePackageName, NovelRepositoryRemote],
@@ -95,26 +105,34 @@ describe('Novel Studio real composition', () => {
     const agentId = 'agent-loader' as Agent['id']
     const agent = {
       id: agentId,
-      session: { id: agentId, header: { cwd: root }, events: [] },
+      session: { id: agentId, header: { cwd: projectRoot }, events: [] },
       ctx,
     } as unknown as Agent
     const disposeAgent = ctx.agents.register(agent)
     const abort = new AbortController()
-    const canonicalRoot = await realpath(root)
+    const canonicalRoot = await realpath(projectRoot)
 
     await expect(ctx.novelRepositoryRemote.discover(agent, abort.signal)).resolves.toEqual({
       schema: 1,
       id: 'project-loader',
       title: 'Loader Project',
-      rootDisplayPath: root,
+      rootDisplayPath: projectRoot,
       manifestDisplayPath: join(canonicalRoot, 'novel.yaml'),
       contentRootDisplayPaths: { manuscript: join(canonicalRoot, 'manuscript') },
     })
     const [asset] = await ctx.novelRepositoryRemote.assets(agent, abort.signal)
     const chapter = await ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-loader'), null, abort.signal)
+    const saved = await ctx.novelRepositoryRemote.saveChapter(agent, {
+      assetId: AssetId('chapter-loader'),
+      baseRevisionId: chapter.revisionId,
+      body: '白港的灯光越来越暗了。',
+    }, abort.signal)
+    expect(saved.body).toBe('白港的灯光越来越暗了。')
+    await expect(readFile(join(projectRoot, 'manuscript', 'chapter.md'), 'utf8'))
+      .resolves.toContain('白港的灯光越来越暗了。')
     const selection = await ctx.novelRepositoryRemote.captureSelection(agent, {
       assetId: AssetId('chapter-loader'),
-      revisionId: chapter.revisionId,
+      revisionId: saved.revisionId,
       startUtf16: 0,
       endUtf16: 2,
     }, abort.signal)
@@ -122,7 +140,7 @@ describe('Novel Studio real composition', () => {
     await expect(ctx.novelContextResolver.resolveReferences(agent, [{
       projectId: asset!.projectId,
       assetId: asset!.id,
-      revisionId: asset!.revisionId,
+      revisionId: saved.revisionId,
       selector: { ...selection.selector, quoteHash: selection.selector.quoteHash as ContentHash },
     }], abort.signal)).resolves.toMatchObject({ references: [{ text: '白港' }] })
 

@@ -10,6 +10,7 @@
     { "path": "../../../vendor/schemastery" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../fs/fs" },
+    { "path": "../../sandbox/sandbox" },
     { "path": "../novel-repository" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]

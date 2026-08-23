@@ -13,6 +13,7 @@ This experimental package defines the provider-neutral `ctx.novelRepository` cap
 - `listAssets()` reconciles authored files into current catalog rows, `readAsset()` reads the current or one retained immutable Revision, `saveChapterBody()` performs a guarded body-only author save, and `captureSelection()` freezes one exact UTF-16 body range.
 - Version-one public values define `manuscript.chapter`, exact `sha256:` content hashes, immutable Revision ancestry, Revision-bound `SelectionRef` values, typed `replace-text` operations, and durable single-asset ChangeSets.
 - `proposeChangeSet()` records a proposal without changing authored files. `readChangeSet()`, `applyChangeSet()`, and `rejectChangeSet()` expose explicit review transitions; apply authority is a Session id supplied by an authorized Consumer.
+- Operations that may publish files or recover an interrupted apply accept an optional per-call sandbox policy. Session-aware Consumers must pass the addressed Session's resolved policy so a Project outside the Host process working directory remains writable only within that Session workspace.
 - Providers report invalid roots, malformed or oversized manifests, unsupported schemas, and path escapes through stable `NovelRepositoryError` codes rather than guessing a repair.
 - This package owns only the Service Definition, provider-neutral public values, and error vocabulary. A provider such as `@deepseek-ai/dsh-experimental-novel-repository-local` owns manifest I/O and validation; a separate Consumer owns any Remote or UI projection.
 

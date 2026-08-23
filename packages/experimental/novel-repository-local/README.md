@@ -17,6 +17,7 @@ This experimental package provides the local-filesystem implementation of `ctx.n
 - Author saves replace only the parsed body, retain the exact Frontmatter prefix, and use the current `FsVersion` plus base Revision to reject stale publication. Selection references use UTF-16 body offsets, reject surrogate-pair splits, and bind quote hashes to retained Revisions.
 - History schema version two stores ChangeSets and an apply journal. Proposal is file-read-only; apply requires the proposing Session, an exact current base Revision, and one validated `replace-text` operation; reject is also Session-owned and terminal.
 - Apply records exact before/after bytes and hashes as `applying` before guarded filesystem publication, then records the `agent-apply` Revision and terminal state. On project reopen, an after-hash finalizes, a before-hash retries the authorized write, and any third hash marks the ChangeSet `conflicted` without overwriting it.
+- Save and apply-recovery publications forward the caller's per-call sandbox policy to `ctx.fs`; the provider never substitutes its own process directory for a Session workspace boundary.
 - Version-one history databases migrate to version two in place. Unsupported newer or corrupt databases still fail explicitly and are never reset.
 
 ## Model Experience

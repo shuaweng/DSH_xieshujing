@@ -9,7 +9,7 @@
 }
 
 .dshSidebar, .explorer, .agent { min-width: 0; overflow: hidden; border-right: 1px solid var(--ds-color-border-subtle); background: var(--ds-color-bg-secondary); }
-.agent { display: grid; grid-template-rows: minmax(0, 1fr) auto; border-right: 0; border-left: 1px solid var(--ds-color-border-subtle); background: var(--ds-color-bg-primary); }
+.agent { display: grid; grid-template-rows: minmax(0, 1fr) auto; background: var(--ds-color-bg-primary); }
 .frame[data-details-open] .agent { grid-template-rows: minmax(240px, 1fr) minmax(180px, 42%); }
 .agentConversation, .agentDetails { min-width: 0; min-height: 0; }
 .canvas { min-width: 0; overflow: hidden; }
@@ -47,5 +47,5 @@
 .changeCard footer { display: flex; justify-content: flex-end; gap: 8px; }
 
 @media (max-width: 1050px) {
-  .frame { grid-template-columns: 56px 190px minmax(360px, 1fr) 340px !important; }
+  .frame { grid-template-columns: 56px 340px 190px minmax(360px, 1fr) !important; }
 }

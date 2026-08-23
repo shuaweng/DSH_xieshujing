@@ -24,7 +24,9 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-context": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-repository": "workspace:^",
+    "@deepseek-ai/dsh-fs": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
+    "@deepseek-ai/dsh-sandbox-policy": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^"
   },
@@ -34,8 +36,10 @@
     "@deepseek-ai/dsh-experimental-novel-context": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-repository": "workspace:^",
     "@deepseek-ai/dsh-fs-local": "workspace:^",
+    "@deepseek-ai/dsh-fs": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
+    "@deepseek-ai/dsh-sandbox-policy": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^"

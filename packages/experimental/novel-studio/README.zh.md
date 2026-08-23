@@ -10,7 +10,7 @@
 
 - 应在现有 base 与 Web App 组合包之后加入本 bundle。它插入 `novel-repository-local`、`novel-context`、`novel-repository-remote`、独立 Client adapter 和 `novel-workbench`。
 - bundle 只禁用普通 `ui-layout` entry，并把 Novel workbench 安装为唯一根占位者。原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染和 Session service 仍安装在该根声明的插槽中。
-- 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，且只包含 `novel_get` 和 `novel_propose_changes`；不包含通用 shell 或文件系统修改工具。
+- 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含 `novel_list`、`novel_get` 和 `novel_propose_changes`；不包含通用 shell 或文件系统修改工具。
 - `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
 - 默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。本包仍不添加已发布的全局 Profile template；调用方把它安装到显式 Profile 中。
 
@@ -38,11 +38,11 @@ pnpm dsh --profile novel-studio --port 3080
 
 #### 模型看到的内容
 
-模型看到 Novel persona、稳定的 `novel_get` 与 `novel_propose_changes` Schema，以及仅在用户发送规范工作台引用时加入的精确资料。浏览器 discovery 和布局状态永远不会进入模型上下文。
+模型看到 Novel persona、稳定的 `novel_list`、`novel_get` 与 `novel_propose_changes` Schema，以及仅在用户发送规范工作台引用时加入的精确资料。浏览器布局状态永远不会进入模型上下文；目录发现只在模型调用 `novel_list` 时发生。
 
 #### Token 影响
 
-Preset 会加入 persona、简短 Novel 工具说明和两个工具 Schema。被引用创作文本会在配置的上下文预算内增加本次请求 token。
+Preset 会加入 persona、简短 Novel 工具说明和三个工具 Schema。被引用创作文本会在配置的上下文预算内增加本次请求 token。
 
 #### KV Cache 影响
 

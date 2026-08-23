@@ -7,6 +7,7 @@ import { constants as bufferConstants } from 'node:buffer'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import {
   ChangeSetId,
   NovelRepositoryError,
@@ -60,7 +61,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Project browser projection consuming the provider-neutral repository service. */
 export class NovelRepositoryRemote extends TypertRemoteService {
-  static inject = ['novelRepository', 'fs']
+  static inject = ['novelRepository', 'fs', 'sandboxPolicy']
   static Config: z<Config> = z.object({
     descriptorMaxBytes: z.number().default(DEFAULT_DESCRIPTOR_MAX_BYTES),
     responseMaxBytes: z.number().default(DEFAULT_RESPONSE_MAX_BYTES),
@@ -104,7 +105,11 @@ export class NovelRepositoryRemote extends TypertRemoteService {
   @Remote('assets')
   async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]> {
     const project = await this.requireProject(agent, signal)
-    const assets = (await this.ctx.novelRepository.listAssets(project, signal)).map(summary => ({
+    const assets = (await this.ctx.novelRepository.listAssets(
+      project,
+      signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )).map(summary => ({
       id: summary.asset.id,
       projectId: summary.asset.projectId,
       type: summary.asset.type,
@@ -138,6 +143,7 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       assetId,
       revisionId ?? undefined,
       signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
     )
     const result = chapterDocument(snapshot)
     assertResponseBytes(result, this.responseMaxBytes, 'chapter document')
@@ -158,7 +164,12 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     signal: AbortSignal,
   ): Promise<NovelChapterDocument> {
     const project = await this.requireProject(agent, signal)
-    const snapshot = await this.ctx.novelRepository.saveChapterBody(project, request, signal)
+    const snapshot = await this.ctx.novelRepository.saveChapterBody(
+      project,
+      request,
+      signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
     const result = chapterDocument(snapshot)
     assertResponseBytes(result, this.responseMaxBytes, 'chapter document')
     return result
@@ -223,6 +234,7 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       changeSetId,
       { sessionId: agent.id },
       signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
     ))
     assertResponseBytes(result, this.responseMaxBytes, 'ChangeSet')
     return result

@@ -6,7 +6,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-experimental-novel-repository-client/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { AssetId, ChangeSetId, RevisionId } from '@deepseek-ai/dsh-experimental-novel-repository/types'
+import type { AssetId, ChangeSetId } from '@deepseek-ai/dsh-experimental-novel-repository/types'
 import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { NovelFrame } from './NovelFrame.tsx'
@@ -134,8 +134,8 @@ export function apply(ctx: Context): void {
       const base = await unwrapRemote(
         remote.asset(
           sessionId as SessionId,
-          changeSet.assetId as AssetId,
-          changeSet.baseRevisionId as RevisionId,
+          changeSet.assetId,
+          changeSet.baseRevisionId,
         ),
         'read ChangeSet base Revision',
       )

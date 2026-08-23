@@ -26,6 +26,7 @@ type Actions = {
   reset: (draft: NovelWorkbenchState) => void
   loaded: (draft: NovelWorkbenchState, project: NovelProjectDescriptor, assets: readonly NovelAssetDescriptor[]) => void
   open: (draft: NovelWorkbenchState, document: NovelChapterDocument) => void
+  saved: (draft: NovelWorkbenchState, document: NovelChapterDocument) => void
   edit: (draft: NovelWorkbenchState, body: string) => void
   select: (draft: NovelWorkbenchState, start: number, end: number) => void
   referenced: (draft: NovelWorkbenchState, reference: NovelSelectionDescriptor) => void
@@ -81,10 +82,23 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
         draft.draft = document.body
         draft.dirty = false
         draft.selection = { start: 0, end: 0 }
+        delete draft.reference
+        delete draft.error
       },
-      edit: (draft, body) => { draft.draft = body; draft.dirty = draft.document?.body !== body },
+      saved: (draft, document) => {
+        draft.document = document
+        draft.draft = document.body
+        draft.dirty = false
+        delete draft.error
+      },
+      edit: (draft, body) => {
+        draft.draft = body
+        draft.dirty = draft.document?.body !== body
+        delete draft.reference
+        delete draft.error
+      },
       select: (draft, start, end) => { draft.selection = { start, end } },
-      referenced: (draft, reference) => { draft.reference = reference },
+      referenced: (draft, reference) => { draft.reference = reference; delete draft.error },
       fail: (draft, message) => { draft.loading = false; draft.error = message },
       refresh: (draft) => { draft.reload += 1 },
     },

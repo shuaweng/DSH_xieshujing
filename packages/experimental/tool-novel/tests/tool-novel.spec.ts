@@ -1,6 +1,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
+import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
 import { CallId } from '@deepseek-ai/dsh-llm'
 import {
   AssetId,
@@ -61,6 +62,7 @@ async function harness(): Promise<{
   ].join('\n'))
   const ctx = new Context()
   await ctx.plugin(LocalFileSystem, { cwd: dir })
+  await ctx.plugin(SandboxPolicy, { mode: 'workspace-write', workspaceRoot: dir })
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
@@ -99,18 +101,20 @@ function execute(ctx: Context, agent: Agent | undefined, name: string, args: unk
 }
 
 describe('Novel model tools', () => {
-  it('registers only exact-read and proposal tools with explicit proposal guidance', async () => {
+  it('registers discovery, exact-read, and proposal tools with explicit proposal guidance', async () => {
     const { ctx, agent } = await harness()
     expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('novel_')).sort())
-      .toEqual(['novel_get', 'novel_propose_changes'])
+      .toEqual(['novel_get', 'novel_list', 'novel_propose_changes'])
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.ctx })
     expect(renderPrompt(assembly)).toContain('绝不代表文件已经修改')
 
     const read = ctx.tools.get('novel_get')!
-    expect(read.output.render({}, { assets: [] } as never)).toEqual([{ type: 'text', text: '[]' }])
+    expect(read.output.render({}, { assets: [] })).toEqual([{ type: 'text', text: '[]' }])
     expect(read.presentCall?.({ references: ['dsh-novel:ref'] })).toEqual({
       card: 'generic', title: '读取小说资产', kind: 'read', rawInput: ['dsh-novel:ref'],
     })
+    const list = ctx.tools.get('novel_list')!
+    expect(list.presentCall?.({})).toEqual({ card: 'generic', title: '浏览小说资产', kind: 'read' })
     const propose = ctx.tools.get('novel_propose_changes')!
     const value = {
       changeSetId: 'changeset-1', projectId: 'project-tool', assetId: 'chapter-tool',
@@ -128,6 +132,23 @@ describe('Novel model tools', () => {
     })).toEqual({
       card: 'generic', title: '提出小说修改', kind: 'edit', rawInput: '摘要',
     })
+  })
+
+  it('discovers the current project and returns canonical exact-Revision references', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    const result = await execute(ctx, agent, 'novel_list', {})
+    expect(result.isError).toBe(false)
+    if (result.isError) throw new Error('expected novel_list success')
+    expect(result.value).toMatchObject({
+      projectId: 'project-tool',
+      title: 'Tool Project',
+      assets: [{
+        assetId: 'chapter-tool', revisionId, title: 'Tool Chapter', path: 'manuscript/chapter.md',
+      }],
+    })
+    const value = result.value as { assets: Array<{ reference: string }> }
+    expect(value.assets[0]?.reference).toMatch(/^dsh-novel:[A-Za-z0-9_-]+$/u)
+    await expect(execute(ctx, undefined, 'novel_list', {})).resolves.toMatchObject({ isError: true })
   })
 
   it('reads canonical retained references and rejects calls without an owning Agent', async () => {

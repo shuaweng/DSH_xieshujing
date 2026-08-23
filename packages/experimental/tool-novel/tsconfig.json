@@ -7,6 +7,7 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/tools" },
     { "path": "../../core/system-prompt" },
+    { "path": "../../sandbox/sandbox-policy" },
     { "path": "../novel-repository" },
     { "path": "../novel-context" },
     { "path": "../../runtime-diagnostics/invariants" }

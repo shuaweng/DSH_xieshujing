@@ -10,6 +10,7 @@ import { join, relative, sep } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { FsError, type FsTarget, type FsVersion } from '@deepseek-ai/dsh-fs'
+import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import NovelRepository, {
   ChangeSetId,
   NovelRepositoryError,
@@ -216,9 +217,13 @@ export class LocalNovelRepository extends NovelRepository {
     }
   }
 
-  override async listAssets(project: NovelProjectSnapshot, signal?: AbortSignal): Promise<readonly AssetSummary[]> {
+  override async listAssets(
+    project: NovelProjectSnapshot,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSummary[]> {
     return await this.withProject(project, async (state) => {
-      const catalog = await this.scan(project, state, signal)
+      const catalog = await this.scan(project, state, signal, sandboxPolicy)
       return [...catalog.values()]
         .sort((left, right) => left.summary.asset.projectRelativePath.localeCompare(right.summary.asset.projectRelativePath))
         .map(value => cloneSummary(value.summary))
@@ -230,11 +235,12 @@ export class LocalNovelRepository extends NovelRepository {
     assetId: AssetId,
     revisionId?: RevisionIdValue,
     signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<AssetSnapshot> {
     return await this.withProject(project, async (state) => {
       signal?.throwIfAborted()
       if (revisionId === undefined) {
-        const asset = (await this.scan(project, state, signal)).get(assetId)
+        const asset = (await this.scan(project, state, signal, sandboxPolicy)).get(assetId)
         if (asset === undefined) throw assetNotFound(assetId)
         return cloneSnapshot(asset.snapshot)
       }
@@ -246,12 +252,13 @@ export class LocalNovelRepository extends NovelRepository {
     project: NovelProjectSnapshot,
     request: SaveChapterBodyRequest,
     signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<AssetSnapshot> {
     return await this.withProject(project, async (state) => {
       if (containsUnpairedSurrogate(request.body)) {
         throw new NovelRepositoryError('novel repository: chapter body contains an unpaired UTF-16 surrogate', 'NOVEL_ASSET_INVALID')
       }
-      const current = (await this.scan(project, state, signal)).get(request.assetId)
+      const current = (await this.scan(project, state, signal, sandboxPolicy)).get(request.assetId)
       if (current === undefined) throw assetNotFound(request.assetId)
       if (current.snapshot.revisionId !== request.baseRevisionId) throw staleRevision(request.baseRevisionId)
       const beforeText = new TextDecoder().decode(current.snapshot.serializedUtf8)
@@ -275,10 +282,11 @@ export class LocalNovelRepository extends NovelRepository {
           serializedText,
           { kind: 'replaceIfVersion', version: current.version },
           signal,
+          sandboxPolicy,
         )
       } catch (error: unknown) {
         if (!(error instanceof FsError) || error.code !== 'FS_STALE_VERSION') throw error
-        await this.scan(project, state, signal)
+        await this.scan(project, state, signal, sandboxPolicy)
         throw staleRevision(request.baseRevisionId, error)
       }
       const revision = newRevision(
@@ -390,10 +398,11 @@ export class LocalNovelRepository extends NovelRepository {
     changeSetId: ChangeSetId,
     authorization: ChangeSetAuthorization,
     signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<ChangeSet> {
     return await this.withProject(project, async (state) => {
       signal?.throwIfAborted()
-      await this.scan(project, state, signal)
+      await this.scan(project, state, signal, sandboxPolicy)
       let changeSet = this.changeSetForProject(state, project.id, changeSetId)
       authorizeChangeSet(changeSet, authorization)
       if (changeSet.status !== 'proposed') return cloneChangeSet(changeSet)
@@ -433,11 +442,13 @@ export class LocalNovelRepository extends NovelRepository {
           current.target,
           materialized.text,
           { kind: 'replaceIfVersion', version: current.version },
+          signal,
+          sandboxPolicy,
         )
       } catch (error: unknown) {
         if (!(error instanceof FsError) || error.code !== 'FS_STALE_VERSION') throw error
         changeSet = state.history.conflictApply(changeSet.id)
-        await this.scan(project, state)
+        await this.scan(project, state, undefined, sandboxPolicy)
         return cloneChangeSet(changeSet)
       }
       hitApplyFault(this.ctx.root, 'after-file')
@@ -484,10 +495,11 @@ export class LocalNovelRepository extends NovelRepository {
     project: NovelProjectSnapshot,
     state: ProjectState,
     signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<Map<AssetId, ObservedAsset>> {
     let files = await this.scanFiles(project, signal)
     if (state.history.applyJournals().length > 0) {
-      const wrote = await this.recoverApplying(project, state, files)
+      const wrote = await this.recoverApplying(project, state, files, sandboxPolicy)
       if (wrote) files = await this.scanFiles(project, signal)
     }
     const catalog = new Map<AssetId, ObservedAsset>()
@@ -643,6 +655,7 @@ export class LocalNovelRepository extends NovelRepository {
     project: NovelProjectSnapshot,
     state: ProjectState,
     files: readonly ScannedAssetFile[],
+    sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<boolean> {
     let wrote = false
     for (const journal of state.history.applyJournals()) {
@@ -676,6 +689,8 @@ export class LocalNovelRepository extends NovelRepository {
             file.target,
             new TextDecoder().decode(journal.afterUtf8),
             { kind: 'replaceIfVersion', version: file.version },
+            undefined,
+            sandboxPolicy,
           )
           wrote = true
         } catch (error: unknown) {

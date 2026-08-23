@@ -2,6 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import {
   AssetId,
   ProjectId,
@@ -10,21 +11,86 @@ import {
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import {
   decodeNovelReferenceUri,
+  encodeNovelReferenceUri,
   type NovelReferenceInput,
 } from '@deepseek-ai/dsh-experimental-novel-context'
 
 export const name = 'tool-novel'
-export const inject = ['tools', 'systemPrompt', 'novelContextResolver', 'novelRepository']
+export const inject = ['tools', 'systemPrompt', 'novelContextResolver', 'novelRepository', 'fs', 'sandboxPolicy']
 
 const PROMPT = `## Novel workbench tools
 
-Novel Assets are versioned authored material. Use \`novel_get\` for exact retained
-Revisions. Use \`novel_propose_changes\` for正文修改；它只创建供用户审阅的
+Novel Assets are versioned authored material. When the user names an Asset but no
+canonical reference is available, use \`novel_list\` to discover the current Project.
+Use \`novel_get\` for exact retained Revisions. Use \`novel_propose_changes\` for正文修改；它只创建供用户审阅的
 ChangeSet，绝不代表文件已经修改。不要声称提案已经应用。`
 
 /** Register exact-read and proposal-only Novel tools. */
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({ name: 'tool:novel', order: 111, text: PROMPT })
+
+  ctx.tools.register(defineTool({
+    name: 'novel_list',
+    description: 'List the current Session Novel Project and its chapter Assets with canonical exact-Revision references.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          projectId: { type: 'string', required: true },
+          title: { type: 'string', required: true },
+          assets: {
+            type: 'array',
+            required: true,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                assetId: { type: 'string', required: true },
+                revisionId: { type: 'string', required: true },
+                title: { type: 'string', required: true },
+                path: { type: 'string', required: true },
+                reference: { type: 'string', required: true },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+    },
+    async execute(_args, exec) {
+      const agent = exec.agent
+      if (agent === undefined) throw new Error('novel_list requires an owning agent Session')
+      const cwd = agent.session.header.cwd
+      if (cwd === undefined) throw new Error('novel_list requires a Novel Project working directory')
+      const root = await ctx.fs.resolve(cwd, { cwd, signal: exec.signal })
+      const project = await ctx.novelRepository.discoverProject(root, exec.signal)
+      if (project === undefined) throw new Error('novel_list requires the Session working directory to be a Novel Project')
+      const assets = await ctx.novelRepository.listAssets(
+        project,
+        exec.signal,
+        ctx.sandboxPolicy.resolve({ session: agent.session }),
+      )
+      return {
+        projectId: project.id,
+        title: project.title,
+        assets: assets.map(asset => ({
+          assetId: asset.asset.id,
+          revisionId: asset.revisionId,
+          title: asset.title,
+          path: asset.asset.projectRelativePath,
+          reference: encodeNovelReferenceUri({
+            projectId: project.id,
+            assetId: asset.asset.id,
+            revisionId: asset.revisionId,
+            label: asset.title,
+          }),
+        })),
+      }
+    },
+    presentCall: () => ({ card: 'generic', title: '浏览小说资产', kind: 'read' }),
+  }))
 
   ctx.tools.register(defineTool({
     name: 'novel_get',

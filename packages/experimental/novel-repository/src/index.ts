@@ -6,6 +6,7 @@
 
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
+import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import { NovelRepositoryError } from './error.ts'
 import type {
   AssetId,
@@ -76,9 +77,14 @@ export abstract class NovelRepository extends Service {
    * Rebuild the current authored catalog and reconcile exact file bytes into immutable Revisions.
    * @param project - validated Project declaration returned by this provider.
    * @param signal - optional cancellation for filesystem and history work.
+   * @param sandboxPolicy - optional per-call write policy used if reconciliation must recover an apply journal.
    * @returns current chapter rows in deterministic project-path order.
    */
-  abstract listAssets(project: NovelProjectSnapshot, signal?: AbortSignal): Promise<readonly AssetSummary[]>
+  abstract listAssets(
+    project: NovelProjectSnapshot,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSummary[]>
 
   /**
    * Read either the reconciled current head or one retained immutable Revision.
@@ -86,6 +92,7 @@ export abstract class NovelRepository extends Service {
    * @param assetId - stable authored asset identity.
    * @param revisionId - exact retained Revision; omission reconciles and returns the current file head.
    * @param signal - optional cancellation for filesystem and history work.
+   * @param sandboxPolicy - optional per-call write policy used if current-head reconciliation must recover an apply journal.
    * @returns exact serialized bytes and parsed chapter values.
    * @throws {NovelRepositoryError} when the asset or Revision is absent or invalid.
    */
@@ -94,6 +101,7 @@ export abstract class NovelRepository extends Service {
     assetId: AssetId,
     revisionId?: RevisionId,
     signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<AssetSnapshot>
 
   /**
@@ -101,6 +109,7 @@ export abstract class NovelRepository extends Service {
    * @param project - validated Project declaration returned by this provider.
    * @param request - target, current base Revision, and full replacement body.
    * @param signal - optional cancellation before filesystem publication.
+   * @param sandboxPolicy - optional per-call policy governing authored-file publication and recovery.
    * @returns the committed exact new head.
    * @throws {NovelRepositoryError} when the base is stale or the resulting asset is invalid.
    */
@@ -108,6 +117,7 @@ export abstract class NovelRepository extends Service {
     project: NovelProjectSnapshot,
     request: SaveChapterBodyRequest,
     signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<AssetSnapshot>
 
   /**
@@ -155,6 +165,7 @@ export abstract class NovelRepository extends Service {
    * @param changeSetId - durable proposal identity within the Project.
    * @param authorization - explicit Session identity accepting the proposal.
    * @param signal - optional cancellation before authored-file publication begins.
+   * @param sandboxPolicy - optional per-call policy governing authored-file publication and recovery.
    * @returns the applied, conflicted, or already terminal ChangeSet.
    */
   abstract applyChangeSet(
@@ -162,6 +173,7 @@ export abstract class NovelRepository extends Service {
     changeSetId: ChangeSetId,
     authorization: ChangeSetAuthorization,
     signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<ChangeSet>
 
   /**

@@ -12,6 +12,7 @@
     { "path": "../../llm/llm" },
     { "path": "../../core/session" },
     { "path": "../../fs/fs" },
+    { "path": "../../sandbox/sandbox" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]
 }

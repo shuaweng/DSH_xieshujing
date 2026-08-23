@@ -126,10 +126,9 @@ describe('experimental Novel Studio bundle', () => {
     expect(novel.filter(row => row.id === 'ui-layout')).toHaveLength(1)
     expect(novel.find(row => row.id === 'ui-layout')).toMatchObject({ disabled: true })
     expect(web.find(row => row.id === 'ui-layout')).not.toMatchObject({ disabled: true })
-    expect(novel.find(row => row.id === 'agent-presets')).toMatchObject({
-      inject: expect.arrayContaining(['novelStudioPaths']),
-      config: expect.objectContaining({ default: 'novel-workbench' }),
-    })
+    const presets = novel.find(row => row.id === 'agent-presets')
+    expect(presets?.inject).toContain('novelStudioPaths')
+    expect(presets?.config).toMatchObject({ default: 'novel-workbench' })
     expect(PROFILE_TEMPLATES).not.toHaveProperty('novel-studio')
   })
 })

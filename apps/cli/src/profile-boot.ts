@@ -91,9 +91,10 @@ export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: b
 export function appendShippedPresetRoot(config: Record<string, unknown>): Record<string, unknown> {
   const roots = config.roots
   if (roots !== undefined && !Array.isArray(roots)) return { ...config }
+  const rootEntries: unknown[] = Array.isArray(roots) ? roots : []
   return {
     ...config,
-    roots: [...(roots ?? []), { path: SHIPPED_PRESET_ROOT, trust: 'system' }],
+    roots: [...rootEntries, { path: SHIPPED_PRESET_ROOT, trust: 'system' }],
   }
 }
 

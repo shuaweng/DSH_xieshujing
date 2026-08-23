@@ -39,8 +39,11 @@ export function Canvas({ useSessions, useStore, actions, save, capture, appendMe
         baseRevisionId: state.document.revisionId,
         body: state.draft,
       })
-      actions.open(saved)
+      actions.saved(saved)
       return saved
+    } catch (error: unknown) {
+      actions.fail(errorMessage(error))
+      return undefined
     } finally {
       setBusy(false)
     }
@@ -51,7 +54,8 @@ export function Canvas({ useSessions, useStore, actions, save, capture, appendMe
     setBusy(true)
     try {
       /* v8 ignore next -- the guard above guarantees persist returns the current or newly saved document. */
-      const document = await persist() ?? state.document
+      const document = await persist()
+      if (document === undefined) return
       const reference = await capture(sessionId, {
         assetId: document.id,
         revisionId: document.revisionId,
@@ -60,6 +64,8 @@ export function Canvas({ useSessions, useStore, actions, save, capture, appendMe
       })
       appendMention(sessionId, reference.mention)
       actions.referenced(reference)
+    } catch (error: unknown) {
+      actions.fail(errorMessage(error))
     } finally {
       setBusy(false)
     }
@@ -71,7 +77,9 @@ export function Canvas({ useSessions, useStore, actions, save, capture, appendMe
       <header className={css.editorHeader}>
         <div><small>{state.document.projectRelativePath}</small><h1>{state.document.title}</h1></div>
         <div className={css.editorActions}>
-          <span>{busy ? t('saving') : state.dirty ? '' : t('saved')}</span>
+          {state.error === undefined
+            ? <span>{busy ? t('saving') : state.dirty ? '' : t('saved')}</span>
+            : <span className={css.error} role="alert">{state.error}</span>}
           <button type="button" disabled={!state.dirty || busy} onClick={() => { void persist() }}>{t('save')}</button>
           <button type="button" disabled={state.selection.end <= state.selection.start || busy} onClick={() => { void referenceSelection() }}>
             {t('reference')}
@@ -100,4 +108,8 @@ export function Canvas({ useSessions, useStore, actions, save, capture, appendMe
       </section>
     </div>
   )
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

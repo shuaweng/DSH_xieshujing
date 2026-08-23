@@ -42,13 +42,13 @@ PR2 在同一能力 seam 上加入第一种作者资产 `manuscript.chapter`。�
 
 ## PR3 Agent 原生 MVP 切片
 
-PR3 增加历史 Schema 版本二，其中包含持久单资产 ChangeSet 和 apply journal。面向模型的 `novel_propose_changes` 工具可以创建一个绑定精确 Revision 的 `replace-text` 提案，但不能应用它。应用与拒绝是只面向浏览器的 Remote 决策，并由被寻址 Session 授权。应用会在带保护文件发布前写入 journal，之后记录 `agent-apply` Revision，并在项目重开时通过比较精确 before、after 或第三种分歧 hash 恢复 `applying` 记录。
+PR3 增加历史 Schema 版本二，其中包含持久单资产 ChangeSet 和 apply journal。面向模型的 `novel_list` 与 `novel_get` 提供有边界的目录发现和精确读取；`novel_propose_changes` 可以创建一个绑定精确 Revision 的 `replace-text` 提案，但不能应用它。应用与拒绝是只面向浏览器的 Remote 决策，并由被寻址 Session 授权。应用会在带保护文件发布前写入 journal，之后记录 `agent-apply` Revision，并在项目重开时通过比较精确 before、after 或第三种分歧 hash 恢复 `applying` 记录。
 
 第一版 SelectionRef 策略仍是绑定 Revision 的正文 UTF-16 偏移、quote hash、可选有界 prefix 与 suffix，不使用持久 Block id。Client 通过 Repository 保存脏章节后再捕获选区，从而实现 Context Commit Barrier。它把包含规范 `dsh-novel:` URI 的可读 Markdown mention 放入普通 Composer。
 
 `NovelContextResolver` 在 `agent/pre-step` 运行，从直接用户消息解析规范 mention，只解析已保留的精确 Revision，并返回可读直接消息以及紧随其后、来源类型为 `novel-context` 的不可变 `user/message`。该消息包含安全序列化的不可信创作资料，并由普通 Agent loop 追加，因此回放不会重新读取可变文件。一个 Session 绑定到第一个被引用 Project。
 
-显式 Novel Studio overlay 只在该组合中禁用普通 `ui-layout` 根占位者。`novel-workbench` 成为唯一根占位者，并声明原生 DSH 侧栏、对话、详情、overlay、章节浏览器和正文画布插槽。已发布 `web` 与 `headless` 组合不包含这些包。浏览器 MVP 渲染一个章节编辑器、可见 Context Tray，以及带接受和拒绝动作的持久 ChangeSet Diff 卡片。
+显式 Novel Studio overlay 只在该组合中禁用普通 `ui-layout` 根占位者。`novel-workbench` 成为唯一根占位者，并声明原生 DSH 侧栏、对话、详情、overlay、章节浏览器和正文画布插槽。已发布 `web` 与 `headless` 组合不包含这些包。浏览器 MVP 把 Agent 对话放在左侧，把浏览器与正文画布放在右侧，并渲染一个章节编辑器、可见 Context Tray，以及带接受和拒绝动作的持久 ChangeSet Diff 卡片。
 
 PR3 不添加文件 watcher 或浏览器失效事件流。Repository 调用会协调外部文件，接受 ChangeSet 后会显式重新获取工作台数据。Block id、自动保存节奏、搜索、更多资产类型、多资产变更、自动合并、已发布 CLI Profile template 和多 Agent 编排均暂缓。
 
@@ -229,22 +229,24 @@ Session 中第一条被接受的 `novel-context` 消息派生出其 Novel Projec
 
 CLI 会把自带 Preset 根追加在 Profile 组合贡献的全部根之后，而不会替换 bundle 自有根；否则 Profile 可以选择一个 bundle 自有默认 Preset，Session 创建器却无法解析它。
 
-首个技术切片可以在现有对话界面中注册 Novel view，并在输入 dock 中注册 Context Tray。这只是测试支架，不是最终产品布局。在把垂直链路称作小说工作台前，`novel-studio` 会用该 Profile 唯一的 root occupant 替换 `ui-layout`，在已声明的右侧 `conversation` slot 中保留现有 Conversation 组件，并增加项目级 `novel.explorer` 与 `novel.canvas` slot。切换 Session 不会卸载已打开的正文画布。
+首个技术切片可以在现有对话界面中注册 Novel view，并在输入 dock 中注册 Context Tray。这只是测试支架，不是最终产品布局。在把垂直链路称作小说工作台前，`novel-studio` 会用该 Profile 唯一的 root occupant 替换 `ui-layout`，在已声明的左侧 `conversation` slot 中保留现有 Conversation 组件，并在其右侧增加项目级 `novel.explorer` 与 `novel.canvas` slot。切换 Session 不会卸载已打开的正文画布。
 
 版本一不增加通用 Router 或 Workbench 注册表。这些抽象需要第二个具体工作台 Consumer。工作台选择属于 Profile，Agent persona 与工具组合属于 Session Preset。
 
 ## 模型工具与浏览器展示
 
-首批模型 Consumer 是 `novel_get` 和 `novel_propose_changes`。`novel_get` 读取已验证 Asset 或 Selection 引用，并返回有界语义内容。`novel_propose_changes` 验证一个章节操作、记录 ChangeSet 并返回其稳定 id，但不能应用提案。
+首批模型 Consumer 是 `novel_list`、`novel_get` 和 `novel_propose_changes`。`novel_list` 发现当前 Session Project，返回带规范精确 Revision 引用的当前章节元数据，但不返回正文。`novel_get` 读取已验证 Asset 或 Selection 引用，并返回有界语义内容。`novel_propose_changes` 验证一个章节操作、记录 ChangeSet 并返回其稳定 id，但不能应用提案。
 
 ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客户端为 `novel_propose_changes` 注册带键 `tool.call.toolview` 配置项，在回放时渲染持久提案，并调用 Novel Remote 方法来显示、应用或拒绝。缺少客户端插件时，普通通用工具行仍作为可读回退。浏览器失效事件包含项目、资产、Revision 或 ChangeSet id，并显式进入 Remote event allowlist；客户端收到事件或重连后重新获取。
 
 安全 Novel Preset 会移除用于正式资产的原始模型侧 `write` 和 `edit`。研究和开发 Preset 可以暴露 `read`、`grep`、shell 或原始修改工具，但 Repository 权限、陈旧检查和 ChangeSet 应用绝不依赖 `toolFilter` 或提示词策略。外部或高权限原始写入会在下一次核对边界显示为文件分歧。
 
+感知 Session 的 Remote Consumer 会用被寻址 Agent Session 解析 `ctx.sandboxPolicy`，并把逐调用策略传入资产目录协调、当前 head 读取、作者保存与 ChangeSet 应用。本地 Repository 会把该策略继续传给每次文件系统发布和 apply journal 恢复写入。Host 进程工作目录只作为无 Agent 调用的 fallback；它不得拒绝或放宽位于其他位置的 Session 工作区。
+
 ## 推迟工作
 
 - 其他资产类型，包括大纲、人物、灵感、场景、时间线、关系和视图定义。
-- 持久可丢弃搜索索引、全文搜索、语义搜索、推断提及和反向关系。
+- 持久可丢弃搜索索引、全文搜索、语义搜索、推断提及和反向关系。`novel_list` 只是有边界的目录发现，不满足这些搜索能力。
 - 文件监听、远程文件系统一致性、多个并发 Host 写入者、协作和 CRDT 位置。
 - 永久块 id、模糊重定位、三方合并、多资产 ChangeSet、分支和跨项目引用。
 - 系列与每 Workspace 多 Book、发布适配器、导入导出和历史保留控制。

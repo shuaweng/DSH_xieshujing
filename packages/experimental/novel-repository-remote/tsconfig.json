@@ -27,6 +27,9 @@
       "path": "../../fs/fs"
     },
     {
+      "path": "../../sandbox/sandbox-policy"
+    },
+    {
       "path": "../novel-repository"
     },
     {
