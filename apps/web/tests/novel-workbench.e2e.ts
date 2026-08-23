@@ -76,7 +76,6 @@ function proposalFixture(changeSet: ProposalFixture): string {
     base_revision_id: changeSet.baseRevisionId,
     start_utf16: operation.selector.startUtf16,
     end_utf16: operation.selector.endUtf16,
-    quote_hash: operation.selector.quoteHash,
     replacement: operation.replacement,
     summary: changeSet.summary,
   })

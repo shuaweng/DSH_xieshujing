@@ -235,7 +235,7 @@ CLI 会把自带 Preset 根追加在 Profile 组合贡献的全部根之后，�
 
 ## 模型工具与浏览器展示
 
-首批模型 Consumer 是 `novel_list`、`novel_get` 和 `novel_propose_changes`。`novel_list` 发现当前 Session Project，返回带规范精确 Revision 引用的当前章节元数据，但不返回正文。`novel_get` 读取已验证 Asset 或 Selection 引用，并返回有界语义内容。`novel_propose_changes` 验证一个章节操作、记录 ChangeSet 并返回其稳定 id，但不能应用提案。
+首批模型 Consumer 是 `novel_list`、`novel_get` 和 `novel_propose_changes`。`novel_list` 发现当前 Session Project，返回带规范精确 Revision 引用的当前章节元数据，但不返回正文。`novel_get` 读取已验证 Asset 或 Selection 引用，并返回有界语义内容及其 UTF-16 长度。`novel_propose_changes` 接收绑定 Revision 的 UTF-16 偏移，由可信 Repository 冻结该范围并计算 quote hash；工具记录 ChangeSet 并返回其稳定 id，但不能应用提案。
 
 ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客户端为 `novel_propose_changes` 注册带键 `tool.call.toolview` 配置项，在回放时渲染持久提案，并调用 Novel Remote 方法来显示、应用或拒绝。缺少客户端插件时，普通通用工具行仍作为可读回退。浏览器失效事件包含项目、资产、Revision 或 ChangeSet id，并显式进入 Remote event allowlist；客户端收到事件或重连后重新获取。
 

@@ -7,7 +7,6 @@ import {
   AssetId,
   ChangeSetId,
   ProjectId,
-  type ContentHash,
   type RevisionId,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
@@ -35,7 +34,6 @@ async function harness(): Promise<{
   agent: Agent
   path: string
   revisionId: RevisionId
-  quoteHash: ContentHash
 }> {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-tool-novel-'))
   cleanups.push(() => rm(dir, { recursive: true, force: true }))
@@ -73,12 +71,6 @@ async function harness(): Promise<{
   if (project === undefined) throw new Error('expected Novel Project')
   const [asset] = await ctx.novelRepository.listAssets(project)
   if (asset === undefined) throw new Error('expected chapter Asset')
-  const selection = await ctx.novelRepository.captureSelection(project, {
-    assetId: asset.asset.id,
-    revisionId: asset.revisionId,
-    startUtf16: 2,
-    endUtf16: 4,
-  })
   const id = SessionId('tool-novel-agent')
   const session = Session.create(id, [], { version: 0, id, createdAt: 0, cwd: dir })
   return {
@@ -86,7 +78,6 @@ async function harness(): Promise<{
     agent: { id, session, ctx } as Agent,
     path,
     revisionId: asset.revisionId,
-    quoteHash: selection.selector.quoteHash,
   }
 }
 
@@ -128,7 +119,7 @@ describe('Novel model tools', () => {
     })
     expect(propose.presentCall?.({
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: 'revision-1',
-      start_utf16: 0, end_utf16: 1, quote_hash: 'sha256:q', replacement: '新', summary: '摘要',
+      start_utf16: 0, end_utf16: 1, replacement: '新', summary: '摘要',
     })).toEqual({
       card: 'generic', title: '提出小说修改', kind: 'edit', rawInput: '摘要',
     })
@@ -162,7 +153,9 @@ describe('Novel model tools', () => {
     expect(result.isError).toBe(false)
     if (result.isError) throw new Error('expected novel_get success')
     expect(result.value).toMatchObject({
-      assets: [{ projectId: 'project-tool', assetId: 'chapter-tool', text: '白港下雨了。' }],
+      assets: [{
+        projectId: 'project-tool', assetId: 'chapter-tool', text: '白港下雨了。', utf16Length: 6,
+      }],
     })
     await expect(execute(ctx, undefined, 'novel_get', { references: [uri] }))
       .resolves.toMatchObject({ isError: true })
@@ -171,7 +164,7 @@ describe('Novel model tools', () => {
   })
 
   it('creates a durable proposal and presentation card without changing the authored file', async () => {
-    const { ctx, agent, path, revisionId, quoteHash } = await harness()
+    const { ctx, agent, path, revisionId } = await harness()
     const before = await readFile(path, 'utf8')
     const result = await execute(ctx, agent, 'novel_propose_changes', {
       project_id: 'project-tool',
@@ -179,7 +172,6 @@ describe('Novel model tools', () => {
       base_revision_id: revisionId,
       start_utf16: 2,
       end_utf16: 4,
-      quote_hash: quoteHash,
       replacement: '放晴',
       summary: '把天气改为放晴',
     })
@@ -203,12 +195,21 @@ describe('Novel model tools', () => {
     expect(await readFile(path, 'utf8')).toBe(before)
     const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
     if (project === undefined) throw new Error('expected Novel Project')
-    await expect(ctx.novelRepository.readChangeSet(project, ChangeSetId(value.changeSetId)))
-      .resolves.toMatchObject({ status: 'proposed', actor: { kind: 'agent', sessionId: agent.id } })
+    const retained = await ctx.novelRepository.readChangeSet(project, ChangeSetId(value.changeSetId))
+    expect(retained).toMatchObject({
+      status: 'proposed',
+      actor: { kind: 'agent', sessionId: agent.id },
+    })
+    expect(retained.operations[0]?.selector.quoteHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
+
+    await expect(execute(ctx, agent, 'novel_propose_changes', {
+      project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
+      start_utf16: 4, end_utf16: 2, replacement: '放晴', summary: '摘要',
+    })).resolves.toMatchObject({ isError: true })
 
     await expect(execute(ctx, undefined, 'novel_propose_changes', {
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
-      start_utf16: 2, end_utf16: 4, quote_hash: quoteHash, replacement: '放晴', summary: '摘要',
+      start_utf16: 2, end_utf16: 4, replacement: '放晴', summary: '摘要',
     })).resolves.toMatchObject({ isError: true })
   })
 })

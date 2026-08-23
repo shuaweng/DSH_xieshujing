@@ -9,8 +9,8 @@ This experimental Consumer gives a Novel Agent exact-read and proposal-only muta
 ## Behavior
 
 - `novel_list` discovers the Novel Project at the owning Session working directory and returns its current chapter catalog with canonical exact-Revision `dsh-novel:` references. It exposes identities and metadata, not manuscript bodies.
-- `novel_get` accepts canonical `dsh-novel:` references and reads only their retained Revisions through `NovelContextResolver`.
-- `novel_propose_changes` accepts one exact chapter, base Revision, quote-hashed UTF-16 range, replacement, and summary. It validates the reference and durably creates a single-asset `ChangeSet`; it never applies the proposal.
+- `novel_get` accepts canonical `dsh-novel:` references, reads only their retained Revisions through `NovelContextResolver`, and returns each body's exact UTF-16 length for safe range selection.
+- `novel_propose_changes` accepts one exact chapter, base Revision, UTF-16 range, replacement, and summary. It freezes and quote-hashes that range inside the Repository before durably creating a single-asset `ChangeSet`; it never applies the proposal.
 - Proposal results carry JSON-serializable `novel-change-set` presentation metadata so the browser can restore a review card from Session replay.
 - The package adds a short system-prompt section explaining Revision authority and proposal-only semantics. It registers no shell, SQL, generic read, or generic write tools.
 - All three tools require an owning Agent Session and use its working directory and Session-bound Novel Project rules.
@@ -25,7 +25,7 @@ The model sees the `novel_list`, `novel_get`, and `novel_propose_changes` schema
 
 #### Token effect
 
-The fixed tool section and three schemas add a stable prompt cost. `novel_list` returns compact catalog metadata, `novel_get` result size follows the referenced text budget, and proposal results contain compact ids, status, and summary fields.
+The fixed tool section and three schemas add a stable prompt cost. `novel_list` returns compact catalog metadata, `novel_get` result size follows the referenced text budget plus one numeric length, and proposal results contain compact ids, status, and summary fields.
 
 #### KV Cache effect
 

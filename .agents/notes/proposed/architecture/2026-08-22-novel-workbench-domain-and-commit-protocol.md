@@ -235,7 +235,7 @@ Version one does not add a generic Router or Workbench registry. Those abstracti
 
 ## Model tools and browser presentation
 
-The first model-facing Consumers are `novel_list`, `novel_get`, and `novel_propose_changes`. `novel_list` discovers the current Session Project and returns current chapter metadata with canonical exact-Revision references, but no authored body. `novel_get` reads validated Asset or Selection references and returns bounded semantic content. `novel_propose_changes` validates one chapter operation, records a ChangeSet, and returns its stable id; it cannot apply the proposal.
+The first model-facing Consumers are `novel_list`, `novel_get`, and `novel_propose_changes`. `novel_list` discovers the current Session Project and returns current chapter metadata with canonical exact-Revision references, but no authored body. `novel_get` reads validated Asset or Selection references and returns bounded semantic content plus its UTF-16 length. `novel_propose_changes` accepts Revision-bound UTF-16 offsets while the trusted Repository freezes the range and computes its quote hash; the tool records a ChangeSet and returns its stable id, but cannot apply the proposal.
 
 The ChangeSet id and target summary live in JSON-serializable tool `meta`. The Novel client registers the keyed `tool.call.toolview` entry for `novel_propose_changes`, renders the durable proposal on replay, and calls Novel Remote methods for show, apply, or reject. With the client plugin absent, the ordinary generic tool row remains a readable fallback. Browser invalidation events contain project, asset, Revision, or ChangeSet ids and are explicitly admitted by the Remote-event allowlist; clients refetch after an event or reconnect.
 

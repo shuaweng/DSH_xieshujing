@@ -7,7 +7,6 @@ import {
   AssetId,
   ProjectId,
   RevisionId,
-  type ContentHash,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import {
   decodeNovelReferenceUri,
@@ -22,7 +21,8 @@ const PROMPT = `## Novel workbench tools
 
 Novel Assets are versioned authored material. When the user names an Asset but no
 canonical reference is available, use \`novel_list\` to discover the current Project.
-Use \`novel_get\` for exact retained Revisions. Use \`novel_propose_changes\` for正文修改；它只创建供用户审阅的
+Use \`novel_get\` for exact retained Revisions and its UTF-16 length when choosing
+replacement offsets. Use \`novel_propose_changes\` for正文修改；它只创建供用户审阅的
 ChangeSet，绝不代表文件已经修改。不要声称提案已经应用。`
 
 /** Register exact-read and proposal-only Novel tools. */
@@ -120,6 +120,7 @@ export function apply(ctx: Context): void {
                 revisionId: { type: 'string', required: true },
                 path: { type: 'string', required: true },
                 text: { type: 'string', required: true },
+                utf16Length: { type: 'integer', required: true },
               },
             },
           },
@@ -139,6 +140,7 @@ export function apply(ctx: Context): void {
           revisionId: reference.input.revisionId,
           path: reference.snapshot.asset.projectRelativePath,
           text: reference.text,
+          utf16Length: reference.text.length,
         })),
       }
     },
@@ -147,14 +149,13 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'novel_propose_changes',
-    description: 'Create one reviewable replace-text ChangeSet against an exact retained chapter Revision. This never applies the change.',
+    description: 'Create one reviewable replace-text ChangeSet against an exact retained chapter Revision. Pass UTF-16 offsets from novel_get; integrity metadata is computed internally. This never applies the change.',
     parameters: {
       project_id: { type: 'string', required: true },
       asset_id: { type: 'string', required: true },
       base_revision_id: { type: 'string', required: true },
       start_utf16: { type: 'integer', required: true },
       end_utf16: { type: 'integer', required: true },
-      quote_hash: { type: 'string', required: true },
       replacement: { type: 'string', required: true },
       summary: { type: 'string', required: true },
     },
@@ -186,23 +187,22 @@ export function apply(ctx: Context): void {
     },
     async execute(args, exec) {
       if (!exec.agent) throw new Error('novel_propose_changes requires an owning agent Session')
-      const selector = {
-        kind: 'text-range' as const,
-        startUtf16: args.start_utf16,
-        endUtf16: args.end_utf16,
-        quoteHash: args.quote_hash as ContentHash,
-      }
       const reference: NovelReferenceInput = {
         projectId: ProjectId(args.project_id),
         assetId: AssetId(args.asset_id),
         revisionId: RevisionId(args.base_revision_id),
-        selector,
       }
       const resolved = await ctx.novelContextResolver.resolveReferences(exec.agent, [reference], exec.signal)
+      const selection = await ctx.novelRepository.captureSelection(resolved.project, {
+        assetId: reference.assetId,
+        revisionId: reference.revisionId,
+        startUtf16: args.start_utf16,
+        endUtf16: args.end_utf16,
+      }, exec.signal)
       const changeSet = await ctx.novelRepository.proposeChangeSet(resolved.project, {
         assetId: reference.assetId,
         baseRevisionId: reference.revisionId,
-        operations: [{ kind: 'replace-text', selector, replacement: args.replacement }],
+        operations: [{ kind: 'replace-text', selector: selection.selector, replacement: args.replacement }],
         actor: { kind: 'agent', sessionId: exec.agent.id },
         summary: args.summary,
       }, exec.signal)

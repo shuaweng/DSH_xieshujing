@@ -9,8 +9,8 @@
 ## 行为
 
 - `novel_list` 在所属 Session 工作目录发现 Novel Project，并返回带有规范、精确 Revision `dsh-novel:` 引用的当前章节目录。它只暴露身份和元数据，不返回正文。
-- `novel_get` 接收规范 `dsh-novel:` 引用，并通过 `NovelContextResolver` 只读取其中指定的已保留 Revision。
-- `novel_propose_changes` 接收一个精确章节、基础 Revision、带 quote hash 的 UTF-16 范围、替换文本和摘要。它验证引用并持久创建单资产 `ChangeSet`；绝不应用提案。
+- `novel_get` 接收规范 `dsh-novel:` 引用，通过 `NovelContextResolver` 只读取其中指定的已保留 Revision，并返回每份正文的精确 UTF-16 长度以安全选择范围。
+- `novel_propose_changes` 接收一个精确章节、基础 Revision、UTF-16 范围、替换文本和摘要。它在 Repository 内冻结范围并计算 quote hash，再持久创建单资产 `ChangeSet`；绝不应用提案。
 - 提案结果携带可 JSON 序列化的 `novel-change-set` 展示元数据，因此浏览器可以从 Session 回放恢复审阅卡片。
 - 本包加入一段简短 system prompt，说明 Revision 权威和仅提案语义。它不注册 shell、SQL、通用读取或通用写入工具。
 - 三个工具都要求所属 Agent Session，并遵守该 Session 工作目录与绑定 Novel Project 规则。
@@ -25,7 +25,7 @@
 
 #### Token 影响
 
-固定工具说明和三个 Schema 带来稳定的 prompt 开销。`novel_list` 返回紧凑目录元数据，`novel_get` 结果大小受引用文本预算约束；提案结果只包含紧凑的 id、状态和摘要字段。
+固定工具说明和三个 Schema 带来稳定的 prompt 开销。`novel_list` 返回紧凑目录元数据，`novel_get` 结果大小受引用文本预算约束并增加一个数值长度；提案结果只包含紧凑的 id、状态和摘要字段。
 
 #### KV Cache 影响
 

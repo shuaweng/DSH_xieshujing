@@ -45,7 +45,7 @@ Authored manuscript body.
 
 ## 提案、审阅与恢复
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_get` 与 `novel_propose_changes`。目录发现返回当前 Session 项目的规范精确 Revision 引用，精确读取解析已保留 Revision；提案会校验一个带 quote hash 的 `replace-text` 操作，并持久创建 ChangeSet，但不改作者文件。模型没有 apply 工具，也不能宣称已经发布修改。
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_get` 与 `novel_propose_changes`。目录发现返回当前 Session 项目的规范精确 Revision 引用，精确读取解析已保留 Revision 并报告正文 UTF-16 长度；提案会在 Repository 内冻结一个 `replace-text` 范围并计算 quote hash，再持久创建 ChangeSet，但不改作者文件。模型没有 apply 工具，也不能宣称已经发布修改。
 
 浏览器把 ChangeSet 读成行内 Diff 卡片。接受或拒绝都是显式、归 Session 所有的 Remote 操作。Apply 在接触文件前，把精确前后字节、hash、授权与预期结果 Revision 以 `applying` 状态写入 journal。项目重开时，after hash 会完成提交，before hash 会重试受保护写入，任何第三种 hash 都会变成 `conflicted`，且不覆盖作者文件。
 

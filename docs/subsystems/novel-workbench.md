@@ -45,7 +45,7 @@ Version one freezes a non-empty range as UTF-16 body offsets plus an exact quote
 
 ## Proposal, review, and recovery
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) exposes `novel_list`, `novel_get`, and `novel_propose_changes` in the package-owned Preset. Catalog discovery returns canonical exact-Revision references for the current Session project, exact reads resolve retained Revisions, and a proposal validates one quote-hashed `replace-text` operation and durably creates a ChangeSet without changing the authored file. The model has no apply tool and cannot claim publication.
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) exposes `novel_list`, `novel_get`, and `novel_propose_changes` in the package-owned Preset. Catalog discovery returns canonical exact-Revision references for the current Session project, exact reads resolve retained Revisions and report body UTF-16 lengths, and a proposal freezes and quote-hashes one `replace-text` range inside the Repository before durably creating a ChangeSet without changing the authored file. The model has no apply tool and cannot claim publication.
 
 The browser reads that ChangeSet into an inline Diff card. Accept or Reject is an explicit Session-owned Remote action. Apply records exact before/after bytes, hashes, authorization, and the intended result Revision as `applying` before filesystem publication. On reopen, an after-hash finalizes, a before-hash retries the guarded write, and any third hash becomes `conflicted` without overwriting the authored file.
 

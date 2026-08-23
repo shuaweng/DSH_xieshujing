@@ -2074,7 +2074,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `novel_propose_changes`
 
-基于精确保留的章节 Revision 创建一个可审阅 `replace-text` ChangeSet。此工具绝不会应用修改。
+基于精确保留的章节 Revision 创建一个可审阅 `replace-text` ChangeSet。传入 `novel_get` 返回的 UTF-16 偏移；完整性元数据由系统内部计算。此工具绝不会应用修改。
 
 ```json
 {
@@ -2095,9 +2095,6 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     "end_utf16": {
       "type": "integer"
     },
-    "quote_hash": {
-      "type": "string"
-    },
     "replacement": {
       "type": "string"
     },
@@ -2111,7 +2108,6 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     "base_revision_id",
     "start_utf16",
     "end_utf16",
-    "quote_hash",
     "replacement",
     "summary"
   ]

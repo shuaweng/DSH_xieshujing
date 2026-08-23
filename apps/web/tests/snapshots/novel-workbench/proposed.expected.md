@@ -16,21 +16,6 @@
     - button "Settings":
       - img
       - text: Settings
-  - complementary "Manuscript":
-    - text: "N"
-    - strong: Novel Workbench
-    - text: Manuscript
-    - navigation:
-      - button "第一章 manuscript/chapter-1.md"
-  - text: manuscript/chapter-1.md
-  - heading "第一章" [level=1]
-  - text: Saved
-  - button "Save" [disabled]
-  - button "Reference selection to Agent" [disabled]
-  - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
-  - region "Current DSH context":
-    - strong: Current DSH context
-    - text: Select manuscript text, then reference it to the Agent It will be frozen into the Session Log when sent
   - complementary "Agent conversation":
     - navigation "Session hierarchy":
       - button "{{workspace}}" [disabled]
@@ -61,3 +46,18 @@
       - img
     - button "Send message" [disabled]
     - text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}
+  - complementary "Manuscript":
+    - text: "N"
+    - strong: Novel Workbench
+    - text: Manuscript
+    - navigation:
+      - button "第一章 manuscript/chapter-1.md"
+  - text: manuscript/chapter-1.md
+  - heading "第一章" [level=1]
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Reference selection to Agent" [disabled]
+  - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
+  - region "Current DSH context":
+    - strong: Current DSH context
+    - text: Select manuscript text, then reference it to the Agent It will be frozen into the Session Log when sent

@@ -2068,7 +2068,7 @@ Source: [`packages/experimental/tool-novel/src/index.ts`](../packages/experiment
 
 ### `novel_propose_changes`
 
-Create one reviewable replace-text ChangeSet against an exact retained chapter Revision. This never applies the change.
+Create one reviewable replace-text ChangeSet against an exact retained chapter Revision. Pass UTF-16 offsets from novel_get; integrity metadata is computed internally. This never applies the change.
 
 ```json
 {
@@ -2089,9 +2089,6 @@ Create one reviewable replace-text ChangeSet against an exact retained chapter R
     "end_utf16": {
       "type": "integer"
     },
-    "quote_hash": {
-      "type": "string"
-    },
     "replacement": {
       "type": "string"
     },
@@ -2105,7 +2102,6 @@ Create one reviewable replace-text ChangeSet against an exact retained chapter R
     "base_revision_id",
     "start_utf16",
     "end_utf16",
-    "quote_hash",
     "replacement",
     "summary"
   ]
