@@ -48,7 +48,7 @@ The first SelectionRef strategy remains Revision-bound UTF-16 body offsets with 
 
 `NovelContextResolver` runs at `agent/pre-step`, parses canonical mentions from direct user messages, resolves only retained exact Revisions, and returns the readable direct message followed by one immutable `user/message` with source kind `novel-context`. That message contains safely serialized untrusted authored material and is appended by the ordinary agent loop, so replay does not reread mutable files. One Session is bound to the first referenced Project.
 
-The explicit Novel Studio overlay disables the ordinary `ui-layout` root occupant only in that composition. `novel-workbench` becomes the sole root occupant and declares the native DSH sidebar, conversation, details, overlay, chapter explorer, and manuscript canvas slots. The shipped `web` and `headless` compositions do not contain these packages. The browser MVP places Agent conversation on the left, the explorer and manuscript canvas on the right, and renders one chapter editor, a visible Context Tray, and a durable ChangeSet Diff card with Accept and Reject actions.
+The explicit Novel Studio overlay disables the ordinary `ui-layout` root occupant only in that composition. `novel-workbench` becomes the sole root occupant and declares the native DSH sidebar, conversation, details, overlay, chapter explorer, and manuscript canvas slots. The shipped `web` and `headless` compositions do not contain these packages. The browser MVP places Agent conversation on the left, the explorer and manuscript canvas on the right, and renders one chapter editor and a durable ChangeSet Diff card with Accept and Reject actions.
 
 PR3 does not add a file watcher or browser invalidation stream. Repository calls reconcile external files, and an accepted ChangeSet triggers an explicit workbench refetch. It also defers block ids, autosave cadence, search, additional asset types, multi-asset changes, automatic merge, a shipped CLI Profile template, and multi-Agent orchestration.
 
@@ -61,6 +61,12 @@ Each Host definition declares its Frontmatter type, accepted content root and ex
 The browser Remote exposes one bounded, lossless JSON envelope for Asset content, save requests, selectors, and ChangeSet operations. Host and Client registries own exact type semantics, so the generated Remote method set does not widen when a type is added. The root workbench selects a renderer by the document's declared type and keeps save, Context Commit Barrier, Agent mention insertion, and review authorization in the shared canvas. The initial `manuscript.chapter` Host definition and Client renderer preserve the PR3 text editor, UTF-16 selection, and `replace-text` behavior. A later asset package can add a Host definition and Client renderer without editing the local Repository, generic Novel tools, Remote gateway, or root workbench layout.
 
 PR4 does not add another authored asset type. `planning.outline` is the first intended proof that the registration API supports a structured content value, node selection, typed operations, and a non-text Diff without widening the shared services.
+
+## PR4 workbench presentation slice
+
+The Composer owns the only visible disclosure for an explicitly captured selection. The Novel Client inserts an ordinary reference occurrence whose label contains at most the first ten Unicode characters plus an ellipsis. Its hidden occurrence identity retains the complete canonical `dsh-novel:` mention, and the registered Input Trigger codec serializes that exact mention only when the ordinary Composer submits. Clipboard projection remains the compact human label. Removing the redundant canvas Context Tray changes no model input: the context resolver and immutable Session events remain authoritative.
+
+Reader presentation is an optional Client renderer capability, not a `manuscript.chapter` branch in the shared canvas. A renderer may supply authored-character counting; the shared canvas then offers paper color, typeface, and font-size controls around that exact renderer. These preferences and the Agent/workbench split width are client-only view state and never enter Frontmatter, Revision history, Context Manifest, system prompts, or tool schemas. The panel boundary is an accessible pointer and keyboard separator with bounded widths; its current value may be discarded without changing authored content.
 
 ## Scope and invariants
 
@@ -85,7 +91,7 @@ PR4 does not add another authored asset type. `planning.outline` is the first in
 | Immutable Revision history | `.novel/history.sqlite` | Read cache | Migrate explicitly or refuse read-write open; never reset automatically |
 | ChangeSet and apply authorization | `.novel/history.sqlite` | Tool result metadata and browser cache | Refetch by `ChangeSetId`; replay state transitions idempotently |
 | In-progress file/database commit | Apply journal in `.novel/history.sqlite` | Live operation handle | Reconcile exact before/after hashes on project open |
-| Exact model-visible Novel context | DSH `user/message` events | Context tray and transcript row | Replay logged content; never reread mutable latest assets |
+| Exact model-visible Novel context | DSH `user/message` events | Compact Composer reference and transcript row | Replay logged content; never reread mutable latest assets |
 | Current tab, cursor, panel geometry, uncommitted view state | Client runtime | Optional local UI persistence | May be discarded without changing authored content |
 
 ## Project and asset format
@@ -204,7 +210,7 @@ Reading an old immutable SelectionRef is allowed and is visibly labeled as an ol
 
 ## Context admission and Session history
 
-The Composer serializes explicit asset and selection chips as canonical, versioned `dsh-novel:` references in the direct user message. It continues to call ordinary `session.prompt`; version one does not add `novel.prompt` and does not pair `agent.inject()` with a follow-up.
+The Composer displays an explicit selection as `@[the first ten characters…]`, while its reference occurrence retains the complete canonical, versioned `dsh-novel:` mention separately. On submit, the owning Input Trigger codec serializes the full mention into the direct user message. The visible label and clipboard form never authorize a read. The Composer continues to call ordinary `session.prompt`; version one does not add `novel.prompt` and does not pair `agent.inject()` with a follow-up.
 
 A `NovelContextResolver` follows the existing Session-reference pattern. At `agent/pre-step`, after the current direct message has been claimed, it parses and removes canonical references, validates that every reference names one Project and a retained immutable Revision, applies configured count and byte/token budgets, and returns the readable direct message followed immediately by one frozen Novel context message. The agent loop appends both as `user/message` events in that same Step.
 
@@ -240,7 +246,7 @@ The source-checkout development path installs the Web App and Novel bundle into 
 
 The CLI appends its shipped Preset root after every root contributed by the composed Profile. It does not replace bundle-owned roots; otherwise a Profile can select a bundle-owned default Preset that the Session creator cannot resolve.
 
-The first technical slice may register a Novel view inside the existing conversation surface and a Context Tray in its input dock. This is a test harness, not the final product layout. Before the vertical slice is called a Novel workbench, `novel-studio` replaces `ui-layout` with the Profile's sole root occupant, keeps the existing Conversation component in a declared left-side `conversation` slot, and adds project-scoped `novel.explorer` and `novel.canvas` slots to its right. Switching Sessions does not unmount the open manuscript canvas.
+The first technical slice may register a Novel view inside the existing conversation surface and a reference occurrence in its Composer. This is a test harness, not the final product layout. Before the vertical slice is called a Novel workbench, `novel-studio` replaces `ui-layout` with the Profile's sole root occupant, keeps the existing Conversation component in a declared left-side `conversation` slot, and adds project-scoped `novel.explorer` and `novel.canvas` slots to its right. Switching Sessions does not unmount the open manuscript canvas.
 
 Version one does not add a generic Router or Workbench registry. Those abstractions require a second concrete workbench consumer. Workbench choice belongs to the Profile; Agent persona and tool composition belong to a Session Preset.
 
@@ -299,7 +305,7 @@ The generic [Domain KV storage proposal](2026-07-24-domain-kv-storage-and-worksp
 - ChangeSet tests prove proposal does not mutate files, unauthorized or stale apply cannot publish, apply/reject/retry are idempotent, and crash injection before journal commit, before file publish, after file publish, and before final SQLite commit converges to the documented state.
 - A guarded write racing a user or external edit preserves the newer file, records divergence, and leaves the Agent proposal `conflicted`; no test permits last-writer-wins overwrite.
 - Browser tests prove asset and ChangeSet invalidations refetch authoritative state, reconnect needs no event replay, keyed Tool presentation restores the card from durable `meta`, and absent Novel presentation falls back to the generic Tool row.
-- Keyless runnable application snapshots cover the technical Novel view and the final `novel-studio` root composition, including a selected range, disclosed frozen context, a ChangeSet card, Diff review, acceptance, stale conflict, and restart recovery. Default Web snapshots remain unchanged apart from separately intentional Preset roster facts.
+- Keyless runnable application snapshots cover the technical Novel view and the final `novel-studio` root composition, including a selected range, compact human reference backed by an exact model reference, a ChangeSet card, Diff review, acceptance, stale conflict, and restart recovery. Default Web snapshots remain unchanged apart from separately intentional Preset roster facts.
 - Documentation records the on-disk formats, migration policy, single-writer limit, security framing, token effect, KV Cache effect, and operational recovery procedure before the proposal moves to `implemented`.
 
 ## Risks

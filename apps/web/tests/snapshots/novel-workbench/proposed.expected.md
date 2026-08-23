@@ -46,6 +46,7 @@
       - img
     - button "Send message" [disabled]
     - text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}
+  - separator "Resize conversation and workbench"
   - complementary "Manuscript":
     - text: "N"
     - strong: Novel Workbench
@@ -57,7 +58,18 @@
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent" [disabled]
+  - strong: "12"
+  - text: characters Typeface
+  - combobox "Typeface":
+    - option "Song serif" [selected]
+    - option "Kai serif"
+    - option "Sans serif"
+  - button "Decrease font size": −
+  - status: 18px
+  - button "Increase font size": ＋
+  - group "Reading background":
+    - button "Paper white" [pressed]
+    - button "Warm parchment"
+    - button "Reading green"
+    - button "Night"
   - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
-  - region "Current DSH context":
-    - strong: Current DSH context
-    - text: Select manuscript text, then reference it to the Agent It will be frozen into the Session Log when sent

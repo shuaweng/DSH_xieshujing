@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-08-22-novel-workbench-domain-and-commit-protocol.md
-2026-08-22-novel-workbench-domain-and-commit-protocol.md: 757c785875122ca807b753dfa7f3ca0bb56790cf
-2026-08-22-novel-workbench-domain-and-commit-protocol.zh.md: 3ee39bf4badbfc9b363e2718cbe0e620f8d89c88
+2026-08-22-novel-workbench-domain-and-commit-protocol.md: 74bfb660ec52ba818872972d66846fb49782a18a
+2026-08-22-novel-workbench-domain-and-commit-protocol.zh.md: 42732bc08a149a5857350ee3aae25f744f151cc3

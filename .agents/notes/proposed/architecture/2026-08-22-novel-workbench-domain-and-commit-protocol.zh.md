@@ -48,7 +48,7 @@ PR3 增加历史 Schema 版本二，其中包含持久单资产 ChangeSet 和 ap
 
 `NovelContextResolver` 在 `agent/pre-step` 运行，从直接用户消息解析规范 mention，只解析已保留的精确 Revision，并返回可读直接消息以及紧随其后、来源类型为 `novel-context` 的不可变 `user/message`。该消息包含安全序列化的不可信创作资料，并由普通 Agent loop 追加，因此回放不会重新读取可变文件。一个 Session 绑定到第一个被引用 Project。
 
-显式 Novel Studio overlay 只在该组合中禁用普通 `ui-layout` 根占位者。`novel-workbench` 成为唯一根占位者，并声明原生 DSH 侧栏、对话、详情、overlay、章节浏览器和正文画布插槽。已发布 `web` 与 `headless` 组合不包含这些包。浏览器 MVP 把 Agent 对话放在左侧，把浏览器与正文画布放在右侧，并渲染一个章节编辑器、可见 Context Tray，以及带接受和拒绝动作的持久 ChangeSet Diff 卡片。
+显式 Novel Studio overlay 只在该组合中禁用普通 `ui-layout` 根占位者。`novel-workbench` 成为唯一根占位者，并声明原生 DSH 侧栏、对话、详情、overlay、章节浏览器和正文画布插槽。已发布 `web` 与 `headless` 组合不包含这些包。浏览器 MVP 把 Agent 对话放在左侧，把浏览器与正文画布放在右侧，并渲染一个章节编辑器，以及带接受和拒绝动作的持久 ChangeSet Diff 卡片。
 
 PR3 不添加文件 watcher 或浏览器失效事件流。Repository 调用会协调外部文件，接受 ChangeSet 后会显式重新获取工作台数据。Block id、自动保存节奏、搜索、更多资产类型、多资产变更、自动合并、已发布 CLI Profile template 和多 Agent 编排均暂缓。
 
@@ -61,6 +61,12 @@ PR4 用两个随 effect 生命周期管理的 Registry，替换分散在本地 R
 浏览器 Remote 为 Asset 内容、保存请求、selector 和 ChangeSet operation 暴露同一个有边界、无损的 JSON 信封。Host 与 Client 注册表拥有精确类型语义，因此新增类型不会扩展生成的 Remote 方法集合。根工作台按文档声明类型选择 Renderer，并把保存、Context Commit Barrier、Agent 引用插入与审阅授权保留在共享画布中。首个 `manuscript.chapter` Host 定义和 Client Renderer 保持 PR3 的文本编辑器、UTF-16 选区与 `replace-text` 行为。后续资产包可以增加 Host 定义与 Client Renderer，无需修改本地 Repository、通用 Novel 工具、Remote Gateway 或工作台根布局。
 
 PR4 不增加另一种作者资产。`planning.outline` 将作为首个验证：注册 API 能支持结构化内容值、节点选区、类型化操作和非文本 Diff，而无需扩大共享 Service。
+
+## PR4 工作台展示切片
+
+Composer 是显式冻结选区唯一可见的披露位置。Novel Client 插入普通 reference occurrence，其 label 最多包含前十个 Unicode 字符与一个省略号。隐藏的 occurrence identity 保留完整规范 `dsh-novel:` mention，已注册 Input Trigger codec 只在普通 Composer 提交时序列化该精确 mention。剪贴板投影仍是紧凑的人类 label。删除重复的画布 Context Tray 不改变任何模型输入：上下文解析器和不可变 Session 事件继续作为权威。
+
+阅读展示是可选 Client Renderer 能力，而不是共享画布中针对 `manuscript.chapter` 的分支。Renderer 可以提供作者字符统计；共享画布随后在该精确 Renderer 外提供背景色、字体和字号控件。这些偏好以及 Agent/工作台分栏宽度都只是客户端视图状态，绝不进入 Frontmatter、Revision 历史、Context Manifest、system prompt 或工具 Schema。面板边界是同时支持指针和键盘、宽度有界的无障碍 separator；丢弃当前值不会改变作者内容。
 
 ## 范围与不变量
 
@@ -85,7 +91,7 @@ PR4 不增加另一种作者资产。`planning.outline` 将作为首个验证：
 | 不可变 Revision 历史 | `.novel/history.sqlite` | 读取缓存 | 显式迁移或拒绝读写打开；绝不自动重置 |
 | ChangeSet 与应用授权 | `.novel/history.sqlite` | 工具结果元数据和浏览器缓存 | 按 `ChangeSetId` 重新获取；幂等回放状态转换 |
 | 进行中的文件/数据库提交 | `.novel/history.sqlite` 中的应用日志 | 实时操作句柄 | 打开项目时核对精确 before/after 哈希 |
-| 精确模型可见 Novel 上下文 | DSH `user/message` 事件 | Context Tray 和 transcript 行 | 回放已记录内容；绝不重读可变最新资产 |
+| 精确模型可见 Novel 上下文 | DSH `user/message` 事件 | 紧凑 Composer 引用与 transcript 行 | 回放已记录内容；绝不重读可变最新资产 |
 | 当前标签页、光标、面板尺寸、未提交视图状态 | 客户端运行时 | 可选本地 UI 持久化 | 可以丢弃，不改变作者内容 |
 
 ## 项目与资产格式
@@ -204,7 +210,7 @@ Composer 提交指向脏编辑器内容的引用前，浏览器通过 Novel Remo
 
 ## 上下文准入与 Session 历史
 
-Composer 把显式资产和选区 chip 序列化为直接用户消息中的规范、带版本 `dsh-novel:` 引用，并继续调用普通 `session.prompt`。版本一不增加 `novel.prompt`，也不把 `agent.inject()` 与 follow-up 配对。
+Composer 把显式选区显示为 `@[前十个字…]`，同时由 reference occurrence 单独保留完整规范、带版本的 `dsh-novel:` mention。提交时，所属 Input Trigger codec 把完整 mention 序列化进直接用户消息。可见 label 与剪贴板形式都不授权读取。Composer 继续调用普通 `session.prompt`；版本一不增加 `novel.prompt`，也不把 `agent.inject()` 与 follow-up 配对。
 
 `NovelContextResolver` 沿用现有 Session reference 模式。在 `agent/pre-step` 中，当前直接消息被领取后，它解析并移除规范引用，验证每个引用都属于同一个 Project 且指向保留的不可变 Revision，执行可配置的数量与字节/token 预算，并返回可读直接消息，随后紧跟一条冻结 Novel 上下文消息。agent loop 在同一个 Step 中把两条消息都追加为 `user/message` 事件。
 
@@ -240,7 +246,7 @@ Session 中第一条被接受的 `novel-context` 消息派生出其 Novel Projec
 
 CLI 会把自带 Preset 根追加在 Profile 组合贡献的全部根之后，而不会替换 bundle 自有根；否则 Profile 可以选择一个 bundle 自有默认 Preset，Session 创建器却无法解析它。
 
-首个技术切片可以在现有对话界面中注册 Novel view，并在输入 dock 中注册 Context Tray。这只是测试支架，不是最终产品布局。在把垂直链路称作小说工作台前，`novel-studio` 会用该 Profile 唯一的 root occupant 替换 `ui-layout`，在已声明的左侧 `conversation` slot 中保留现有 Conversation 组件，并在其右侧增加项目级 `novel.explorer` 与 `novel.canvas` slot。切换 Session 不会卸载已打开的正文画布。
+首个技术切片可以在现有对话界面中注册 Novel view，并在 Composer 中注册 reference occurrence。这只是测试支架，不是最终产品布局。在把垂直链路称作小说工作台前，`novel-studio` 会用该 Profile 唯一的 root occupant 替换 `ui-layout`，在已声明的左侧 `conversation` slot 中保留现有 Conversation 组件，并在其右侧增加项目级 `novel.explorer` 与 `novel.canvas` slot。切换 Session 不会卸载已打开的正文画布。
 
 版本一不增加通用 Router 或 Workbench 注册表。这些抽象需要第二个具体工作台 Consumer。工作台选择属于 Profile，Agent persona 与工具组合属于 Session Preset。
 
@@ -299,7 +305,7 @@ ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客
 - ChangeSet 测试证明提出提案不会修改文件，未授权或陈旧应用无法发布，apply/reject/retry 保持幂等，并且在日志提交前、文件发布前、文件发布后和最终 SQLite 提交前注入崩溃时，状态都会收敛到已记录结果。
 - 与用户或外部修改竞争的带守卫写入会保留更新文件，记录分歧，并让 Agent 提案保持 `conflicted`；任何测试都不允许 last-writer-wins 覆盖。
 - 浏览器测试证明资产与 ChangeSet 失效通知会重新获取权威状态，重连不需要事件回放，带键工具展示会从持久 `meta` 恢复卡片，并且缺少 Novel 展示时回退到通用工具行。
-- 无密钥可运行应用快照覆盖技术 Novel view 和最终 `novel-studio` root 组合，包括选中范围、披露的冻结上下文、ChangeSet 卡片、diff 审阅、接受、陈旧冲突和重启恢复。默认 Web 快照除独立且有意的 Preset roster 事实外保持不变。
+- 无密钥可运行应用快照覆盖技术 Novel view 和最终 `novel-studio` root 组合，包括选中范围、由精确模型引用支撑的人类短引用、ChangeSet 卡片、diff 审阅、接受、陈旧冲突和重启恢复。默认 Web 快照除独立且有意的 Preset roster 事实外保持不变。
 - 在提案移动到 `implemented` 前，文档会记录磁盘格式、迁移策略、单写入者限制、安全框定、token 影响、KV Cache 影响和运维恢复流程。
 
 ## 风险

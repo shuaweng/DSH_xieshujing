@@ -1,6 +1,7 @@
-/** Typed Asset canvas, Context Commit Barrier, and visible context tray. */
+/** Typed Asset canvas, Context Commit Barrier, and optional reader presentation. */
 
 import { useState } from 'react'
+import type { CSSProperties } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
@@ -10,14 +11,14 @@ import type {
   SaveNovelAssetRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type { NovelAssetRendererRegistry } from './renderers.tsx'
-import type { createNovelWorkbenchStore } from './store.ts'
+import type { NovelReaderFont, NovelReaderPaper, createNovelWorkbenchStore } from './store.ts'
 import css from './workbench.module.css'
 
 export interface CanvasInjected {
   renderers: NovelAssetRendererRegistry
   save: (sessionId: SessionId, request: SaveNovelAssetRequest) => Promise<NovelAssetDocument>
   capture: (sessionId: SessionId, request: CaptureNovelSelectionRequest) => Promise<NovelSelectionDescriptor>
-  appendMention: (sessionId: SessionId, mention: string) => void
+  appendReference: (sessionId: SessionId, reference: NovelSelectionDescriptor, label: string) => void
 }
 
 type CanvasProps = PropsRuntime<'novel.canvas'>
@@ -25,8 +26,10 @@ type CanvasProps = PropsRuntime<'novel.canvas'>
   & PropsLocale<'novel-workbench'>
   & InjectFace<CanvasInjected>
 
-/** One exact-revision typed Asset editor with a visible Agent context handoff. */
-export function Canvas({ useSessions, useStore, actions, renderers, save, capture, appendMention, t }: CanvasProps) {
+const PAPERS: readonly NovelReaderPaper[] = ['paper', 'warm', 'green', 'night']
+
+/** One exact-revision typed Asset editor with a compact Agent context handoff. */
+export function Canvas({ useSessions, useStore, actions, renderers, save, capture, appendReference, t }: CanvasProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
   const state = useStore(value => value)
   const [busy, setBusy] = useState(false)
@@ -62,8 +65,7 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
         revisionId: document.revisionId,
         selector: state.selection,
       })
-      appendMention(sessionId, reference.mention)
-      actions.referenced(reference)
+      appendReference(sessionId, reference, shortReferenceLabel(reference.preview ?? document.title))
     } catch (error: unknown) {
       actions.fail(errorMessage(error))
     } finally {
@@ -80,6 +82,8 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
   } catch (error: unknown) {
     return <div className={css.empty}>{errorMessage(error)}</div>
   }
+  const reader = renderer.reader
+  const characterCount = reader?.countCharacters(state.draft)
   return (
     <div className={css.editorShell}>
       <header className={css.editorHeader}>
@@ -94,27 +98,65 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
           </button>
         </div>
       </header>
-      {renderer.renderEditor({
-        document: state.document,
-        content: state.draft,
-        ariaLabel: `${state.document.title} · ${t('editor')}`,
-        onContentChange: actions.edit,
-        onSelectionChange: actions.select,
-      })}
-      <section className={css.contextTray} aria-label={t('context')}>
-        <strong>{t('context')}</strong>
-        {state.reference === undefined
-          ? <span>{t('contextEmpty')}</span>
-          : (
-            <span className={css.contextChip}>
-              {state.document.title} · {renderer.describeSelection(state.reference.selector)}
-              {state.reference.preview === undefined ? '' : ` · ${state.reference.preview}`}
-            </span>
-          )}
-        <small>{t('contextDurable')}</small>
-      </section>
+      {reader === undefined ? null : (
+        <div className={css.readerToolbar} aria-label={t('readerSettings')}>
+          <span className={css.characterCount}><strong>{characterCount?.toLocaleString()}</strong> {t('characters')}</span>
+          <label className={css.fontControl}>
+            <span>{t('font')}</span>
+            <select
+              aria-label={t('font')}
+              value={state.readerFont}
+              onChange={(event) => { actions.setReaderFont(event.target.value as NovelReaderFont) }}
+            >
+              <option value="song">{t('fontSong')}</option>
+              <option value="kai">{t('fontKai')}</option>
+              <option value="sans">{t('fontSans')}</option>
+            </select>
+          </label>
+          <div className={css.fontSizeControl} aria-label={t('fontSize')}>
+            <button type="button" aria-label={t('decreaseFont')} onClick={() => { actions.setReaderFontSize(state.readerFontSize - 1) }}>−</button>
+            <output>{state.readerFontSize}px</output>
+            <button type="button" aria-label={t('increaseFont')} onClick={() => { actions.setReaderFontSize(state.readerFontSize + 1) }}>＋</button>
+          </div>
+          <div className={css.paperControl} role="group" aria-label={t('paperColor')}>
+            {PAPERS.map(paper => (
+              <button
+                key={paper}
+                type="button"
+                className={css.paperSwatch}
+                data-paper={paper}
+                aria-label={t(paper)}
+                aria-pressed={state.readerPaper === paper}
+                onClick={() => { actions.setReaderPaper(paper) }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      <div
+        className={css.editorStage}
+        data-reader={reader === undefined ? undefined : ''}
+        data-reader-paper={reader === undefined ? undefined : state.readerPaper}
+        data-reader-font={reader === undefined ? undefined : state.readerFont}
+        style={reader === undefined ? undefined : { '--novel-reader-size': `${state.readerFontSize}px` } as CSSProperties}
+      >
+        {renderer.renderEditor({
+          document: state.document,
+          content: state.draft,
+          ariaLabel: `${state.document.title} · ${t('editor')}`,
+          onContentChange: actions.edit,
+          onSelectionChange: actions.select,
+        })}
+      </div>
     </div>
   )
+}
+
+/** Human-facing reference label; the Composer occurrence retains the full model reference separately. */
+export function shortReferenceLabel(preview: string): string {
+  const characters = Array.from(preview.replace(/\s+/gu, ' ').trim())
+  const visible = characters.slice(0, 10).join('')
+  return `[${visible}${characters.length > 10 ? '…' : ''}]`
 }
 
 function errorMessage(error: unknown): string {

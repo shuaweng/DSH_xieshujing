@@ -9,6 +9,7 @@
     { "path": "../../client/ui-layout" },
     { "path": "../../client/ui-theme" },
     { "path": "../../client/ui-conversation" },
+    { "path": "../../client/ui-input-trigger" },
     { "path": "../../client/ui-tool" },
     { "path": "../../client/locale" },
     { "path": "../novel-repository-client" },

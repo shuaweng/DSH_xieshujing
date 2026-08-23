@@ -213,17 +213,25 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     const editor = page.getByRole('textbox', { name: '第一章 · Chapter manuscript' })
     await expect.poll(() => editor.inputValue()).toBe('她沉默片刻没有再解释。雨还在下。')
 
-    await editor.fill('她只看着窗外。雨还在下。')
+    const authored = '她只看着窗外。雨还在下。'
+    await editor.fill(authored)
     await editor.press('Home')
-    for (let offset = 0; offset < 7; offset += 1) await editor.press('Shift+ArrowRight')
+    for (let offset = 0; offset < authored.length; offset += 1) await editor.press('Shift+ArrowRight')
     await page.getByRole('button', { name: 'Reference selection to Agent' }).click()
+    const composer = page.getByRole('complementary', { name: 'Agent conversation' }).locator('textarea')
     try {
-      await page.getByText(/第一章 · 0–7 · 她只看着窗外/u).waitFor({ timeout: 15_000 })
+      await expect.poll(() => composer.inputValue()).toBe('@[她只看着窗外。雨还在…] ')
     } catch (cause) {
       throw new Error(`Selection reference was not committed; page errors: ${JSON.stringify(tripwire.pageErrors)}; body: ${JSON.stringify(await page.locator('body').innerText())}`, { cause })
     }
-    const composer = page.getByRole('complementary', { name: 'Agent conversation' }).locator('textarea')
-    await expect.poll(() => composer.inputValue()).toMatch(/^@\[她只看着窗外。\]\(dsh-novel:/u)
+
+    await page.getByLabel('Typeface').selectOption('kai')
+    await page.getByRole('button', { name: 'Increase font size' }).click()
+    await page.getByRole('button', { name: 'Warm parchment' }).click()
+    await expect.poll(() => page.locator('[data-reader-paper]').getAttribute('data-reader-paper')).toBe('warm')
+    await expect.poll(() => page.locator('[data-reader-font]').getAttribute('data-reader-font')).toBe('kai')
+    await page.getByRole('separator', { name: 'Resize conversation and workbench' }).press('ArrowRight')
+    await expect.poll(() => page.getByRole('separator', { name: 'Resize conversation and workbench' }).getAttribute('aria-valuenow')).toBe('426')
 
     expect(await readFile(join(scaffold.workspaceCwd, 'manuscript', 'chapter-1.md'), 'utf8'))
       .toContain('她只看着窗外。雨还在下。')

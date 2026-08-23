@@ -36,7 +36,7 @@
       - deletion: 她
       - insertion: 她沉默片刻
       - paragraph: Applied
-    - textbox "Message the agent": "@[她只看着窗外。](dsh-novel:{{reference}})"
+    - textbox "Message the agent": "@[她只看着窗外。雨还在…]"
     - button "Commands":
       - img
     - 'button "Access mode, current: Workspace Write"'
@@ -45,6 +45,7 @@
       - img
     - button "Send message"
     - text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}
+  - separator "Resize conversation and workbench"
   - complementary "Manuscript":
     - text: "N"
     - strong: Novel Workbench
@@ -56,7 +57,18 @@
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent"
+  - strong: "12"
+  - text: characters Typeface
+  - combobox "Typeface":
+    - option "Song serif"
+    - option "Kai serif" [selected]
+    - option "Sans serif"
+  - button "Decrease font size": −
+  - status: 19px
+  - button "Increase font size": ＋
+  - group "Reading background":
+    - button "Paper white"
+    - button "Warm parchment" [pressed]
+    - button "Reading green"
+    - button "Night"
   - textbox "第一章 · Chapter manuscript": 她只看着窗外。雨还在下。
-  - region "Current DSH context":
-    - strong: Current DSH context
-    - text: 第一章 · 0–7 · 她只看着窗外。 It will be frozen into the Session Log when sent

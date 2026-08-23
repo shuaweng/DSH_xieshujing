@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { SlotRegistry, type SessionId, type SessionListState, type ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {
   NovelChangeSetDescriptor,
@@ -15,7 +16,7 @@ import type {
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import { NovelFrame } from '../src/client/NovelFrame.tsx'
 import { Explorer } from '../src/client/Explorer.tsx'
-import { Canvas } from '../src/client/Canvas.tsx'
+import { Canvas, shortReferenceLabel } from '../src/client/Canvas.tsx'
 import { ChangeSetCard, type NovelChangeReview } from '../src/client/ChangeSetCard.tsx'
 import { createNovelFrameStore, createNovelWorkbenchStore } from '../src/client/store.ts'
 import { zh } from '../src/client/locales.ts'
@@ -129,11 +130,17 @@ describe('NovelFrame', () => {
     expect(view.container.querySelector('[data-novel-workbench]')).not.toBeNull()
     expect(view.getByLabelText(zh.chapters)).toBeTruthy()
     expect(view.getByLabelText(zh.agent)).toBeTruthy()
+    const resizer = view.getByRole('separator', { name: zh.resizePanels })
+    expect(resizer.getAttribute('aria-valuenow')).toBe('410')
     expect(calls).toEqual(['sidebar', 'conversation', 'details', 'novel.explorer', 'novel.canvas', 'shell.overlay'])
     expect(view.container.querySelector('[data-details-open]')).toBeNull()
 
     act(() => { frameStore.actions.toggleSidebar(); frameStore.actions.openDetails() })
     expect(view.container.querySelector('[data-details-open]')).not.toBeNull()
+    fireEvent.keyDown(resizer, { key: 'ArrowRight' })
+    expect(frameStore.getSnapshot().agentWidth).toBe(426)
+    fireEvent.doubleClick(resizer)
+    expect(frameStore.getSnapshot().agentWidth).toBe(410)
   })
 })
 
@@ -153,7 +160,7 @@ describe('Canvas', () => {
     const order: string[] = []
     const save = vi.fn(async () => { order.push('save'); return saved })
     const capture = vi.fn(async () => { order.push('capture'); return frozen })
-    const appendMention = vi.fn(() => { order.push('mention') })
+    const appendReference = vi.fn(() => { order.push('reference') })
 
     const view = render(<Canvas
       useStore={hookOf(store) as never}
@@ -162,14 +169,14 @@ describe('Canvas', () => {
       useWorkspaces={vi.fn() as never}
       save={save}
       capture={capture}
-      appendMention={appendMention}
+      appendReference={appendReference}
       renderers={renderers}
       t={t}
     />)
     fireEvent.click(view.getByText(zh.reference))
 
-    await waitFor(() => { expect(appendMention).toHaveBeenCalledWith(SID, frozen.mention) })
-    expect(order).toEqual(['save', 'capture', 'mention'])
+    await waitFor(() => { expect(appendReference).toHaveBeenCalledWith(SID, frozen, '[新句]') })
+    expect(order).toEqual(['save', 'capture', 'reference'])
     expect(save).toHaveBeenCalledWith(SID, {
       assetId: saved.id, baseRevisionId: 'revision-1', content: { kind: 'manuscript', body: '新句继续。' },
     })
@@ -177,7 +184,8 @@ describe('Canvas', () => {
       assetId: saved.id, revisionId: saved.revisionId,
       selector: { kind: 'text-range', startUtf16: 0, endUtf16: 2 },
     })
-    expect(view.getByText(/第一章 · 0–2/u)).toBeTruthy()
+    expect(view.getByLabelText(zh.readerSettings)).toBeTruthy()
+    expect(view.queryByText('DSH 当前上下文')).toBeNull()
     expect(store.getSnapshot().document?.revisionId).toBe(saved.revisionId)
   })
 
@@ -185,7 +193,7 @@ describe('Canvas', () => {
     const store = createNovelWorkbenchStore().create()
     const empty = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      save={vi.fn()} capture={vi.fn()} appendMention={vi.fn()} t={t}
+      save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} t={t}
       renderers={renderers}
     />)
     expect(empty.getByText(zh.noChapter)).toBeTruthy()
@@ -202,7 +210,7 @@ describe('Canvas', () => {
     }))
     const view = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      save={save} capture={vi.fn()} appendMention={vi.fn()} renderers={renderers} t={t}
+      save={save} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
     />)
     fireEvent.click(view.getByText(zh.save))
     await waitFor(() => { expect(save).toHaveBeenCalledTimes(1) })
@@ -223,10 +231,10 @@ describe('Canvas', () => {
       store.actions.select({ kind: 'text-range', startUtf16: 0, endUtf16: 4 })
     })
     const capture = vi.fn()
-    const appendMention = vi.fn()
+    const appendReference = vi.fn()
     const view = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      save={async () => { throw new Error('workspace write denied') }} capture={capture} appendMention={appendMention}
+      save={async () => { throw new Error('workspace write denied') }} capture={capture} appendReference={appendReference}
       renderers={renderers} t={t}
     />)
 
@@ -234,7 +242,7 @@ describe('Canvas', () => {
 
     await waitFor(() => { expect(view.getByRole('alert').textContent).toContain('workspace write denied') })
     expect(capture).not.toHaveBeenCalled()
-    expect(appendMention).not.toHaveBeenCalled()
+    expect(appendReference).not.toHaveBeenCalled()
     expect(store.getSnapshot()).toMatchObject({
       dirty: true,
       selection: { kind: 'text-range', startUtf16: 0, endUtf16: 4 },
@@ -245,18 +253,18 @@ describe('Canvas', () => {
     const store = createNovelWorkbenchStore().create()
     const { preview: _preview, ...selectionWithoutPreview } = selection()
     const capture = vi.fn(async () => selectionWithoutPreview)
-    const appendMention = vi.fn()
+    const appendReference = vi.fn()
     act(() => {
       store.actions.open(chapter())
       store.actions.select({ kind: 'text-range', startUtf16: 0, endUtf16: 2 })
     })
     const view = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      save={vi.fn()} capture={capture} appendMention={appendMention} renderers={renderers} t={t}
+      save={vi.fn()} capture={capture} appendReference={appendReference} renderers={renderers} t={t}
     />)
     fireEvent.click(view.getByText(zh.reference))
     await waitFor(() => { expect(capture).toHaveBeenCalledWith(SID, expect.objectContaining({ revisionId: 'revision-1' })) })
-    expect(view.getByText(/第一章 · 0–2$/u)).toBeTruthy()
+    await waitFor(() => { expect(appendReference).toHaveBeenCalledWith(SID, selectionWithoutPreview, '[第一章]') })
     const textarea = view.getByLabelText(/第一章/u)
     fireEvent.change(textarea, { target: { value: '键盘编辑' } })
     Object.defineProperties(textarea, { selectionStart: { value: 1, configurable: true }, selectionEnd: { value: 3, configurable: true } })
@@ -273,11 +281,29 @@ describe('Canvas', () => {
       useSessions={((select: (state: SessionListState) => unknown) => select({
         ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
       })) as never}
-      useWorkspaces={vi.fn() as never} save={vi.fn()} capture={vi.fn()} appendMention={vi.fn()}
+      useWorkspaces={vi.fn() as never} save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()}
       renderers={renderers} t={t}
     />)
     fireEvent.click(noSession.getByText(zh.save))
     fireEvent.click(noSession.getByText(zh.reference))
+  })
+
+  it('presents manuscript character count, reader preferences, and Unicode-safe short references', () => {
+    const store = createNovelWorkbenchStore().create()
+    act(() => { store.actions.open(chapter()) })
+    const view = render(<Canvas
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
+    />)
+
+    expect(view.getByText((_, element) => element?.textContent?.trim() === '5 字')).toBeTruthy()
+    fireEvent.change(view.getByLabelText(zh.font), { target: { value: 'kai' } })
+    fireEvent.click(view.getByRole('button', { name: zh.increaseFont }))
+    fireEvent.click(view.getByRole('button', { name: zh.green }))
+    expect(store.getSnapshot()).toMatchObject({ readerFont: 'kai', readerFontSize: 19, readerPaper: 'green' })
+    expect(view.container.querySelector('[data-reader-paper="green"][data-reader-font="kai"]')).not.toBeNull()
+    expect(shortReferenceLabel('一二三四五六七八九十十一十二')).toBe('[一二三四五六七八九十…]')
+    expect(shortReferenceLabel('😀 一\n二')).toBe('[😀 一 二]')
   })
 })
 
@@ -592,20 +618,26 @@ describe('Novel workbench stores and browser assembly', () => {
       store.actions.open(chapter())
       store.actions.edit({ kind: 'manuscript', body: '旧句继续。' })
       store.actions.select({ kind: 'text-range', startUtf16: 1, endUtf16: 2 })
-      store.actions.referenced(selection())
+      store.actions.setReaderPaper('night')
+      store.actions.setReaderFont('sans')
+      store.actions.setReaderFontSize(99)
       store.actions.saved(chapter({ revisionId: 'revision-2' as never, content: { kind: 'manuscript', body: '旧句继续。' } }))
       store.actions.fail('failed')
       store.actions.refresh()
     })
-    expect(store.getSnapshot()).toMatchObject({ error: 'failed', reload: 1, dirty: false })
+    expect(store.getSnapshot()).toMatchObject({
+      error: 'failed', reload: 1, dirty: false, readerPaper: 'night', readerFont: 'sans', readerFontSize: 28,
+    })
     act(() => { store.actions.reset() })
     expect(store.getSnapshot()).toEqual({
-      assets: [], dirty: false, loading: true, reload: 1,
+      assets: [], dirty: false, readerPaper: 'night', readerFont: 'sans', readerFontSize: 28, loading: true, reload: 1,
     })
 
     const frame = createNovelFrameStore().create()
-    act(() => { frame.actions.toggleSidebar(); frame.actions.openDetails(); frame.actions.closeDetails() })
-    expect(frame.getSnapshot()).toEqual({ sidebarCollapsed: false, detailsOpen: false })
+    act(() => {
+      frame.actions.toggleSidebar(); frame.actions.openDetails(); frame.actions.closeDetails(); frame.actions.setAgentWidth(999)
+    })
+    expect(frame.getSnapshot()).toEqual({ sidebarCollapsed: false, detailsOpen: false, agentWidth: 640 })
   })
 
   it('wires slots, remotes, Composer mentions, reviews, layout, locale, and theme teardown', async () => {
@@ -616,6 +648,10 @@ describe('Novel workbench stores and browser assembly', () => {
     ctx.provide('locale', locale)
     const sessionScope: { value?: object } = {}
     ctx.provide('sessions', { scope: () => sessionScope.value } as never)
+    let referenceSource: InputTriggerSource | undefined
+    ctx.provide('inputTriggers', {
+      registerSource: (source: InputTriggerSource) => { referenceSource = source; return () => { referenceSource = undefined } },
+    } as never)
     const project = {
       schema: 1, id: 'project-1', title: '白港', rootDisplayPath: '/story',
       manifestDisplayPath: '/story/novel.yaml', contentRootDisplayPaths: { manuscript: '/story/manuscript' },
@@ -666,7 +702,7 @@ describe('Novel workbench stores and browser assembly', () => {
     const root = slots.entries('root').find(entry => entry.component === NovelFrame)!
     const layout = ctx.get('layout') as { toggleSidebar: () => void; openDetails: () => void; closeDetails: () => void }
     layout.toggleSidebar(); layout.openDetails(); layout.closeDetails()
-    const panels = { toggleSidebar: vi.fn(), openDetails: vi.fn(), closeDetails: vi.fn() }
+    const panels = { toggleSidebar: vi.fn(), openDetails: vi.fn(), closeDetails: vi.fn(), setAgentWidth: vi.fn() }
     expect((root.inject as (actions: typeof panels) => object)(panels)).toEqual({})
     layout.toggleSidebar(); layout.openDetails(); layout.closeDetails()
     expect(panels.toggleSidebar).toHaveBeenCalledOnce()
@@ -687,23 +723,36 @@ describe('Novel workbench stores and browser assembly', () => {
     const canvas = slots.entries('novel.canvas')[0]!.inject as () => {
       save: (id: SessionId, request: unknown) => Promise<unknown>
       capture: (id: SessionId, request: unknown) => Promise<unknown>
-      appendMention: (id: SessionId, mention: string) => void
+      appendReference: (id: SessionId, reference: NovelSelectionDescriptor, label: string) => void
     }
     const canvasFace = canvas()
     await expect(canvasFace.save(SID, {})).resolves.toMatchObject({ revisionId: 'revision-2' })
     await expect(canvasFace.capture(SID, {})).resolves.toMatchObject({ id: 'selection-1' })
-    expect(() => { canvasFace.appendMention(SID, 'mention') }).toThrow(/no browser scope/u)
+    expect(() => { canvasFace.appendReference(SID, selection(), '[新句]') }).toThrow(/no browser scope/u)
     sessionScope.value = {}
-    expect(() => { canvasFace.appendMention(SID, 'mention') }).toThrow(/conversation service is unavailable/u)
+    expect(() => { canvasFace.appendReference(SID, selection(), '[新句]') }).toThrow(/conversation service is unavailable/u)
     let draft = ''
-    const setDraft = vi.fn((value: string) => { draft = value })
-    ctx.provide('conversation', { input: { for: () => ({ state: { getSnapshot: () => ({ draft }) }, setDraft }) } } as never)
-    canvasFace.appendMention(SID, 'one')
-    draft = 'two '
-    canvasFace.appendMention(SID, 'three')
+    let draftRev = 0
+    const setDraft = vi.fn((value: string) => { draft = value; draftRev += 1 })
+    const insertReference = vi.fn((reference: ReferenceInsert, span: { start: number; end: number; draftRev: number }) => {
+      if (span.draftRev !== draftRev) return false
+      draft = `${draft.slice(0, span.start)}@${reference.label} ${draft.slice(span.end)}`
+      draftRev += 1
+      return true
+    })
+    ctx.provide('conversation', {
+      input: { for: () => ({ state: { getSnapshot: () => ({ draft, draftRev }) }, setDraft, insertReference }) },
+    } as never)
+    canvasFace.appendReference(SID, selection(), '[新句]')
     draft = 'four'
-    canvasFace.appendMention(SID, 'five')
-    expect(setDraft.mock.calls.map(call => call[0])).toEqual(['one ', 'two three ', 'four five '])
+    draftRev += 1
+    canvasFace.appendReference(SID, selection(), '[新句]')
+    expect(setDraft.mock.calls.map(call => call[0])).toEqual(['four '])
+    const inserted = insertReference.mock.calls[0]![0]
+    expect(inserted).toMatchObject({ source: 'novel-selection', label: '[新句]', clipboardText: '@[新句]' })
+    if (referenceSource?.codec === undefined) throw new Error('Novel reference source was not registered')
+    await expect(referenceSource.codec.serialize(inserted.ref, new AbortController().signal)).resolves.toBe(selection().mention)
+    expect(referenceSource.codec.clipboardText(inserted.ref)).toBe('@[新句]')
 
     const card = slots.entries('tool.call.toolview').find(entry => entry.component === ChangeSetCard)!
     const review = (card.inject as () => {

@@ -26,6 +26,11 @@ export interface NovelAssetEditorProps {
 /** Browser behavior contributed by one exact Frontmatter Asset type. */
 export interface NovelAssetRendererDefinition {
   readonly type: string
+  /** Optional human reading presentation supplied by prose-like Asset types. */
+  readonly reader?: {
+    /** Count authored characters for the active typed value (whitespace excluded). */
+    countCharacters(content: NovelWireValue): number
+  }
   renderEditor(props: NovelAssetEditorProps): ReactNode
   renderDiff(before: NovelWireValue, operations: readonly NovelWireValue[]): ReactNode
   describeSelection(selector: NovelWireValue): string
@@ -82,6 +87,11 @@ function validateRenderer(definition: NovelAssetRendererDefinition): void {
 /** Shipped plain-text editor and Diff projection for `manuscript.chapter`. */
 export const manuscriptChapterRenderer: NovelAssetRendererDefinition = {
   type: 'manuscript.chapter',
+  reader: {
+    countCharacters(content) {
+      return Array.from(manuscriptContent(content).body.replace(/\s/gu, '')).length
+    },
+  },
   renderEditor({ content, ariaLabel, onContentChange, onSelectionChange }) {
     const chapter = manuscriptContent(content)
     return (

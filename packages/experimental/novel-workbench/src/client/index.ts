@@ -3,6 +3,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {} from '@deepseek-ai/dsh-experimental-novel-repository-client/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
@@ -22,6 +23,28 @@ import {
 } from './store.ts'
 import { en, NS, zh, type NovelWorkbenchKey } from './locales.ts'
 
+const NOVEL_SELECTION_REFERENCE_SOURCE = 'novel-selection'
+
+interface NovelComposerReference {
+  readonly mention: string
+  readonly clipboardText: string
+}
+
+const novelSelectionReferenceSource: InputTriggerSource = {
+  trigger: '@',
+  name: NOVEL_SELECTION_REFERENCE_SOURCE,
+  showGroupTitle: false,
+  candidates: () => Promise.resolve([]),
+  onPick: () => undefined,
+  codec: {
+    clipboardText: ref => decodeComposerReference(ref).clipboardText,
+    serialize: (ref, signal) => {
+      if (signal.aborted) return Promise.reject(signal.reason instanceof Error ? signal.reason : new Error('Novel reference serialization aborted'))
+      return Promise.resolve(decodeComposerReference(ref).mention)
+    },
+  },
+}
+
 export {
   NovelAssetRendererRegistry,
   type NovelAssetEditorProps,
@@ -29,7 +52,7 @@ export {
 } from './renderers.tsx'
 
 export const inject = [
-  'slots', 'sessions', 'remote', 'remote.novelRepository', 'theme', 'locale',
+  'slots', 'sessions', 'remote', 'remote.novelRepository', 'theme', 'locale', 'inputTriggers',
 ]
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -71,6 +94,10 @@ export function apply(ctx: Context): void {
   const layout = new NovelLayout()
   const renderers = new NovelAssetRendererRegistry(ctx)
   renderers.register(manuscriptChapterRenderer)
+  ctx.effect(
+    () => ctx.inputTriggers.registerSource(novelSelectionReferenceSource),
+    'novel-workbench: exact SelectionRef serializer',
+  )
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'novel-workbench: dictionaries')
   ctx.effect(() => ctx.reflect.provide('layout', layout), 'novel-workbench: layout service')
 
@@ -126,14 +153,29 @@ export function apply(ctx: Context): void {
         remote.captureSelection(sessionId, request),
         'capture chapter selection',
       ),
-      appendMention: (sessionId, mention) => {
+      appendReference: (sessionId, reference, label) => {
         const scoped = ctx.sessions.scope(sessionId)
         if (scoped === undefined) throw new Error(`novel workbench: Session ${JSON.stringify(sessionId)} has no browser scope`)
         const conversation = ctx.get('conversation')
         if (conversation === undefined) throw new Error('novel workbench: conversation service is unavailable')
         const input = conversation.input.for(scoped)
-        const draft = input.state.getSnapshot().draft
-        input.setDraft(`${draft}${draft === '' || /\s$/u.test(draft) ? '' : ' '}${mention} `)
+        let snapshot = input.state.getSnapshot()
+        if (snapshot.draft !== '' && !/\s$/u.test(snapshot.draft)) {
+          input.setDraft(`${snapshot.draft} `)
+          snapshot = input.state.getSnapshot()
+        }
+        const display = `@${label}`
+        const inserted = input.insertReference({
+          source: NOVEL_SELECTION_REFERENCE_SOURCE,
+          ref: encodeComposerReference({ mention: reference.mention, clipboardText: display }),
+          label,
+          clipboardText: display,
+        }, {
+          start: snapshot.draft.length,
+          end: snapshot.draft.length,
+          draftRev: snapshot.draftRev,
+        })
+        if (!inserted) throw new Error('novel workbench: Composer rejected the SelectionRef insertion')
       },
     }),
   }, Canvas)
@@ -201,4 +243,18 @@ async function unwrapRemote<T>(pending: Promise<RemoteResult<T>>, operation: str
   const result = await pending
   if (!result.ok) throw new Error(`${operation} failed: ${result.error.code}: ${result.error.message}`)
   return result.value
+}
+
+function encodeComposerReference(reference: NovelComposerReference): string {
+  return JSON.stringify(reference)
+}
+
+function decodeComposerReference(value: string): NovelComposerReference {
+  const parsed: unknown = JSON.parse(value)
+  if (typeof parsed !== 'object' || parsed === null
+    || !('mention' in parsed) || typeof parsed.mention !== 'string'
+    || !('clipboardText' in parsed) || typeof parsed.clipboardText !== 'string') {
+    throw new Error('novel workbench: malformed Composer SelectionRef')
+  }
+  return { mention: parsed.mention, clipboardText: parsed.clipboardText }
 }
