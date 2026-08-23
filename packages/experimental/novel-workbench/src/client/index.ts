@@ -14,9 +14,19 @@ import { Explorer, type ExplorerInjected } from './Explorer.tsx'
 import { Canvas, type CanvasInjected } from './Canvas.tsx'
 import { ChangeSetCard, type ChangeSetInjected, type NovelChangeReview } from './ChangeSetCard.tsx'
 import {
+  manuscriptChapterRenderer,
+  NovelAssetRendererRegistry,
+} from './renderers.tsx'
+import {
   createNovelFrameStore, createNovelWorkbenchStore, type NovelFramePanelActions,
 } from './store.ts'
 import { en, NS, zh, type NovelWorkbenchKey } from './locales.ts'
+
+export {
+  NovelAssetRendererRegistry,
+  type NovelAssetEditorProps,
+  type NovelAssetRendererDefinition,
+} from './renderers.tsx'
 
 export const inject = [
   'slots', 'sessions', 'remote', 'remote.novelRepository', 'theme', 'locale',
@@ -59,6 +69,8 @@ export function apply(ctx: Context): void {
   const refreshListeners = new Set<() => void>()
   const refreshWorkbench = (): void => { for (const listener of refreshListeners) listener() }
   const layout = new NovelLayout()
+  const renderers = new NovelAssetRendererRegistry(ctx)
+  renderers.register(manuscriptChapterRenderer)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'novel-workbench: dictionaries')
   ctx.effect(() => ctx.reflect.provide('layout', layout), 'novel-workbench: layout service')
 
@@ -108,7 +120,8 @@ export function apply(ctx: Context): void {
     locale: NS,
     store,
     inject: (): CanvasInjected => ({
-      save: async (sessionId, request) => await unwrapRemote(remote.saveChapter(sessionId, request), 'save chapter'),
+      renderers,
+      save: async (sessionId, request) => await unwrapRemote(remote.saveAsset(sessionId, request), 'save Novel Asset'),
       capture: async (sessionId, request) => await unwrapRemote(
         remote.captureSelection(sessionId, request),
         'capture chapter selection',
@@ -126,6 +139,7 @@ export function apply(ctx: Context): void {
   }, Canvas)
 
   const reviewActions = (): ChangeSetInjected => ({
+    renderers,
     read: async (sessionId, changeSetId): Promise<NovelChangeReview> => {
       const changeSet = await unwrapRemote(
         remote.changeSet(sessionId as SessionId, changeSetId as ChangeSetId),
@@ -139,7 +153,7 @@ export function apply(ctx: Context): void {
         ),
         'read ChangeSet base Revision',
       )
-      return { changeSet, before: base.body }
+      return { changeSet, before: base.content }
     },
     applyChange: async (sessionId, changeSetId) => await unwrapRemote(
       remote.applyChangeSet(sessionId as SessionId, changeSetId as ChangeSetId),

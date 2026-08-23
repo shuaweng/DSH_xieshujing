@@ -19,7 +19,7 @@ import type {
   NovelProjectSnapshot,
   ProposeChangeSetRequest,
   RevisionId,
-  SaveChapterBodyRequest,
+  SaveAssetContentRequest,
   SelectionRef,
 } from './types.ts'
 
@@ -40,15 +40,21 @@ export type {
   ChangeSet,
   ChangeSetAuthorization,
   ContentHash,
+  ManuscriptChapterContent,
+  NovelAssetContent,
   NovelAssetType,
+  NovelAssetTypeMap,
   NovelOperation,
+  NovelSelectionInput,
+  NovelSelector,
   NovelProjectSnapshot,
   NovelRepositoryErrorCode,
   ProposeChangeSetRequest,
   ReplaceTextOperation,
   RevisionOrigin,
-  SaveChapterBodyRequest,
+  SaveAssetContentRequest,
   SelectionRef,
+  TextRangeSelectionInput,
   TextRangeSelector,
 } from './types.ts'
 
@@ -105,25 +111,25 @@ export abstract class NovelRepository extends Service {
   ): Promise<AssetSnapshot>
 
   /**
-   * Guardedly publish a user-authored chapter body and retain its exact new Revision.
+   * Guardedly publish user-authored typed content and retain its exact new Revision.
    * @param project - validated Project declaration returned by this provider.
-   * @param request - target, current base Revision, and full replacement body.
+   * @param request - target, current base Revision, and full typed replacement content.
    * @param signal - optional cancellation before filesystem publication.
    * @param sandboxPolicy - optional per-call policy governing authored-file publication and recovery.
    * @returns the committed exact new head.
    * @throws {NovelRepositoryError} when the base is stale or the resulting asset is invalid.
    */
-  abstract saveChapterBody(
+  abstract saveAssetContent(
     project: NovelProjectSnapshot,
-    request: SaveChapterBodyRequest,
+    request: SaveAssetContentRequest,
     signal?: AbortSignal,
     sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<AssetSnapshot>
 
   /**
-   * Freeze one exact non-empty UTF-16 body range without rereading mutable latest content.
+   * Freeze one exact type-defined selection without rereading mutable latest content.
    * @param project - validated Project declaration returned by this provider.
-   * @param request - retained Revision and body offsets to validate.
+   * @param request - retained Revision and type-defined selection input to validate.
    * @param signal - optional cancellation for the history read.
    * @returns immutable selection identity, quote hash, and bounded diagnostics.
    */

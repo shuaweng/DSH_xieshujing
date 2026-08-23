@@ -1,11 +1,11 @@
 /** Exact Novel references converted into durable, untrusted model context. */
 
-import { createHash } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage, freezeMessage, type ContentBlock, type UserMessage } from '@deepseek-ai/dsh-llm'
-import type { ProjectId, TextRangeSelector } from '@deepseek-ai/dsh-experimental-novel-repository'
+import type { NovelSelector, ProjectId } from '@deepseek-ai/dsh-experimental-novel-repository'
+import type {} from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import { NovelContextError } from './error.ts'
 import type {
   NovelContextSource,
@@ -54,7 +54,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Exact-read Consumer that freezes canonical references before a model step. */
 export class NovelContextResolver extends Service {
-  static inject = ['fs', 'novelRepository']
+  static inject = ['fs', 'novelRepository', 'novelAssetTypes']
   static Config: z<Config> = z.object({
     maxReferences: z.number().step(1).min(1).default(DEFAULT_MAX_REFERENCES),
     maxContextBytes: z.number().step(1).min(1).default(DEFAULT_MAX_CONTEXT_BYTES),
@@ -126,7 +126,16 @@ export class NovelContextResolver extends Service {
     let retainedBytes = 0
     for (const input of inputs) {
       const snapshot = await this.ctx.novelRepository.readAsset(project, input.assetId, input.revisionId, signal)
-      const text = input.selector === undefined ? snapshot.body : selectedText(snapshot.body, input.selector)
+      let text: string
+      try {
+        text = this.ctx.novelAssetTypes.get(snapshot.asset.type).modelText(snapshot, input.selector)
+      } catch (cause: unknown) {
+        throw new NovelContextError(
+          `novel context: selector is invalid for Asset type ${JSON.stringify(snapshot.asset.type)}`,
+          'NOVEL_CONTEXT_INVALID_REFERENCE',
+          { cause },
+        )
+      }
       retainedBytes += Buffer.byteLength(text, 'utf8')
       if (retainedBytes > this.config.maxContextBytes) {
         throw new NovelContextError('novel context: referenced text exceeds the configured budget', 'NOVEL_CONTEXT_BUDGET_EXCEEDED')
@@ -259,39 +268,22 @@ function isReference(value: unknown): value is NovelReferenceInput {
     && (record['selector'] === undefined || isSelector(record['selector']))
 }
 
-function isSelector(value: unknown): value is TextRangeSelector {
+function isSelector(value: unknown): value is NovelSelector {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
-  return record['kind'] === 'text-range'
-    && Number.isSafeInteger(record['startUtf16'])
-    && Number.isSafeInteger(record['endUtf16'])
-    && typeof record['quoteHash'] === 'string'
-    && (record['prefix'] === undefined || typeof record['prefix'] === 'string')
-    && (record['suffix'] === undefined || typeof record['suffix'] === 'string')
+  return typeof record['kind'] === 'string' && record['kind'].length > 0 && isJsonValue(value)
 }
 
-function selectedText(body: string, selector: TextRangeSelector): string {
-  const { startUtf16, endUtf16 } = selector
-  if (
-    startUtf16 < 0
-    || endUtf16 <= startUtf16
-    || endUtf16 > body.length
-    || splitsSurrogatePair(body, startUtf16)
-    || splitsSurrogatePair(body, endUtf16)
-  ) throw new NovelContextError('novel context: selection is outside the retained body', 'NOVEL_CONTEXT_INVALID_REFERENCE')
-  const text = body.slice(startUtf16, endUtf16)
-  const quoteHash = `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`
-  if (quoteHash !== selector.quoteHash) {
-    throw new NovelContextError('novel context: selection quote hash does not match the retained Revision', 'NOVEL_CONTEXT_INVALID_REFERENCE')
-  }
-  return text
-}
-
-function splitsSurrogatePair(text: string, offset: number): boolean {
-  if (offset <= 0 || offset >= text.length) return false
-  const before = text.charCodeAt(offset - 1)
-  const after = text.charCodeAt(offset)
-  return before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF
+function isJsonValue(value: unknown, depth = 0): boolean {
+  if (depth > 32) return false
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0)
+  if (Array.isArray(value)) return value.every(child => isJsonValue(child, depth + 1))
+  if (typeof value !== 'object') return false
+  const prototype = Object.getPrototypeOf(value) as unknown
+  if (prototype !== Object.prototype && prototype !== null) return false
+  return Object.entries(value as Record<string, unknown>).every(([key, child]) =>
+    key.length > 0 && key !== '__proto__' && isJsonValue(child, depth + 1))
 }
 
 function stringifyTagSafeJson(value: unknown): string {

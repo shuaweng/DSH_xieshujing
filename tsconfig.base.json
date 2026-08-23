@@ -106,6 +106,7 @@
       "@deepseek-ai/dsh-experimental-novel-context/invariant": ["./packages/experimental/novel-context/src/invariant.ts"],
       "@deepseek-ai/dsh-experimental-novel-context/types": ["./packages/experimental/novel-context/src/types.ts"],
       "@deepseek-ai/dsh-experimental-novel-repository/invariant": ["./packages/experimental/novel-repository/src/invariant.ts"],
+      "@deepseek-ai/dsh-experimental-novel-repository/asset-types": ["./packages/experimental/novel-repository/src/asset-types.ts"],
       "@deepseek-ai/dsh-experimental-novel-repository/brand": ["./packages/experimental/novel-repository/src/brand.ts"],
       "@deepseek-ai/dsh-experimental-novel-repository/types": ["./packages/experimental/novel-repository/src/types.ts"],
       "@deepseek-ai/dsh-experimental-novel-repository-local/invariant": ["./packages/experimental/novel-repository-local/src/invariant.ts"],

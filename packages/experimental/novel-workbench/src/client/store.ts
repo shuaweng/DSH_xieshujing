@@ -3,19 +3,20 @@
 import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   NovelAssetDescriptor,
-  NovelChapterDocument,
+  NovelAssetDocument,
   NovelProjectDescriptor,
   NovelSelectionDescriptor,
+  NovelWireValue,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 
 /** Shared chapter, draft, selection, and loading state for Novel workbench surfaces. */
 export interface NovelWorkbenchState {
   project?: NovelProjectDescriptor
   assets: readonly NovelAssetDescriptor[]
-  document?: NovelChapterDocument
-  draft: string
+  document?: NovelAssetDocument
+  draft?: NovelWireValue
   dirty: boolean
-  selection: { start: number; end: number }
+  selection?: NovelWireValue
   reference?: NovelSelectionDescriptor
   loading: boolean
   error?: string
@@ -25,10 +26,10 @@ export interface NovelWorkbenchState {
 type Actions = {
   reset: (draft: NovelWorkbenchState) => void
   loaded: (draft: NovelWorkbenchState, project: NovelProjectDescriptor, assets: readonly NovelAssetDescriptor[]) => void
-  open: (draft: NovelWorkbenchState, document: NovelChapterDocument) => void
-  saved: (draft: NovelWorkbenchState, document: NovelChapterDocument) => void
-  edit: (draft: NovelWorkbenchState, body: string) => void
-  select: (draft: NovelWorkbenchState, start: number, end: number) => void
+  open: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
+  saved: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
+  edit: (draft: NovelWorkbenchState, content: NovelWireValue) => void
+  select: (draft: NovelWorkbenchState, selection?: NovelWireValue) => void
   referenced: (draft: NovelWorkbenchState, reference: NovelSelectionDescriptor) => void
   fail: (draft: NovelWorkbenchState, message: string) => void
   refresh: (draft: NovelWorkbenchState) => void
@@ -59,7 +60,7 @@ export interface NovelFramePanelActions {
  */
 export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchState, Actions> {
   return defineStore({
-    init: (): NovelWorkbenchState => ({ assets: [], draft: '', dirty: false, selection: { start: 0, end: 0 }, loading: true, reload: 0 }),
+    init: (): NovelWorkbenchState => ({ assets: [], dirty: false, loading: true, reload: 0 }),
     actions: {
       reset: (draft) => {
         delete draft.project
@@ -67,7 +68,8 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
         delete draft.reference
         delete draft.error
         draft.assets = []
-        draft.draft = ''
+        delete draft.draft
+        delete draft.selection
         draft.dirty = false
         draft.loading = true
       },
@@ -79,25 +81,28 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       },
       open: (draft, document) => {
         draft.document = document
-        draft.draft = document.body
+        draft.draft = structuredClone(document.content)
         draft.dirty = false
-        draft.selection = { start: 0, end: 0 }
+        delete draft.selection
         delete draft.reference
         delete draft.error
       },
       saved: (draft, document) => {
         draft.document = document
-        draft.draft = document.body
+        draft.draft = structuredClone(document.content)
         draft.dirty = false
         delete draft.error
       },
-      edit: (draft, body) => {
-        draft.draft = body
-        draft.dirty = draft.document?.body !== body
+      edit: (draft, content) => {
+        draft.draft = structuredClone(content)
+        draft.dirty = JSON.stringify(draft.document?.content) !== JSON.stringify(content)
         delete draft.reference
         delete draft.error
       },
-      select: (draft, start, end) => { draft.selection = { start, end } },
+      select: (draft, selection) => {
+        if (selection === undefined) delete draft.selection
+        else draft.selection = structuredClone(selection)
+      },
       referenced: (draft, reference) => { draft.reference = reference; delete draft.error },
       fail: (draft, message) => { draft.loading = false; draft.error = message },
       refresh: (draft) => { draft.reload += 1 },

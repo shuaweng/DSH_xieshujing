@@ -4,6 +4,7 @@ import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { AssetId, ProjectId, RevisionId } from '@deepseek-ai/dsh-experimental-novel-repository'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
+import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -54,6 +55,7 @@ async function harness(config: ConstructorParameters<typeof NovelContextResolver
   ].join('\n'))
   const ctx = new Context()
   await ctx.plugin(LocalFileSystem, { cwd: dir })
+  await ctx.plugin(NovelAssetTypeRegistry)
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SessionStore)
   await ctx.plugin(NovelContextResolver, config)
@@ -162,8 +164,7 @@ describe('Novel context preparation', () => {
     const selection = await ctx.novelRepository.captureSelection(project, {
       assetId: AssetId('chapter-context'),
       revisionId,
-      startUtf16: 2,
-      endUtf16: 4,
+      selector: { kind: 'text-range', startUtf16: 2, endUtf16: 4 },
     })
     const mention = formatNovelReferenceMention({
       ...reference(revisionId),
@@ -265,12 +266,9 @@ describe('Novel context preparation', () => {
       { projectId: 'p', assetId: 'a', revisionId: 1 },
       { projectId: 'p', assetId: 'a', revisionId: 'r', label: 1 },
       { projectId: 'p', assetId: 'a', revisionId: 'r', selector: null },
-      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: { kind: 'x' } },
-      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: { kind: 'text-range', startUtf16: 0.5, endUtf16: 1, quoteHash: 'q' } },
-      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1.5, quoteHash: 'q' } },
-      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1, quoteHash: 1 } },
-      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1, quoteHash: 'q', prefix: 1 } },
-      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1, quoteHash: 'q', suffix: 1 } },
+      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: {} },
+      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: { kind: 'x', value: Number.NaN } },
+      { projectId: 'p', assetId: 'a', revisionId: 'r', selector: { kind: 'x', value: undefined } },
     ]
     for (const value of invalidReferences) {
       await expect(resolver.resolveReferences(agent, [value as NovelReferenceInput]))

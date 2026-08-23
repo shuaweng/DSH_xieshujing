@@ -8,11 +8,11 @@
 
 ## 行为
 
-- `dsh-novel:` URI 携带一个项目、资产、已保留 Revision、可选 UTF-16 文本选择器和展示标签；`formatNovelReferenceMention()` 将 URI 包装为 Composer 草稿中的可读 Markdown 引用。
+- `dsh-novel:` URI 携带一个项目、资产、已保留 Revision、可选的类型定义 JSON selector 和展示标签；`formatNovelReferenceMention()` 将 URI 包装为 Composer 草稿中的可读 Markdown 引用。
 - `NovelContextResolver` 在 `agent/pre-step` 拦截直接用户消息，只从可读消息中移除已识别的规范引用，解析精确的已保留 Revision，并紧随其后追加一条来源类型为 `novel-context` 的不可变 `user/message`。
 - 被引用的正文以确定性 JSON 序列化在明确的“不可信资料”框架内。引用不会授予指令、权限或工具权威。
 - 默认一次请求最多包含八个引用和 256 KiB 已解析 UTF-8 文本。两个正整数上限均可配置，重复引用会合并，超限会在模型请求前失败。
-- 文本选择器只有在 UTF-16 边界不切开代理对且 quote hash 与精确的已保留 Revision 匹配时才有效。解析器绝不回退读取当前文件。
+- 解析器让目标 Asset 已注册的 Host 定义校验 selector 并生成模型投影。内置文本 selector 会拒绝切开代理对或 quote 漂移；任何 selector 都绝不回退读取当前文件。
 - 第一条持久 Novel 上下文消息把 Session 绑定到一个 Project；后续引用另一个 Project 会明确失败。
 
 ## 模型体验

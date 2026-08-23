@@ -159,8 +159,7 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     const frozen = await scaffold.ctx.novelRepository.captureSelection(project, {
       assetId: chapter.asset.id,
       revisionId: chapter.revisionId,
-      startUtf16: 0,
-      endUtf16: 1,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
     })
     const proposal = await scaffold.ctx.novelRepository.proposeChangeSet(project, {
       assetId: chapter.asset.id,

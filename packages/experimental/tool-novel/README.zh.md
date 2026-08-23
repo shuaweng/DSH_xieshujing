@@ -4,13 +4,13 @@
 
 ## 用途
 
-这个实验性 Consumer 为 Novel Agent 提供精确读取和仅提案修改工具，而不向正式正文资产开放通用文件写入。
+这个实验性 Consumer 为 Novel Agent 提供精确读取和仅提案修改工具，而不向正式小说 Asset 开放通用文件写入。
 
 ## 行为
 
-- `novel_list` 在所属 Session 工作目录发现 Novel Project，并返回带有规范、精确 Revision `dsh-novel:` 引用的当前章节目录。它只暴露身份和元数据，不返回正文。
-- `novel_get` 接收规范 `dsh-novel:` 引用，通过 `NovelContextResolver` 只读取其中指定的已保留 Revision，并返回每份正文的精确 UTF-16 长度以安全选择范围。
-- `novel_propose_changes` 接收一个精确章节、基础 Revision、UTF-16 范围、替换文本和摘要。它在 Repository 内冻结范围并计算 quote hash，再持久创建单资产 `ChangeSet`；绝不应用提案。
+- `novel_list` 在所属 Session 工作目录发现 Novel Project，并返回带有规范、精确 Revision `dsh-novel:` 引用的当前类型化 Asset 目录。它只暴露身份和元数据，不返回作者内容。
+- `novel_get` 接收规范引用，只读取已保留 Revision，并返回 Asset 类型、该类型注册的提案说明和精确模型投影。
+- `novel_propose_changes` 接收一个精确 Asset、基础 Revision、类型定义的 operation 信封和摘要。已注册 Host 定义会校验并补全这些操作，再由 Repository 持久创建单资产 `ChangeSet`；绝不应用提案。
 - 提案结果携带可 JSON 序列化的 `novel-change-set` 展示元数据，因此浏览器可以从 Session 回放恢复审阅卡片。
 - 本包加入一段简短 system prompt，说明 Revision 权威和仅提案语义。它不注册 shell、SQL、通用读取或通用写入工具。
 - 三个工具都要求所属 Agent Session，并遵守该 Session 工作目录与绑定 Novel Project 规则。
@@ -33,7 +33,7 @@
 
 ## 已知限制与延期工作
 
-- **仅目录发现** — `novel_list` 可以列出当前章节身份；全文搜索、relations、create、present 和 delegation 工具尚未实现。
-- **单一操作** — 提案只支持一个章节上的一个 `replace-text` 操作；多范围和多资产 ChangeSet 尚未实现。
+- **仅目录发现** — `novel_list` 可以列出当前 Asset 身份；全文搜索、relations、create、present 和 delegation 工具尚未实现。
+- **只内置一种 operation adapter** — 工具由类型驱动，但当前只安装章节 `replace-text` 输入；多范围和多资产 ChangeSet 尚未实现。
 - **没有应用权威** — 只有浏览器 Remote 可以接受或拒绝提案；模型不能提交修改。
 - **没有语义搜索** — 模型可以通过 `novel_list` 发现规范章节引用，但相关内容检索仍需要未来的搜索 Consumer。

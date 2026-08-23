@@ -29,15 +29,14 @@ import NovelRepository, {
   type ProposeChangeSetRequest,
   type RevisionId as RevisionIdValue,
   type RevisionOrigin,
-  type SaveChapterBodyRequest,
+  type SaveAssetContentRequest,
   type SelectionRef,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
+import type { ParsedNovelAsset } from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import {
-  containsUnpairedSurrogate,
   contentHash,
-  parseChapter,
-  splitsSurrogatePair,
-  type ParsedChapter,
+  declaredAssetType,
+  manuscriptChapterTypeDefinition,
 } from './content.ts'
 import { hitApplyFault } from './apply-fault.ts'
 import { NovelHistory, openHistory, type ApplyJournal } from './history.ts'
@@ -85,7 +84,7 @@ interface ResolvedConfig {
 interface ObservedAsset {
   readonly target: FsTarget
   readonly version: FsVersion
-  readonly parsed: ParsedChapter
+  readonly parsed: ParsedNovelAsset
   readonly snapshot: AssetSnapshot
   readonly summary: AssetSummary
 }
@@ -94,7 +93,7 @@ interface ScannedAssetFile {
   readonly target: FsTarget
   readonly version: FsVersion
   readonly projectRelativePath: string
-  readonly parsed: ParsedChapter
+  readonly parsed: ParsedNovelAsset
   readonly bytes: Uint8Array
 }
 
@@ -108,7 +107,7 @@ interface ProjectState {
 
 /** Local provider for project discovery, chapter assets, and immutable history. */
 export class LocalNovelRepository extends NovelRepository {
-  static inject = ['fs']
+  static inject = ['fs', 'novelAssetTypes']
   static Config: z<Config> = z.object({
     manifestMaxBytes: z.number().default(DEFAULT_MANIFEST_MAX_BYTES),
     assetMaxBytes: z.number().default(DEFAULT_ASSET_MAX_BYTES),
@@ -133,6 +132,7 @@ export class LocalNovelRepository extends NovelRepository {
   constructor(ctx: Context, config: Config = {}) {
     super(ctx)
     this.config = resolveConfig(config)
+    ctx.novelAssetTypes.register(manuscriptChapterTypeDefinition)
     ctx.effect(() => async () => { await this.close() }, 'novelRepositoryLocal.close')
   }
 
@@ -248,33 +248,30 @@ export class LocalNovelRepository extends NovelRepository {
     })
   }
 
-  override async saveChapterBody(
+  override async saveAssetContent(
     project: NovelProjectSnapshot,
-    request: SaveChapterBodyRequest,
+    request: SaveAssetContentRequest,
     signal?: AbortSignal,
     sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<AssetSnapshot> {
     return await this.withProject(project, async (state) => {
-      if (containsUnpairedSurrogate(request.body)) {
-        throw new NovelRepositoryError('novel repository: chapter body contains an unpaired UTF-16 surrogate', 'NOVEL_ASSET_INVALID')
-      }
       const current = (await this.scan(project, state, signal, sandboxPolicy)).get(request.assetId)
       if (current === undefined) throw assetNotFound(request.assetId)
       if (current.snapshot.revisionId !== request.baseRevisionId) throw staleRevision(request.baseRevisionId)
-      const beforeText = new TextDecoder().decode(current.snapshot.serializedUtf8)
-      const serializedText = `${beforeText.slice(0, current.parsed.bodyStartUtf16)}${request.body}`
-      const bytes = new TextEncoder().encode(serializedText)
+      const definition = this.ctx.novelAssetTypes.get(current.snapshot.asset.type)
+      const materialized = definition.serializeContent(current.snapshot, request.content)
+      const bytes = materialized.serializedUtf8
       if (bytes.byteLength > this.config.assetMaxBytes) {
         throw new NovelRepositoryError(
-          `novel repository: chapter asset exceeds ${this.config.assetMaxBytes} bytes`,
+          `novel repository: asset exceeds ${this.config.assetMaxBytes} bytes`,
           'NOVEL_ASSET_TOO_LARGE',
         )
       }
-      const parsed = parseChapter(bytes, current.summary.asset.projectRelativePath)
-      /* v8 ignore next 3 -- a body-only rewrite cannot alter the retained Frontmatter prefix. */
-      if (parsed.id !== request.assetId) {
-        throw new NovelRepositoryError('novel repository: body save changed the asset identity', 'NOVEL_ASSET_INVALID')
+      if (materialized.parsed.id !== request.assetId
+        || !sameAssetType(materialized.parsed.type, current.snapshot.asset.type)) {
+        throw new NovelRepositoryError('novel repository: authored save changed the asset identity or type', 'NOVEL_ASSET_INVALID')
       }
+      const serializedText = new TextDecoder().decode(bytes)
       let outcome
       try {
         outcome = await this.ctx.fs.writeText(
@@ -302,7 +299,7 @@ export class LocalNovelRepository extends NovelRepository {
         current.summary.asset.projectRelativePath,
         current.target,
         outcome.version,
-        parsed,
+        materialized.parsed,
         revision,
       )
       state.catalog.set(request.assetId, observed)
@@ -318,38 +315,22 @@ export class LocalNovelRepository extends NovelRepository {
     return await this.withProject(project, (state) => {
       signal?.throwIfAborted()
       const snapshot = this.snapshotFromHistory(project, state, request.assetId, request.revisionId)
-      const { body } = snapshot
-      const { startUtf16, endUtf16 } = request
-      if (
-        !Number.isSafeInteger(startUtf16)
-        || !Number.isSafeInteger(endUtf16)
-        || startUtf16 < 0
-        || endUtf16 <= startUtf16
-        || endUtf16 > body.length
-        || splitsSurrogatePair(body, startUtf16)
-        || splitsSurrogatePair(body, endUtf16)
-      ) {
-        throw new NovelRepositoryError(
-          'novel repository: selection must be a non-empty UTF-16 range on code-point boundaries',
-          'NOVEL_SELECTION_INVALID',
-        )
-      }
-      const quote = body.slice(startUtf16, endUtf16)
+      const captured = this.ctx.novelAssetTypes.get(snapshot.asset.type).captureSelection(
+        snapshot,
+        request.selector,
+        {
+          contextUnits: this.config.selectionContextChars,
+          previewUnits: this.config.selectionPreviewChars,
+        },
+      )
       return {
         version: 1,
         id: SelectionRefId(`selection_${randomUUID()}`),
         projectId: project.id,
         assetId: request.assetId,
         revisionId: request.revisionId,
-        selector: {
-          kind: 'text-range',
-          startUtf16,
-          endUtf16,
-          quoteHash: contentHash(new TextEncoder().encode(quote)),
-          ...boundedBefore(body, startUtf16, this.config.selectionContextChars),
-          ...boundedAfter(body, endUtf16, this.config.selectionContextChars),
-        },
-        preview: boundedSlice(quote, this.config.selectionPreviewChars),
+        selector: structuredClone(captured.selector),
+        ...(captured.preview === undefined ? {} : { preview: captured.preview }),
       }
     })
   }
@@ -362,7 +343,11 @@ export class LocalNovelRepository extends NovelRepository {
     return await this.withProject(project, (state) => {
       signal?.throwIfAborted()
       const base = this.snapshotFromHistory(project, state, request.assetId, request.baseRevisionId)
-      materializeOperations(base, request.operations, this.config.assetMaxBytes)
+      const definition = this.ctx.novelAssetTypes.get(base.asset.type)
+      const candidate = definition.materializeOperations(base, request.operations)
+      if (candidate.serializedUtf8.byteLength > this.config.assetMaxBytes) {
+        throw invalidChangeSet(`result exceeds ${this.config.assetMaxBytes} bytes`)
+      }
       const summary = request.summary.trim()
       if (summary.length === 0 || summary.length > 500 || request.summary !== summary) {
         throw invalidChangeSet('summary must be 1 to 500 characters without surrounding whitespace')
@@ -371,6 +356,7 @@ export class LocalNovelRepository extends NovelRepository {
         id: ChangeSetId(`changeset_${randomUUID()}`),
         projectId: project.id,
         assetId: request.assetId,
+        assetType: base.asset.type,
         baseRevisionId: request.baseRevisionId,
         operations: structuredClone(request.operations),
         actor: { ...request.actor },
@@ -416,11 +402,14 @@ export class LocalNovelRepository extends NovelRepository {
         changeSet = state.history.conflictApply(changeSet.id)
         return cloneChangeSet(changeSet)
       }
-      const materialized = materializeOperations(
-        current.snapshot,
-        changeSet.operations,
-        this.config.assetMaxBytes,
-      )
+      if (!sameAssetType(current.snapshot.asset.type, changeSet.assetType)) {
+        throw new NovelRepositoryError('novel repository: ChangeSet asset type does not match the current asset', 'NOVEL_HISTORY_CORRUPT')
+      }
+      const materialized = this.ctx.novelAssetTypes.get(changeSet.assetType)
+        .materializeOperations(current.snapshot, changeSet.operations)
+      if (materialized.serializedUtf8.byteLength > this.config.assetMaxBytes) {
+        throw invalidChangeSet(`result exceeds ${this.config.assetMaxBytes} bytes`)
+      }
       const resultRevisionId = RevisionId(`revision_${randomUUID()}`)
       const createdAt = new Date().toISOString()
       const journal: ApplyJournal = {
@@ -428,8 +417,8 @@ export class LocalNovelRepository extends NovelRepository {
         authorizedSessionId: authorization.sessionId,
         projectRelativePath: current.summary.asset.projectRelativePath,
         beforeHash: current.snapshot.contentHash,
-        afterHash: contentHash(materialized.bytes),
-        afterUtf8: materialized.bytes,
+        afterHash: contentHash(materialized.serializedUtf8),
+        afterUtf8: materialized.serializedUtf8,
         resultRevisionId,
         createdAt,
       }
@@ -440,7 +429,7 @@ export class LocalNovelRepository extends NovelRepository {
       try {
         outcome = await this.ctx.fs.writeText(
           current.target,
-          materialized.text,
+          new TextDecoder().decode(materialized.serializedUtf8),
           { kind: 'replaceIfVersion', version: current.version },
           signal,
           sandboxPolicy,
@@ -458,7 +447,7 @@ export class LocalNovelRepository extends NovelRepository {
         project.id,
         changeSet.assetId,
         changeSet.baseRevisionId,
-        materialized.bytes,
+        materialized.serializedUtf8,
         createdAt,
       )
       changeSet = state.history.finalizeApply(changeSet.id, revision, journal.projectRelativePath)
@@ -549,9 +538,19 @@ export class LocalNovelRepository extends NovelRepository {
   }
 
   private async scanFiles(project: NovelProjectSnapshot, signal?: AbortSignal): Promise<ScannedAssetFile[]> {
-    const manuscript = project.contentRoots['manuscript']
-    if (manuscript === undefined) {
-      throw new NovelRepositoryError('novel repository: project has no manuscript content root', 'NOVEL_PROJECT_MANIFEST_INVALID')
+    const definitions = this.ctx.novelAssetTypes.list()
+    if (definitions.length === 0) {
+      throw new NovelRepositoryError('novel repository: no Asset type definitions are registered', 'NOVEL_ASSET_INVALID')
+    }
+    const extensions = new Set(definitions.flatMap(definition => definition.extensions))
+    const rootNames = [...new Set(definitions.map(definition => definition.contentRoot))].sort()
+    for (const definition of definitions) {
+      if (definition.requiredContentRoot === true && project.contentRoots[definition.contentRoot] === undefined) {
+        throw new NovelRepositoryError(
+          `novel repository: project does not declare required content root ${JSON.stringify(definition.contentRoot)} for Asset type ${JSON.stringify(definition.type)}`,
+          'NOVEL_PROJECT_MANIFEST_INVALID',
+        )
+      }
     }
     const directories = new Set<string>()
     const files = new Map<string, string>()
@@ -560,7 +559,7 @@ export class LocalNovelRepository extends NovelRepository {
       signal?.throwIfAborted()
       if (depth > this.config.scanMaxDepth) {
         throw new NovelRepositoryError(
-          `novel repository: manuscript tree exceeds depth ${this.config.scanMaxDepth}`,
+          `novel repository: authored content tree exceeds depth ${this.config.scanMaxDepth}`,
           'NOVEL_ASSET_INVALID',
         )
       }
@@ -570,7 +569,7 @@ export class LocalNovelRepository extends NovelRepository {
       for (const entry of await this.ctx.fs.listDir(directory, signal)) {
         if (!this.ctx.fs.contains(project.root, entry.target)) {
           throw new NovelRepositoryError(
-            `novel repository: manuscript entry "${entry.target.displayPath}" escapes the project root`,
+            `novel repository: authored entry "${entry.target.displayPath}" escapes the project root`,
             'NOVEL_PROJECT_PATH_ESCAPE',
           )
         }
@@ -578,20 +577,21 @@ export class LocalNovelRepository extends NovelRepository {
           await visit(entry.target, depth + 1)
           continue
         }
-        if (entry.type !== 'file' || !entry.name.toLocaleLowerCase().endsWith('.md')) continue
+        const lowerName = entry.name.toLocaleLowerCase()
+        if (entry.type !== 'file' || ![...extensions].some(extension => lowerName.endsWith(extension))) continue
         const projectRelativePath = relativeProjectPath(project, entry.target, this.ctx.fs.processPath.bind(this.ctx.fs))
         const priorPath = files.get(entry.target.targetKey)
         /* v8 ignore next -- canonical FsTargets derive one canonical project-relative path. */
         if (priorPath !== undefined && priorPath !== projectRelativePath) {
           throw new NovelRepositoryError(
-            `novel repository: one chapter file appears through both "${priorPath}" and "${projectRelativePath}"`,
+            `novel repository: one Asset file appears through both "${priorPath}" and "${projectRelativePath}"`,
             'NOVEL_ASSET_INVALID',
           )
         }
         files.set(entry.target.targetKey, projectRelativePath)
         if (result.length >= this.config.maxAssets) {
           throw new NovelRepositoryError(
-            `novel repository: project contains more than ${this.config.maxAssets} chapter assets`,
+            `novel repository: project contains more than ${this.config.maxAssets} authored assets`,
             'NOVEL_ASSET_INVALID',
           )
         }
@@ -600,16 +600,31 @@ export class LocalNovelRepository extends NovelRepository {
         const bytes = await this.readBounded(entry.target, this.config.assetMaxBytes, 'NOVEL_ASSET_TOO_LARGE', signal)
         const after = await this.ctx.fs.stat(entry.target, signal)
         if (after?.type !== 'file' || before.version !== after.version) throw changedDuringScan(projectRelativePath)
+        const declaredType = declaredAssetType(bytes, projectRelativePath)
+        const definition = this.ctx.novelAssetTypes.get(declaredType)
+        if (!definition.extensions.some(extension => lowerName.endsWith(extension))) {
+          throw new NovelRepositoryError(
+            `novel repository: Asset type ${JSON.stringify(declaredType)} does not accept file ${JSON.stringify(projectRelativePath)}`,
+            'NOVEL_ASSET_INVALID',
+          )
+        }
+        const parsed = definition.parse(bytes, projectRelativePath)
+        if (!sameAssetType(parsed.type, definition.type)) {
+          throw new NovelRepositoryError('novel repository: Asset parser returned a mismatched type', 'NOVEL_ASSET_INVALID')
+        }
         result.push({
           target: entry.target,
           version: after.version,
           projectRelativePath,
-          parsed: parseChapter(bytes, projectRelativePath),
+          parsed,
           bytes,
         })
       }
     }
-    await visit(manuscript, 0)
+    for (const rootName of rootNames) {
+      const root = project.contentRoots[rootName]
+      if (root !== undefined) await visit(root, 0)
+    }
     return result
   }
 
@@ -629,7 +644,11 @@ export class LocalNovelRepository extends NovelRepository {
     if (contentHash(retained.revision.serializedUtf8) !== retained.revision.contentHash) {
       throw new NovelRepositoryError('novel repository: retained Revision content hash does not match its bytes', 'NOVEL_HISTORY_CORRUPT')
     }
-    const parsed = parseChapter(retained.revision.serializedUtf8, retained.projectRelativePath)
+    const declaredType = declaredAssetType(retained.revision.serializedUtf8, retained.projectRelativePath)
+    const parsed = this.ctx.novelAssetTypes.get(declaredType).parse(
+      retained.revision.serializedUtf8,
+      retained.projectRelativePath,
+    )
     if (parsed.id !== assetId) {
       throw new NovelRepositoryError('novel repository: retained Revision Frontmatter identity is corrupt', 'NOVEL_HISTORY_CORRUPT')
     }
@@ -676,9 +695,11 @@ export class LocalNovelRepository extends NovelRepository {
         state.history.conflictApply(changeSet.id)
         continue
       }
-      const parsed = parseChapter(journal.afterUtf8, journal.projectRelativePath)
+      const declaredType = declaredAssetType(journal.afterUtf8, journal.projectRelativePath)
+      const parsed = this.ctx.novelAssetTypes.get(declaredType).parse(journal.afterUtf8, journal.projectRelativePath)
       if (
         parsed.id !== changeSet.assetId
+        || !sameAssetType(parsed.type, changeSet.assetType)
         || contentHash(journal.afterUtf8) !== journal.afterHash
       ) {
         throw new NovelRepositoryError('novel repository: apply journal payload is corrupt', 'NOVEL_HISTORY_CORRUPT')
@@ -759,6 +780,7 @@ export class LocalNovelRepository extends NovelRepository {
       history: await openHistory(
         join(this.ctx.fs.processPath(project.root), HISTORY_PATH),
         this.config.busyTimeoutMs,
+        (assetType, value) => this.ctx.novelAssetTypes.get(assetType).decodeOperations(value),
       ),
       tail: Promise.resolve(),
       catalog: new Map(),
@@ -869,56 +891,16 @@ function preparedRevision(
   }
 }
 
-function materializeOperations(
-  base: AssetSnapshot,
-  operations: ProposeChangeSetRequest['operations'],
-  assetMaxBytes: number,
-): { text: string; bytes: Uint8Array; parsed: ParsedChapter } {
-  if (operations.length !== 1) throw invalidChangeSet('MVP proposals must contain exactly one operation')
-  const operation = operations[0]
-  /* v8 ignore next -- NovelOperation is currently closed to replace-text. */
-  if (operation === undefined) throw invalidChangeSet('unsupported operation')
-  if (containsUnpairedSurrogate(operation.replacement)) {
-    throw invalidChangeSet('replacement contains an unpaired UTF-16 surrogate')
-  }
-  const { startUtf16, endUtf16, quoteHash } = operation.selector
-  if (
-    !Number.isSafeInteger(startUtf16)
-    || !Number.isSafeInteger(endUtf16)
-    || startUtf16 < 0
-    || endUtf16 <= startUtf16
-    || endUtf16 > base.body.length
-    || splitsSurrogatePair(base.body, startUtf16)
-    || splitsSurrogatePair(base.body, endUtf16)
-  ) {
-    throw invalidChangeSet('replace-text selector is outside the retained body')
-  }
-  const selected = base.body.slice(startUtf16, endUtf16)
-  if (contentHash(new TextEncoder().encode(selected)) !== quoteHash) {
-    throw invalidChangeSet('replace-text quote hash does not match the retained Revision')
-  }
-  const beforeText = new TextDecoder().decode(base.serializedUtf8)
-  const parsedBase = parseChapter(base.serializedUtf8, base.asset.projectRelativePath)
-  const body = `${base.body.slice(0, startUtf16)}${operation.replacement}${base.body.slice(endUtf16)}`
-  const text = `${beforeText.slice(0, parsedBase.bodyStartUtf16)}${body}`
-  const bytes = new TextEncoder().encode(text)
-  if (bytes.byteLength > assetMaxBytes) throw invalidChangeSet(`result exceeds ${assetMaxBytes} bytes`)
-  const parsed = parseChapter(bytes, base.asset.projectRelativePath)
-  /* v8 ignore next -- replace-text addresses only the post-Frontmatter body, so it cannot change the parsed Asset id. */
-  if (parsed.id !== base.asset.id) throw invalidChangeSet('proposal changed the asset identity')
-  return { text, bytes, parsed }
-}
-
 function snapshot(
   project: NovelProjectSnapshot,
   projectRelativePath: string,
-  parsed: ParsedChapter,
+  parsed: ParsedNovelAsset,
   revision: AssetRevision,
 ): AssetSnapshot {
   const asset: Asset = {
     id: parsed.id,
     projectId: project.id,
-    type: 'manuscript.chapter',
+    type: parsed.type,
     projectRelativePath,
   }
   return {
@@ -927,7 +909,7 @@ function snapshot(
     serializedUtf8: new Uint8Array(revision.serializedUtf8),
     contentHash: revision.contentHash,
     frontmatter: structuredClone(parsed.frontmatter),
-    body: parsed.body,
+    content: structuredClone(parsed.content),
   }
 }
 
@@ -936,7 +918,7 @@ function observedAsset(
   projectRelativePath: string,
   target: FsTarget,
   version: FsVersion,
-  parsed: ParsedChapter,
+  parsed: ParsedNovelAsset,
   revision: AssetRevision,
 ): ObservedAsset {
   const current = snapshot(project, projectRelativePath, parsed, revision)
@@ -960,6 +942,7 @@ function cloneSnapshot(value: AssetSnapshot): AssetSnapshot {
     asset: { ...value.asset },
     serializedUtf8: new Uint8Array(value.serializedUtf8),
     frontmatter: structuredClone(value.frontmatter),
+    content: structuredClone(value.content),
   }
 }
 
@@ -973,6 +956,11 @@ function cloneChangeSet(value: ChangeSet): ChangeSet {
     actor: { ...value.actor },
     operations: structuredClone(value.operations),
   }
+}
+
+/** Keep runtime-contributed type equality explicit even while one built-in type inhabits the compile-time map. */
+function sameAssetType(left: unknown, right: unknown): boolean {
+  return typeof left === 'string' && typeof right === 'string' && left === right
 }
 
 function authorizeChangeSet(value: ChangeSet, authorization: ChangeSetAuthorization): void {
@@ -1006,30 +994,9 @@ function staleRevision(revisionId: RevisionIdValue, cause?: unknown): NovelRepos
 
 function changedDuringScan(path: string): NovelRepositoryError {
   return new NovelRepositoryError(
-    `novel repository: chapter asset "${path}" changed while it was being scanned`,
+    `novel repository: Asset "${path}" changed while it was being scanned`,
     'NOVEL_ASSET_CHANGED_DURING_SCAN',
   )
-}
-
-function boundedSlice(text: string, maxUtf16: number): string {
-  if (text.length <= maxUtf16) return text
-  let end = maxUtf16
-  if (splitsSurrogatePair(text, end)) end -= 1
-  return `${text.slice(0, end)}…`
-}
-
-function boundedBefore(text: string, offset: number, maxUtf16: number): { prefix?: string } {
-  let start = Math.max(0, offset - maxUtf16)
-  if (splitsSurrogatePair(text, start)) start += 1
-  const prefix = text.slice(start, offset)
-  return prefix === '' ? {} : { prefix }
-}
-
-function boundedAfter(text: string, offset: number, maxUtf16: number): { suffix?: string } {
-  let end = Math.min(text.length, offset + maxUtf16)
-  if (splitsSurrogatePair(text, end)) end -= 1
-  const suffix = text.slice(offset, end)
-  return suffix === '' ? {} : { suffix }
 }
 
 export default LocalNovelRepository

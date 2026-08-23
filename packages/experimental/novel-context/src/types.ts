@@ -8,7 +8,7 @@ import type {
   NovelProjectSnapshot,
   ProjectId,
   RevisionId,
-  TextRangeSelector,
+  NovelSelector,
 } from '@deepseek-ai/dsh-experimental-novel-repository/types'
 
 /** One exact immutable Novel Asset, optionally narrowed to a text selection. */
@@ -16,7 +16,7 @@ export interface NovelReferenceInput {
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly selector?: TextRangeSelector
+  readonly selector?: NovelSelector
   readonly label?: string
 }
 
@@ -30,7 +30,7 @@ export interface NovelContextSource {
     readonly assetId: AssetId
     readonly revisionId: RevisionId
     readonly label: string
-    readonly selector?: TextRangeSelector
+    readonly selector?: NovelSelector
   }[]
 }
 

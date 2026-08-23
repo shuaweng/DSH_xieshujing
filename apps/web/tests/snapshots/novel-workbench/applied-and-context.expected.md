@@ -50,8 +50,8 @@
     - strong: Novel Workbench
     - text: Manuscript
     - navigation:
-      - button "第一章 manuscript/chapter-1.md"
-  - text: manuscript/chapter-1.md
+      - button "第一章 manuscript.chapter · manuscript/chapter-1.md"
+  - text: manuscript.chapter · manuscript/chapter-1.md
   - heading "第一章" [level=1]
   - text: Saved
   - button "Save" [disabled]

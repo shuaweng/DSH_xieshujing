@@ -8,6 +8,7 @@ import {
   ProjectId,
   RevisionId,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
+import type {} from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import {
   decodeNovelReferenceUri,
   encodeNovelReferenceUri,
@@ -15,15 +16,16 @@ import {
 } from '@deepseek-ai/dsh-experimental-novel-context'
 
 export const name = 'tool-novel'
-export const inject = ['tools', 'systemPrompt', 'novelContextResolver', 'novelRepository', 'fs', 'sandboxPolicy']
+export const inject = ['tools', 'systemPrompt', 'novelContextResolver', 'novelRepository', 'novelAssetTypes', 'fs', 'sandboxPolicy']
 
 const PROMPT = `## Novel workbench tools
 
 Novel Assets are versioned authored material. When the user names an Asset but no
 canonical reference is available, use \`novel_list\` to discover the current Project.
-Use \`novel_get\` for exact retained Revisions and its UTF-16 length when choosing
-replacement offsets. Use \`novel_propose_changes\` for正文修改；它只创建供用户审阅的
-ChangeSet，绝不代表文件已经修改。不要声称提案已经应用。`
+Use \`novel_get\` for exact retained Revisions and the Asset type's proposal
+instructions. Use \`novel_propose_changes\` for typed Asset changes; it only creates
+a ChangeSet for user review and never means the file changed. Do not claim a proposal
+was applied.`
 
 /** Register exact-read and proposal-only Novel tools. */
 export function apply(ctx: Context): void {
@@ -31,7 +33,7 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'novel_list',
-    description: 'List the current Session Novel Project and its chapter Assets with canonical exact-Revision references.',
+    description: 'List the current Session Novel Project and its typed Assets with canonical exact-Revision references.',
     parameters: {},
     output: {
       schema: {
@@ -49,6 +51,7 @@ export function apply(ctx: Context): void {
               properties: {
                 assetId: { type: 'string', required: true },
                 revisionId: { type: 'string', required: true },
+                type: { type: 'string', required: true },
                 title: { type: 'string', required: true },
                 path: { type: 'string', required: true },
                 reference: { type: 'string', required: true },
@@ -78,6 +81,7 @@ export function apply(ctx: Context): void {
         assets: assets.map(asset => ({
           assetId: asset.asset.id,
           revisionId: asset.revisionId,
+          type: asset.asset.type,
           title: asset.title,
           path: asset.asset.projectRelativePath,
           reference: encodeNovelReferenceUri({
@@ -118,9 +122,11 @@ export function apply(ctx: Context): void {
                 projectId: { type: 'string', required: true },
                 assetId: { type: 'string', required: true },
                 revisionId: { type: 'string', required: true },
+                type: { type: 'string', required: true },
                 path: { type: 'string', required: true },
                 text: { type: 'string', required: true },
                 utf16Length: { type: 'integer', required: true },
+                proposalInstructions: { type: 'string', required: true },
               },
             },
           },
@@ -138,9 +144,11 @@ export function apply(ctx: Context): void {
           projectId: reference.input.projectId,
           assetId: reference.input.assetId,
           revisionId: reference.input.revisionId,
+          type: reference.snapshot.asset.type,
           path: reference.snapshot.asset.projectRelativePath,
           text: reference.text,
           utf16Length: reference.text.length,
+          proposalInstructions: ctx.novelAssetTypes.get(reference.snapshot.asset.type).model.proposalInstructions,
         })),
       }
     },
@@ -149,14 +157,20 @@ export function apply(ctx: Context): void {
 
   ctx.tools.register(defineTool({
     name: 'novel_propose_changes',
-    description: 'Create one reviewable replace-text ChangeSet against an exact retained chapter Revision. Pass UTF-16 offsets from novel_get; integrity metadata is computed internally. This never applies the change.',
+    description: 'Create one reviewable typed ChangeSet against an exact retained Novel Asset Revision. Pass operations in the format returned by novel_get. The Host type adapter validates and adds integrity metadata. This never applies the change.',
     parameters: {
       project_id: { type: 'string', required: true },
       asset_id: { type: 'string', required: true },
       base_revision_id: { type: 'string', required: true },
-      start_utf16: { type: 'integer', required: true },
-      end_utf16: { type: 'integer', required: true },
-      replacement: { type: 'string', required: true },
+      operations: {
+        type: 'array',
+        required: true,
+        items: {
+          type: 'object',
+          additionalProperties: true,
+          properties: { kind: { type: 'string', required: true } },
+        },
+      },
       summary: { type: 'string', required: true },
     },
     output: {
@@ -167,6 +181,7 @@ export function apply(ctx: Context): void {
           changeSetId: { type: 'string', required: true },
           projectId: { type: 'string', required: true },
           assetId: { type: 'string', required: true },
+          assetType: { type: 'string', required: true },
           baseRevisionId: { type: 'string', required: true },
           summary: { type: 'string', required: true },
           status: { type: 'string', required: true, enum: ['proposed'] },
@@ -174,7 +189,7 @@ export function apply(ctx: Context): void {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `已创建修改提案 ${value.changeSetId}：${value.summary}。等待用户审阅，尚未修改正文。`,
+        text: `已创建修改提案 ${value.changeSetId}：${value.summary}。等待用户审阅，尚未修改资产。`,
       }],
       presentationMeta: (_args, value) => ({
         kind: 'novel-change-set',
@@ -193,16 +208,15 @@ export function apply(ctx: Context): void {
         revisionId: RevisionId(args.base_revision_id),
       }
       const resolved = await ctx.novelContextResolver.resolveReferences(exec.agent, [reference], exec.signal)
-      const selection = await ctx.novelRepository.captureSelection(resolved.project, {
-        assetId: reference.assetId,
-        revisionId: reference.revisionId,
-        startUtf16: args.start_utf16,
-        endUtf16: args.end_utf16,
-      }, exec.signal)
+      const [resolvedReference] = resolved.references
+      if (resolvedReference === undefined) throw new Error('novel_propose_changes lost its exact resolved Asset')
+      const assetType = resolvedReference.snapshot.asset.type
+      const operations = ctx.novelAssetTypes.get(assetType)
+        .prepareOperations(resolvedReference.snapshot, args.operations)
       const changeSet = await ctx.novelRepository.proposeChangeSet(resolved.project, {
         assetId: reference.assetId,
         baseRevisionId: reference.revisionId,
-        operations: [{ kind: 'replace-text', selector: selection.selector, replacement: args.replacement }],
+        operations,
         actor: { kind: 'agent', sessionId: exec.agent.id },
         summary: args.summary,
       }, exec.signal)
@@ -210,6 +224,7 @@ export function apply(ctx: Context): void {
         changeSetId: changeSet.id,
         projectId: changeSet.projectId,
         assetId: changeSet.assetId,
+        assetType: changeSet.assetType,
         baseRevisionId: changeSet.baseRevisionId,
         summary: changeSet.summary,
         status: 'proposed' as const,

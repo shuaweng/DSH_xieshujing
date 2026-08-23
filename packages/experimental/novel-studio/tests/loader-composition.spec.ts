@@ -3,7 +3,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
-import { AssetId, type ContentHash } from '@deepseek-ai/dsh-experimental-novel-repository'
+import { AssetId, type TextRangeSelector } from '@deepseek-ai/dsh-experimental-novel-repository'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelRepositoryRemote from '../../novel-repository-remote/src/index.ts'
 import NovelContextResolver from '../../novel-context/src/index.ts'
+import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 
 const remotePackageName = '@deepseek-ai/dsh-experimental-novel-repository-remote'
 
@@ -66,6 +67,8 @@ describe('Novel Studio real composition', () => {
       "  name: '@deepseek-ai/dsh-fs-sandbox'",
       '  config:',
       `    cwd: ${JSON.stringify(fallbackRoot)}`,
+      '- id: asset-types',
+      "  name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types'",
       '- id: repository',
       "  name: '@deepseek-ai/dsh-experimental-novel-repository-local'",
       '- id: novel-context',
@@ -83,6 +86,7 @@ describe('Novel Studio real composition', () => {
     const modules = new Map<string, unknown>([
       ['@deepseek-ai/dsh-sandbox-policy', SandboxPolicyService],
       ['@deepseek-ai/dsh-fs-sandbox', SandboxedFileSystem],
+      ['@deepseek-ai/dsh-experimental-novel-repository/asset-types', NovelAssetTypeRegistry],
       ['@deepseek-ai/dsh-experimental-novel-repository-local', LocalNovelRepository],
       ['@deepseek-ai/dsh-experimental-novel-context', NovelContextResolver],
       [remotePackageName, NovelRepositoryRemote],
@@ -122,26 +126,25 @@ describe('Novel Studio real composition', () => {
     })
     const [asset] = await ctx.novelRepositoryRemote.assets(agent, abort.signal)
     const chapter = await ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-loader'), null, abort.signal)
-    const saved = await ctx.novelRepositoryRemote.saveChapter(agent, {
+    const saved = await ctx.novelRepositoryRemote.saveAsset(agent, {
       assetId: AssetId('chapter-loader'),
       baseRevisionId: chapter.revisionId,
-      body: '白港的灯光越来越暗了。',
+      content: { kind: 'manuscript', body: '白港的灯光越来越暗了。' },
     }, abort.signal)
-    expect(saved.body).toBe('白港的灯光越来越暗了。')
+    expect(saved.content).toEqual({ kind: 'manuscript', body: '白港的灯光越来越暗了。' })
     await expect(readFile(join(projectRoot, 'manuscript', 'chapter.md'), 'utf8'))
       .resolves.toContain('白港的灯光越来越暗了。')
     const selection = await ctx.novelRepositoryRemote.captureSelection(agent, {
       assetId: AssetId('chapter-loader'),
       revisionId: saved.revisionId,
-      startUtf16: 0,
-      endUtf16: 2,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 2 },
     }, abort.signal)
     expect(selection.mention).toContain('dsh-novel:')
     await expect(ctx.novelContextResolver.resolveReferences(agent, [{
       projectId: asset!.projectId,
       assetId: asset!.id,
       revisionId: saved.revisionId,
-      selector: { ...selection.selector, quoteHash: selection.selector.quoteHash as ContentHash },
+      selector: selection.selector as unknown as TextRangeSelector,
     }], abort.signal)).resolves.toMatchObject({ references: [{ text: '白港' }] })
 
     disposeAgent()

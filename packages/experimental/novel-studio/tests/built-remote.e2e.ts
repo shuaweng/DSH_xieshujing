@@ -21,6 +21,7 @@ const requiredArtifacts = [
   'packages/sandbox/sandbox-policy/lib/index.js',
   'packages/typert/registry/lib/client.js',
   'packages/typert/registry/lib/index.js',
+  'packages/experimental/novel-repository/lib/types/asset-types.js',
   'packages/experimental/novel-repository/lib/index.js',
   'packages/experimental/novel-repository-local/lib/index.js',
   'packages/experimental/novel-context/lib/index.js',
@@ -60,6 +61,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         apiGatewayClient: 'packages/api/gateway/lib/client.js',
         apiGatewayHost: 'packages/api/gateway/lib/index.js',
         fsSandbox: 'packages/fs/fs-sandbox/lib/index.js',
+        novelAssetTypes: 'packages/experimental/novel-repository/lib/types/asset-types.js',
         novelClient: 'packages/experimental/novel-repository-client/lib/client.js',
         novelLocal: 'packages/experimental/novel-repository-local/lib/index.js',
         novelRemote: 'packages/experimental/novel-repository-remote/lib/index.js',
@@ -77,6 +79,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         const { default: AgentRegistry } = await import(urls.agent)
         const { default: TypertGatewayService } = await import(urls.apiGatewayHost)
         const { default: SandboxedFileSystem } = await import(urls.fsSandbox)
+        const { default: NovelAssetTypeRegistry } = await import(urls.novelAssetTypes)
         const { default: LocalNovelRepository } = await import(urls.novelLocal)
         const { default: NovelRepositoryRemote } = await import(urls.novelRemote)
         const { TYPERT } = await import(urls.novelTypert)
@@ -86,6 +89,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         const host = new Context()
         await host.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: projectRoot })
         await host.plugin(SandboxedFileSystem, { cwd: projectRoot })
+        await host.plugin(NovelAssetTypeRegistry)
         await host.plugin(LocalNovelRepository)
         await host.plugin(TypertRegistry)
         await host.plugin(AgentRegistry)
@@ -110,6 +114,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
           })
         }
 
+        let lastCarrierValue
         const client = new Context()
         await client.plugin(instantiate('@deepseek-ai/dsh-typert-registry'))
         client.provide('connection', {
@@ -118,6 +123,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
               if (path !== '/api') throw new Error('unexpected path ' + path)
               const [namespace, method] = endpoint.split('/')
               const value = await host.typertGateway.invoke({ namespace, method, args: payload.args, signal })
+              lastCarrierValue = value
               return { ok: true, value }
             },
           },
@@ -130,13 +136,12 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         const assets = await client.remote.novelRepository.assets(agentId)
         const chapter = await client.remote.novelRepository.asset(agentId, 'chapter-built', null)
         if (chapter.ok !== true) {
-          throw new Error('chapter read failed: ' + JSON.stringify(chapter))
+          throw new Error('chapter read failed: ' + JSON.stringify(chapter) + '; carrier=' + JSON.stringify(lastCarrierValue))
         }
         const selection = await client.remote.novelRepository.captureSelection(agentId, {
           assetId: 'chapter-built',
           revisionId: chapter.value.revisionId,
-          startUtf16: 0,
-          endUtf16: 2,
+          selector: { kind: 'text-range', startUtf16: 0, endUtf16: 2 },
         })
         if (selection.ok !== true) throw new Error('selection failed: ' + JSON.stringify(selection))
         const project = await host.novelRepository.discoverProject(await host.fs.resolve(projectRoot))
@@ -169,22 +174,22 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
       const output = JSON.parse(result.stdout.trim().split('\n').at(-1) ?? '{}') as {
         response: { ok: boolean; value?: { id?: string; title?: string } }
         assets: { ok: boolean; value?: Array<{ id?: string; title?: string }> }
-        chapter: { ok: boolean; value?: { body?: string } }
+        chapter: { ok: boolean; value?: { content?: { body?: string } } }
         selection: { ok: boolean; value?: { preview?: string; mention?: string } }
         changeSet: { ok: boolean; value?: { status?: string } }
         applied: { ok: boolean; value?: { status?: string } }
-        after: { ok: boolean; value?: { body?: string } }
+        after: { ok: boolean; value?: { content?: { body?: string } } }
         withdrawn: boolean
         retainedAfterDispose: { ok: boolean; error?: { message?: string } }
       }
       expect(output).toMatchObject({
         response: { ok: true, value: { id: 'project-built', title: 'Built Project' } },
         assets: { ok: true, value: [{ id: 'chapter-built', title: 'Built Chapter' }] },
-        chapter: { ok: true, value: { body: '白港下雨了。' } },
+        chapter: { ok: true, value: { content: { body: '白港下雨了。' } } },
         selection: { ok: true, value: { preview: '白港' } },
         changeSet: { ok: true, value: { status: 'proposed' } },
         applied: { ok: true, value: { status: 'applied' } },
-        after: { ok: true, value: { body: '新港下雨了。' } },
+        after: { ok: true, value: { content: { body: '新港下雨了。' } } },
         withdrawn: true,
         retainedAfterDispose: { ok: false },
       })

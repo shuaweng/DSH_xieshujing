@@ -6,6 +6,7 @@ import {
   ChangeSetId,
   ProjectId,
   RevisionId,
+  type AssetSnapshot,
   type ChangeSet,
   type ContentHash,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
@@ -16,12 +17,25 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } fro
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import LocalNovelRepository from '../src/index.ts'
+import NovelAssetTypeRegistry, {
+  type NovelAssetTypeDefinition,
+  type ParsedNovelAsset,
+} from '../../novel-repository/src/asset-types.ts'
 import { installApplyFault, type ApplyFaultStage } from '../src/apply-fault.ts'
-import { containsUnpairedSurrogate, parseChapter, splitsSurrogatePair } from '../src/content.ts'
+import {
+  containsUnpairedSurrogate,
+  manuscriptChapterTypeDefinition,
+  parseChapter,
+  splitsSurrogatePair,
+} from '../src/content.ts'
 import { NOVEL_HISTORY_APPLICATION_ID, openHistory } from '../src/history.ts'
 import { parseProjectManifest } from '../src/manifest.ts'
 
 const cleanups: Array<() => Promise<void>> = []
+const decodeHistoryOperations = (assetType: string, value: unknown) => {
+  if (assetType !== manuscriptChapterTypeDefinition.type) throw new Error(`unsupported test Asset type ${assetType}`)
+  return manuscriptChapterTypeDefinition.decodeOperations(value)
+}
 
 afterEach(async () => {
   while (cleanups.length > 0) await cleanups.pop()!()
@@ -33,16 +47,52 @@ async function tempDir(): Promise<string> {
   return dir
 }
 
-async function boot(dir: string, config: ConstructorParameters<typeof LocalNovelRepository>[1] = {}): Promise<Context> {
+async function boot(
+  dir: string,
+  config: ConstructorParameters<typeof LocalNovelRepository>[1] = {},
+  definitions: readonly NovelAssetTypeDefinition[] = [],
+): Promise<Context> {
   const ctx = new Context()
   const fsFiber = ctx.plugin(LocalFileSystem, { cwd: dir })
   await fsFiber
+  const typesFiber = ctx.plugin(NovelAssetTypeRegistry)
+  await typesFiber
+  for (const definition of definitions) ctx.novelAssetTypes.register(definition)
   const repositoryFiber = ctx.plugin(LocalNovelRepository, config)
   await repositoryFiber
   cleanups.push(async () => { await fsFiber.dispose() })
+  cleanups.push(async () => { await typesFiber.dispose() })
   cleanups.push(async () => { await repositoryFiber.dispose() })
   return ctx
 }
+
+const testNoteType = {
+  type: 'bible.test',
+  contentRoot: 'notes',
+  extensions: ['.note'],
+  model: { description: 'test note', proposalInstructions: 'test only' },
+  parse(serializedUtf8: Uint8Array): ParsedNovelAsset {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(serializedUtf8)
+    const id = /^\s+id: ([^\n]+)$/mu.exec(text)?.[1]
+    const title = /^\s+title: ([^\n]+)$/mu.exec(text)?.[1]
+    const body = text.split('---\n').at(-1)
+    if (id === undefined || title === undefined || body === undefined) throw new Error('invalid test note')
+    return {
+      id: AssetId(id),
+      type: 'bible.test' as never,
+      title,
+      frontmatter: { novel: { schema: 1, id, type: 'bible.test', title } },
+      content: { kind: 'test-note', text: body } as never,
+      source: undefined,
+    }
+  },
+  serializeContent: () => { throw new Error('unused') },
+  captureSelection: () => { throw new Error('unused') },
+  modelText(snapshot: AssetSnapshot) { return (snapshot.content as never as { text: string }).text },
+  prepareOperations: () => [],
+  decodeOperations: () => [],
+  materializeOperations: () => { throw new Error('unused') },
+} as never as NovelAssetTypeDefinition
 
 function chapter(id: string, title: string, body: string, newline = '\n'): string {
   return [
@@ -77,6 +127,35 @@ function manifest(overrides: string[] = []): string {
 }
 
 describe('LocalNovelRepository', () => {
+  it('discovers a second registered Asset type without repository type branches', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await mkdir(join(dir, 'notes'))
+    await writeFile(join(dir, 'novel.yaml'), manifest(['  notes: notes']))
+    await writeFile(join(dir, 'notes', 'setting.note'), [
+      '---',
+      'novel:',
+      '  schema: 1',
+      '  id: note-white-harbor',
+      '  type: bible.test',
+      '  title: White Harbor setting',
+      '---',
+      'Fog covers the harbor.',
+    ].join('\n'))
+    const ctx = await boot(dir, {}, [testNoteType])
+    const currentProject = await project(ctx)
+
+    const assets = await ctx.novelRepository.listAssets(currentProject)
+    expect(assets).toHaveLength(1)
+    expect(assets[0]?.asset).toMatchObject({
+      id: 'note-white-harbor',
+      type: 'bible.test',
+      projectRelativePath: 'notes/setting.note',
+    })
+    const snapshot = await ctx.novelRepository.readAsset(currentProject, AssetId('note-white-harbor'))
+    expect(snapshot.content).toEqual({ kind: 'test-note', text: 'Fog covers the harbor.' })
+  })
+
   it('discovers one project and resolves every declared content root through ctx.fs', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))
@@ -237,6 +316,7 @@ describe('LocalNovelRepository', () => {
     ctx.fs.readBytes = original
 
     const direct = new Context()
+    new NovelAssetTypeRegistry(direct)
     const defaultRepository = new LocalNovelRepository(direct)
     expect(defaultRepository.manifestMaxBytes).toBe(64 * 1024)
     await direct.fiber.dispose()
@@ -245,6 +325,7 @@ describe('LocalNovelRepository', () => {
       const invalid = new Context()
       const fsFiber = invalid.plugin(LocalFileSystem, { cwd: dir })
       await fsFiber
+      await invalid.plugin(NovelAssetTypeRegistry)
       await expect(invalid.plugin(LocalNovelRepository, { manifestMaxBytes }))
         .rejects.toThrow(/integer between 1 and/)
       await fsFiber.dispose()
@@ -285,7 +366,7 @@ describe('LocalNovelRepository', () => {
     })
     const snapshot = await ctx.novelRepository.readAsset(novel, first!.asset.id)
     expect(Buffer.from(snapshot.serializedUtf8).toString('utf8')).toBe(exact)
-    expect(snapshot.body).toBe('白港\r\n下雨了。')
+    expect(snapshot.content).toEqual({ kind: 'manuscript', body: '白港\r\n下雨了。' })
     expect(snapshot.contentHash).toBe(`sha256:${createHash('sha256').update(exact).digest('hex')}`)
 
     await rename(
@@ -314,7 +395,8 @@ describe('LocalNovelRepository', () => {
     await writeFile(path, after)
     const [current] = await ctx.novelRepository.listAssets(novel)
     expect(current!.revisionId).not.toBe(initial!.revisionId)
-    expect((await ctx.novelRepository.readAsset(novel, current!.asset.id)).body).toBe('外部编辑后的正文')
+    expect((await ctx.novelRepository.readAsset(novel, current!.asset.id)).content)
+      .toEqual({ kind: 'manuscript', body: '外部编辑后的正文' })
     const retained = await ctx.novelRepository.readAsset(novel, initial!.asset.id, initial!.revisionId)
     expect(Buffer.from(retained.serializedUtf8).toString('utf8')).toBe(before)
   })
@@ -347,19 +429,19 @@ describe('LocalNovelRepository', () => {
     const ctx = await boot(dir)
     const novel = await project(ctx)
     const [initial] = await ctx.novelRepository.listAssets(novel)
-    const saved = await ctx.novelRepository.saveChapterBody(novel, {
+    const saved = await ctx.novelRepository.saveAssetContent(novel, {
       assetId: initial!.asset.id,
       baseRevisionId: initial!.revisionId,
-      body: '作者新稿',
+      content: { kind: 'manuscript', body: '作者新稿' },
     })
-    expect(saved.body).toBe('作者新稿')
+    expect(saved.content).toEqual({ kind: 'manuscript', body: '作者新稿' })
     expect(await readFile(path, 'utf8')).toBe(chapter('chapter-one', '第一章', '作者新稿'))
 
     await writeFile(path, chapter('chapter-one', '第一章', '编辑器外部新稿'))
-    await expect(ctx.novelRepository.saveChapterBody(novel, {
+    await expect(ctx.novelRepository.saveAssetContent(novel, {
       assetId: initial!.asset.id,
       baseRevisionId: saved.revisionId,
-      body: '不应覆盖',
+      content: { kind: 'manuscript', body: '不应覆盖' },
     })).rejects.toMatchObject({ code: 'NOVEL_REVISION_STALE' })
     expect(await readFile(path, 'utf8')).toBe(chapter('chapter-one', '第一章', '编辑器外部新稿'))
   })
@@ -375,8 +457,7 @@ describe('LocalNovelRepository', () => {
     const selection = await ctx.novelRepository.captureSelection(novel, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 1,
-      endUtf16: 5,
+      selector: { kind: 'text-range', startUtf16: 1, endUtf16: 5 },
     })
     expect(selection).toMatchObject({
       version: 1,
@@ -397,8 +478,7 @@ describe('LocalNovelRepository', () => {
     await expect(ctx.novelRepository.captureSelection(novel, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 2,
-      endUtf16: 5,
+      selector: { kind: 'text-range', startUtf16: 2, endUtf16: 5 },
     })).rejects.toMatchObject({ code: 'NOVEL_SELECTION_INVALID' })
   })
 
@@ -441,15 +521,15 @@ describe('LocalNovelRepository', () => {
       .rejects.toMatchObject({ code: 'NOVEL_ASSET_NOT_FOUND' })
     await expect(ctx.novelRepository.readAsset(novel, AssetId('chapter-a'), RevisionId('missing')))
       .rejects.toMatchObject({ code: 'NOVEL_REVISION_NOT_FOUND' })
-    await expect(ctx.novelRepository.saveChapterBody(novel, {
+    await expect(ctx.novelRepository.saveAssetContent(novel, {
       assetId: AssetId('missing'),
       baseRevisionId: RevisionId('missing'),
-      body: 'body',
+      content: { kind: 'manuscript', body: 'body' },
     })).rejects.toMatchObject({ code: 'NOVEL_ASSET_NOT_FOUND' })
-    await expect(ctx.novelRepository.saveChapterBody(novel, {
+    await expect(ctx.novelRepository.saveAssetContent(novel, {
       assetId: assets[0]!.asset.id,
       baseRevisionId: assets[0]!.revisionId,
-      body: '\uD83D',
+      content: { kind: 'manuscript', body: '\uD83D' },
     })).rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
   })
 
@@ -464,10 +544,10 @@ describe('LocalNovelRepository', () => {
     const bytesCtx = await boot(dir, { assetMaxBytes: Buffer.byteLength(serialized) })
     const bytesProject = await project(bytesCtx)
     const [asset] = await bytesCtx.novelRepository.listAssets(bytesProject)
-    await expect(bytesCtx.novelRepository.saveChapterBody(bytesProject, {
+    await expect(bytesCtx.novelRepository.saveAssetContent(bytesProject, {
       assetId: asset!.asset.id,
       baseRevisionId: asset!.revisionId,
-      body: 'this body is deliberately much larger than the original',
+      content: { kind: 'manuscript', body: 'this body is deliberately much larger than the original' },
     })).rejects.toMatchObject({ code: 'NOVEL_ASSET_TOO_LARGE' })
 
     const requests = [
@@ -483,20 +563,18 @@ describe('LocalNovelRepository', () => {
       await expect(bytesCtx.novelRepository.captureSelection(bytesProject, {
         assetId: asset!.asset.id,
         revisionId: asset!.revisionId,
-        ...range,
+        selector: { kind: 'text-range', ...range },
       })).rejects.toMatchObject({ code: 'NOVEL_SELECTION_INVALID' })
     }
     await expect(bytesCtx.novelRepository.captureSelection(bytesProject, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 0,
-      endUtf16: 1,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
     })).resolves.toMatchObject({ preview: 'A', selector: { suffix: '😀B' } })
     await expect(bytesCtx.novelRepository.captureSelection(bytesProject, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 3,
-      endUtf16: 4,
+      selector: { kind: 'text-range', startUtf16: 3, endUtf16: 4 },
     })).resolves.toMatchObject({ preview: 'B', selector: { prefix: 'A😀' } })
     const aborted = new AbortController()
     aborted.abort()
@@ -526,16 +604,16 @@ describe('LocalNovelRepository', () => {
     const [asset] = await ctx.novelRepository.listAssets(novel)
     const original = ctx.fs.writeText.bind(ctx.fs)
     ctx.fs.writeText = () => Promise.reject(new Error('disk offline'))
-    await expect(ctx.novelRepository.saveChapterBody(novel, {
+    await expect(ctx.novelRepository.saveAssetContent(novel, {
       assetId: asset!.asset.id,
       baseRevisionId: asset!.revisionId,
-      body: 'new',
+      content: { kind: 'manuscript', body: 'new' },
     })).rejects.toThrow('disk offline')
     ctx.fs.writeText = () => Promise.reject(new FsError('stale', 'FS_STALE_VERSION'))
-    await expect(ctx.novelRepository.saveChapterBody(novel, {
+    await expect(ctx.novelRepository.saveAssetContent(novel, {
       assetId: asset!.asset.id,
       baseRevisionId: asset!.revisionId,
-      body: 'new',
+      content: { kind: 'manuscript', body: 'new' },
     })).rejects.toMatchObject({ code: 'NOVEL_REVISION_STALE' })
     ctx.fs.writeText = original
   })
@@ -588,7 +666,7 @@ describe('LocalNovelRepository', () => {
     }, 'NOVEL_HISTORY_CORRUPT')
 
     const dir = await tempDir()
-    const history = await openHistory(join(dir, 'history.sqlite'), 100)
+    const history = await openHistory(join(dir, 'history.sqlite'), 100, decodeHistoryOperations)
     const revision = {
       id: RevisionId('revision-one'),
       projectId: ProjectId('project-one'),
@@ -604,7 +682,7 @@ describe('LocalNovelRepository', () => {
     }).toThrow()
     expect(history.revision(RevisionId('missing'))).toBeUndefined()
     history.close()
-    const reopened = await openHistory(join(dir, 'history.sqlite'), 100)
+    const reopened = await openHistory(join(dir, 'history.sqlite'), 100, decodeHistoryOperations)
     expect(reopened.head(ProjectId('project-one'), AssetId('asset-one'))).toMatchObject({ revision_id: 'revision-one' })
     reopened.close()
   })
@@ -705,20 +783,17 @@ describe('LocalNovelRepository', () => {
     await expect(ctx.novelRepository.captureSelection(novel, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 1,
-      endUtf16: 3,
+      selector: { kind: 'text-range', startUtf16: 1, endUtf16: 3 },
     })).resolves.toMatchObject({ preview: '…' })
     await expect(ctx.novelRepository.captureSelection(novel, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 3,
-      endUtf16: 4,
+      selector: { kind: 'text-range', startUtf16: 3, endUtf16: 4 },
     })).resolves.toMatchObject({ selector: { startUtf16: 3, endUtf16: 4 } })
     const leading = await ctx.novelRepository.captureSelection(novel, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 0,
-      endUtf16: 1,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
     })
     expect(leading.selector.suffix).toBeUndefined()
   })
@@ -736,8 +811,7 @@ describe('LocalNovelRepository', () => {
     const selection = await ctx.novelRepository.captureSelection(novel, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 2,
-      endUtf16: 4,
+      selector: { kind: 'text-range', startUtf16: 2, endUtf16: 4 },
     })
     const owner = SessionId('novel-owner')
     const proposed = await ctx.novelRepository.proposeChangeSet(novel, {
@@ -758,7 +832,8 @@ describe('LocalNovelRepository', () => {
     const applied = await ctx.novelRepository.applyChangeSet(novel, proposed.id, { sessionId: owner })
     expect(applied.status).toBe('applied')
     expect(applied.resultRevisionId).toMatch(/^revision_/u)
-    expect((await ctx.novelRepository.readAsset(novel, asset!.asset.id)).body).toBe('白港放晴了。')
+    expect((await ctx.novelRepository.readAsset(novel, asset!.asset.id)).content)
+      .toEqual({ kind: 'manuscript', body: '白港放晴了。' })
     await expect(ctx.novelRepository.applyChangeSet(novel, proposed.id, { sessionId: owner }))
       .resolves.toEqual(applied)
   })
@@ -774,8 +849,7 @@ describe('LocalNovelRepository', () => {
     const selection = await ctx.novelRepository.captureSelection(novel, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 0,
-      endUtf16: 1,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
     })
     const owner = SessionId('novel-owner')
     const request = {
@@ -792,10 +866,10 @@ describe('LocalNovelRepository', () => {
       .resolves.toMatchObject({ status: 'rejected' })
 
     const stale = await ctx.novelRepository.proposeChangeSet(novel, request)
-    await ctx.novelRepository.saveChapterBody(novel, {
+    await ctx.novelRepository.saveAssetContent(novel, {
       assetId: asset!.asset.id,
       baseRevisionId: asset!.revisionId,
-      body: '作者的新正文',
+      content: { kind: 'manuscript', body: '作者的新正文' },
     })
     await expect(ctx.novelRepository.applyChangeSet(novel, stale.id, { sessionId: owner }))
       .resolves.toMatchObject({ status: 'conflicted' })
@@ -816,8 +890,7 @@ describe('LocalNovelRepository', () => {
       const selection = await first.novelRepository.captureSelection(firstProject, {
         assetId: asset!.asset.id,
         revisionId: asset!.revisionId,
-        startUtf16: 2,
-        endUtf16: 4,
+        selector: { kind: 'text-range', startUtf16: 2, endUtf16: 4 },
       })
       const owner = SessionId('novel-owner')
       const proposed = await first.novelRepository.proposeChangeSet(firstProject, {
@@ -845,12 +918,12 @@ describe('LocalNovelRepository', () => {
       const recovered = await restarted.novelRepository.readChangeSet(restartedProject, proposed.id)
       expect(recovered.status).toBe('applied')
       expect(recovered.resultRevisionId).toMatch(/^revision_/u)
-      expect((await restarted.novelRepository.readAsset(restartedProject, asset!.asset.id)).body)
-        .toBe('白港放晴')
+      expect((await restarted.novelRepository.readAsset(restartedProject, asset!.asset.id)).content)
+        .toEqual({ kind: 'manuscript', body: '白港放晴' })
     },
   )
 
-  it('migrates an identified version-one history database to ChangeSet schema two', async () => {
+  it('migrates an identified version-one history database to typed ChangeSet schema three', async () => {
     const dir = await tempDir()
     const path = join(dir, 'history.sqlite')
     const { DatabaseSync } = await import('node:sqlite')
@@ -858,10 +931,12 @@ describe('LocalNovelRepository', () => {
     seed.exec(`PRAGMA application_id = ${NOVEL_HISTORY_APPLICATION_ID}; PRAGMA user_version = 1`)
     seed.close()
 
-    const history = await openHistory(path, 100)
+    const history = await openHistory(path, 100, decodeHistoryOperations)
     history.close()
     const migrated = new DatabaseSync(path)
-    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(2)
+    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(3)
+    expect((migrated.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>).map(row => row.name))
+      .toContain('asset_type')
     const tables = migrated.prepare(`
       SELECT name FROM sqlite_master
       WHERE type = 'table' AND name IN ('change_sets', 'apply_journal')
@@ -883,8 +958,7 @@ describe('LocalNovelRepository', () => {
     const frozen = await ctx.novelRepository.captureSelection(novel, {
       assetId: asset!.asset.id,
       revisionId: asset!.revisionId,
-      startUtf16: 0,
-      endUtf16: 1,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
     })
     const valid = {
       assetId: asset!.asset.id,
@@ -943,8 +1017,7 @@ describe('LocalNovelRepository', () => {
     const boundedSelection = await bounded.novelRepository.captureSelection(boundedProject, {
       assetId: boundedAsset!.asset.id,
       revisionId: boundedAsset!.revisionId,
-      startUtf16: 0,
-      endUtf16: 1,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
     })
     await expect(bounded.novelRepository.proposeChangeSet(boundedProject, {
       assetId: boundedAsset!.asset.id,
@@ -991,7 +1064,9 @@ describe('LocalNovelRepository', () => {
       const novel = await project(ctx)
       const [asset] = await ctx.novelRepository.listAssets(novel)
       const selected = await ctx.novelRepository.captureSelection(novel, {
-        assetId: asset!.asset.id, revisionId: asset!.revisionId, startUtf16: 0, endUtf16: 1,
+        assetId: asset!.asset.id,
+        revisionId: asset!.revisionId,
+        selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
       })
       const proposed = await ctx.novelRepository.proposeChangeSet(novel, {
         assetId: asset!.asset.id,
@@ -1046,13 +1121,14 @@ describe('LocalNovelRepository', () => {
       id: ChangeSetId('changeset-corrupt'),
       projectId: baseRevision.projectId,
       assetId: baseRevision.assetId,
+      assetType: 'manuscript.chapter',
       baseRevisionId: baseRevision.id,
       operations: [validOperation],
       actor: { kind: 'user' },
       summary: 'proposal',
       status: 'proposed',
     }
-    const history = await openHistory(path, 100)
+    const history = await openHistory(path, 100, decodeHistoryOperations)
     history.commitRevision(baseRevision, 'manuscript/one.md')
     history.proposeChangeSet(changeSet)
     expect(history.rejectChangeSet(ChangeSetId('missing'))).toBeUndefined()
@@ -1137,7 +1213,7 @@ describe('LocalNovelRepository', () => {
       CREATE TABLE change_sets(dummy TEXT) STRICT;
     `)
     broken.close()
-    await expect(openHistory(brokenPath, 100)).rejects.toThrow()
+    await expect(openHistory(brokenPath, 100, decodeHistoryOperations)).rejects.toThrow()
     const after = new DatabaseSync(brokenPath)
     expect((after.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(1)
     expect((after.prepare("SELECT count(*) AS count FROM sqlite_master WHERE name = 'revisions'").get() as { count: number }).count).toBe(0)
@@ -1168,8 +1244,7 @@ describe('LocalNovelRepository', () => {
       const selection = await first.novelRepository.captureSelection(firstProject, {
         assetId: asset!.asset.id,
         revisionId: asset!.revisionId,
-        startUtf16: 2,
-        endUtf16: 4,
+        selector: { kind: 'text-range', startUtf16: 2, endUtf16: 4 },
       })
       const proposed = await first.novelRepository.proposeChangeSet(firstProject, {
         assetId: asset!.asset.id,
@@ -1248,7 +1323,7 @@ describe('LocalNovelRepository', () => {
 describe('chapter parsing and UTF-16 guards', () => {
   it('accepts an empty body and covers ordinary, paired, and unpaired surrogate forms', () => {
     expect(parseChapter(new TextEncoder().encode(chapter('chapter-one', 'One', '').trimEnd()), 'chapter.md'))
-      .toMatchObject({ id: 'chapter-one', title: 'One', body: '' })
+      .toMatchObject({ id: 'chapter-one', title: 'One', content: { kind: 'manuscript', body: '' } })
     expect(splitsSurrogatePair('A😀B', 0)).toBe(false)
     expect(splitsSurrogatePair('A😀B', 2)).toBe(true)
     expect(splitsSurrogatePair('A😀B', 4)).toBe(false)

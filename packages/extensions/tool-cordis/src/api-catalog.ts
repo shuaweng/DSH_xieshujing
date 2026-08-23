@@ -1078,6 +1078,32 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'novelAssetTypes',
+    summary: 'Effect-scoped Host registry of exact authored Asset type definitions.',
+    description: 'Effect-scoped Host registry of exact authored Asset type definitions.',
+    methods: [
+      {
+        signature: 'register(definition: NovelAssetTypeDefinition): () => void',
+        description: 'Register one exact type for the calling plugin lifetime.',
+        parameters: [{ name: 'definition', description: 'parser, selection, model, and mutation behavior for one type.' }],
+        returns: 'an idempotent disposer that removes this exact contribution.',
+      },
+      {
+        signature: 'get(type: string): NovelAssetTypeDefinition',
+        description: 'Resolve one required type definition.',
+        parameters: [{ name: 'type', description: 'exact Frontmatter type.' }],
+        returns: 'the registered definition.',
+        throws: ['{NovelRepositoryError} when the Project declares an unavailable type.'],
+      },
+      {
+        signature: 'list(): readonly NovelAssetTypeDefinition[]',
+        description: 'List definitions in deterministic type order for project scanning.',
+        parameters: [],
+        returns: 'a stable copy of current registrations.',
+      },
+    ],
+  },
+  {
     key: 'novelContextResolver',
     summary: 'Exact-read Consumer that freezes canonical references before a model step.',
     description: 'Exact-read Consumer that freezes canonical references before a model step.',
@@ -1122,16 +1148,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{NovelRepositoryError} when the asset or Revision is absent or invalid.'],
       },
       {
-        signature: 'abstract saveChapterBody( project: NovelProjectSnapshot, request: SaveChapterBodyRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>',
-        description: 'Guardedly publish a user-authored chapter body and retain its exact new Revision.',
-        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'target, current base Revision, and full replacement body.' }, { name: 'signal', description: 'optional cancellation before filesystem publication.' }, { name: 'sandboxPolicy', description: 'optional per-call policy governing authored-file publication and recovery.' }],
+        signature: 'abstract saveAssetContent( project: NovelProjectSnapshot, request: SaveAssetContentRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>',
+        description: 'Guardedly publish user-authored typed content and retain its exact new Revision.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'target, current base Revision, and full typed replacement content.' }, { name: 'signal', description: 'optional cancellation before filesystem publication.' }, { name: 'sandboxPolicy', description: 'optional per-call policy governing authored-file publication and recovery.' }],
         returns: 'the committed exact new head.',
         throws: ['{NovelRepositoryError} when the base is stale or the resulting asset is invalid.'],
       },
       {
         signature: 'abstract captureSelection( project: NovelProjectSnapshot, request: CaptureSelectionRequest, signal?: AbortSignal, ): Promise<SelectionRef>',
-        description: 'Freeze one exact non-empty UTF-16 body range without rereading mutable latest content.',
-        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'retained Revision and body offsets to validate.' }, { name: 'signal', description: 'optional cancellation for the history read.' }],
+        description: 'Freeze one exact type-defined selection without rereading mutable latest content.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'retained Revision and type-defined selection input to validate.' }, { name: 'signal', description: 'optional cancellation for the history read.' }],
         returns: 'immutable selection identity, quote hash, and bounded diagnostics.',
       },
       {
@@ -1174,26 +1200,26 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'assets\') async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]>',
-        description: 'List the reconciled chapter catalog for the addressed Session project.',
+        description: 'List the reconciled Asset catalog for the addressed Session project.',
         parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'browser-safe current Asset descriptors.',
       },
       {
-        signature: '@Remote(\'asset\') async asset( agent: Agent, assetId: AssetId, revisionId: RevisionId | null, signal: AbortSignal, ): Promise<NovelChapterDocument>',
-        description: 'Read one current or retained chapter body.',
-        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'assetId', description: 'stable chapter identity.' }, { name: 'revisionId', description: 'exact retained Revision, or `null` for current.' }, { name: 'signal', description: 'caller cancellation.' }],
-        returns: 'a browser-safe Revision-bound chapter document.',
+        signature: '@Remote(\'asset\') async asset( agent: Agent, assetId: AssetId, revisionId: RevisionId | null, signal: AbortSignal, ): Promise<NovelAssetDocument>',
+        description: 'Read one current or retained typed Asset document.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'assetId', description: 'stable Asset identity.' }, { name: 'revisionId', description: 'exact retained Revision, or `null` for current.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'a browser-safe Revision-bound typed Asset document.',
       },
       {
-        signature: '@Remote(\'saveChapter\') async saveChapter( agent: Agent, request: SaveNovelChapterRequest, signal: AbortSignal, ): Promise<NovelChapterDocument>',
-        description: 'Guardedly save an authored chapter body.',
-        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'request', description: 'stable target, base Revision, and complete replacement body.' }, { name: 'signal', description: 'caller cancellation.' }],
-        returns: 'the new browser-safe Revision-bound chapter document.',
+        signature: '@Remote(\'saveAsset\') async saveAsset( agent: Agent, request: SaveNovelAssetRequest, signal: AbortSignal, ): Promise<NovelAssetDocument>',
+        description: 'Guardedly save one complete authored typed content value.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'request', description: 'stable target, base Revision, and complete typed content.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'the new browser-safe Revision-bound Asset document.',
       },
       {
         signature: '@Remote(\'captureSelection\') async captureSelection( agent: Agent, request: CaptureNovelSelectionRequest, signal: AbortSignal, ): Promise<NovelSelectionDescriptor>',
-        description: 'Freeze one exact selection over a retained chapter Revision.',
-        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'request', description: 'exact Revision and UTF-16 body offsets.' }, { name: 'signal', description: 'caller cancellation.' }],
+        description: 'Freeze one exact type-defined selection over a retained Revision.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'request', description: 'exact Revision and type-defined selection input.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'a durable browser-safe SelectionRef.',
       },
       {
@@ -3098,7 +3124,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AssetSnapshot',
-    declaration: 'export interface AssetSnapshot {\n    readonly asset: Asset;\n    readonly revisionId: RevisionId;\n    readonly serializedUtf8: Uint8Array;\n    readonly contentHash: ContentHash;\n    readonly frontmatter: Readonly<Record<string, unknown>>;\n    readonly body: string;\n}',
+    declaration: 'export interface AssetSnapshot {\n    readonly asset: Asset;\n    readonly revisionId: RevisionId;\n    readonly serializedUtf8: Uint8Array;\n    readonly contentHash: ContentHash;\n    readonly frontmatter: Readonly<Record<string, unknown>>;\n    readonly content: NovelAssetContent;\n}',
   },
   {
     name: 'AssetSummary',
@@ -3189,16 +3215,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CancelOptions {\n    keepInbox?: boolean | undefined;\n}',
   },
   {
+    name: 'CapturedNovelSelection',
+    declaration: 'export interface CapturedNovelSelection {\n    readonly selector: NovelSelector;\n    readonly preview?: string;\n}',
+  },
+  {
     name: 'CaptureNovelSelectionRequest',
-    declaration: 'export interface CaptureNovelSelectionRequest {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly startUtf16: number;\n    readonly endUtf16: number;\n}',
+    declaration: 'export interface CaptureNovelSelectionRequest {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: NovelWireValue;\n}',
   },
   {
     name: 'CaptureSelectionRequest',
-    declaration: 'export interface CaptureSelectionRequest {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly startUtf16: number;\n    readonly endUtf16: number;\n}',
+    declaration: 'export interface CaptureSelectionRequest {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: NovelSelectionInput;\n}',
   },
   {
     name: 'ChangeSet',
-    declaration: 'export interface ChangeSet {\n    readonly id: ChangeSetId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly operations: readonly NovelOperation[];\n    readonly actor: {\n        readonly kind: \'agent\';\n        readonly sessionId: SessionId;\n    } | {\n        readonly kind: \'user\';\n        readonly sessionId?: SessionId;\n    };\n    readonly summary: string;\n    readonly status: \'proposed\' | \'applying\' | \'applied\' | \'rejected\' | \'conflicted\';\n    readonly resultRevisionId?: RevisionId;\n}',
+    declaration: 'export interface ChangeSet {\n    readonly id: ChangeSetId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly assetType: NovelAssetType;\n    readonly baseRevisionId: RevisionId;\n    readonly operations: readonly NovelOperation[];\n    readonly actor: {\n        readonly kind: \'agent\';\n        readonly sessionId: SessionId;\n    } | {\n        readonly kind: \'user\';\n        readonly sessionId?: SessionId;\n    };\n    readonly summary: string;\n    readonly status: \'proposed\' | \'applying\' | \'applied\' | \'rejected\' | \'conflicted\';\n    readonly resultRevisionId?: RevisionId;\n}',
   },
   {
     name: 'ChangeSetAuthorization',
@@ -3885,6 +3915,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
   },
   {
+    name: 'ManuscriptChapterContent',
+    declaration: 'export interface ManuscriptChapterContent {\n    readonly kind: \'manuscript\';\n    readonly body: string;\n}',
+  },
+  {
     name: 'Message',
     declaration: 'export interface Message {\n    readonly id: MessageId;\n    readonly role: \'system\' | \'user\' | \'assistant\';\n    readonly content: ContentBlock[];\n    readonly source: MessageSource;\n}',
   },
@@ -3989,24 +4023,40 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n}',
   },
   {
+    name: 'NovelAssetContent',
+    declaration: 'export type NovelAssetContent = NovelAssetTypeMap[NovelAssetType][\'content\'];',
+  },
+  {
     name: 'NovelAssetDescriptor',
-    declaration: 'export interface NovelAssetDescriptor {\n    readonly id: AssetId;\n    readonly projectId: ProjectId;\n    readonly type: NovelAssetType;\n    readonly projectRelativePath: string;\n    readonly revisionId: RevisionId;\n    readonly contentHash: string;\n    readonly title: string;\n}',
+    declaration: 'export interface NovelAssetDescriptor {\n    readonly id: AssetId;\n    readonly projectId: ProjectId;\n    readonly type: string;\n    readonly projectRelativePath: string;\n    readonly revisionId: RevisionId;\n    readonly contentHash: string;\n    readonly title: string;\n}',
+  },
+  {
+    name: 'NovelAssetDocument',
+    declaration: 'export interface NovelAssetDocument extends NovelAssetDescriptor {\n    readonly content: NovelWireValue;\n}',
+  },
+  {
+    name: 'NovelAssetMaterialization',
+    declaration: 'export interface NovelAssetMaterialization {\n    readonly serializedUtf8: Uint8Array;\n    readonly parsed: ParsedNovelAsset;\n}',
   },
   {
     name: 'NovelAssetType',
-    declaration: 'export type NovelAssetType = \'manuscript.chapter\';',
+    declaration: 'export type NovelAssetType = Extract<keyof NovelAssetTypeMap, string>;',
+  },
+  {
+    name: 'NovelAssetTypeDefinition',
+    declaration: 'export interface NovelAssetTypeDefinition {\n    readonly type: NovelAssetType;\n    readonly contentRoot: string;\n    readonly requiredContentRoot?: boolean;\n    readonly extensions: readonly string[];\n    readonly model: {\n        readonly description: string;\n        readonly proposalInstructions: string;\n    };\n    parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset;\n    serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent): NovelAssetMaterialization;\n    captureSelection(snapshot: AssetSnapshot, input: NovelSelectionInput, options: NovelSelectionCaptureOptions): CapturedNovelSelection;\n    modelText(snapshot: AssetSnapshot, selector?: NovelSelector): string;\n    prepareOperations(snapshot: AssetSnapshot, input: unknown): readonly NovelOperation[];\n    decodeOperations(value: unknown): readonly NovelOperation[];\n    materializeOperations(snapshot: AssetSnapshot, operations: readonly NovelOperation[]): NovelAssetMaterialization;\n}',
+  },
+  {
+    name: 'NovelAssetTypeMap',
+    declaration: 'export interface NovelAssetTypeMap {\n    \'manuscript.chapter\': {\n        readonly content: ManuscriptChapterContent;\n        readonly selectionInput: TextRangeSelectionInput;\n        readonly selector: TextRangeSelector;\n        readonly operation: ReplaceTextOperation;\n    };\n}',
   },
   {
     name: 'NovelChangeSetDescriptor',
-    declaration: 'export interface NovelChangeSetDescriptor {\n    readonly id: ChangeSetId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly summary: string;\n    readonly status: \'proposed\' | \'applying\' | \'applied\' | \'rejected\' | \'conflicted\';\n    readonly resultRevisionId?: RevisionId;\n    readonly operation: {\n        readonly kind: \'replace-text\';\n        readonly startUtf16: number;\n        readonly endUtf16: number;\n        readonly quoteHash: string;\n        readonly replacement: string;\n    };\n}',
-  },
-  {
-    name: 'NovelChapterDocument',
-    declaration: 'export interface NovelChapterDocument extends NovelAssetDescriptor {\n    readonly body: string;\n}',
+    declaration: 'export interface NovelChangeSetDescriptor {\n    readonly id: ChangeSetId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly assetType: string;\n    readonly baseRevisionId: RevisionId;\n    readonly summary: string;\n    readonly status: \'proposed\' | \'applying\' | \'applied\' | \'rejected\' | \'conflicted\';\n    readonly resultRevisionId?: RevisionId;\n    readonly operations: readonly NovelWireValue[];\n}',
   },
   {
     name: 'NovelOperation',
-    declaration: 'export type NovelOperation = ReplaceTextOperation;',
+    declaration: 'export type NovelOperation = NovelAssetTypeMap[NovelAssetType][\'operation\'];',
   },
   {
     name: 'NovelProjectDescriptor',
@@ -4018,11 +4068,27 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'NovelReferenceInput',
-    declaration: 'export interface NovelReferenceInput {\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector?: TextRangeSelector;\n    readonly label?: string;\n}',
+    declaration: 'export interface NovelReferenceInput {\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector?: NovelSelector;\n    readonly label?: string;\n}',
+  },
+  {
+    name: 'NovelSelectionCaptureOptions',
+    declaration: 'export interface NovelSelectionCaptureOptions {\n    readonly contextUnits: number;\n    readonly previewUnits: number;\n}',
   },
   {
     name: 'NovelSelectionDescriptor',
-    declaration: 'export interface NovelSelectionDescriptor {\n    readonly version: 1;\n    readonly id: SelectionRefId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: {\n        readonly kind: \'text-range\';\n        readonly startUtf16: number;\n        readonly endUtf16: number;\n        readonly quoteHash: string;\n        readonly prefix?: string;\n        readonly suffix?: string;\n    };\n    readonly preview?: string;\n    readonly mention: string;\n}',
+    declaration: 'export interface NovelSelectionDescriptor {\n    readonly version: 1;\n    readonly id: SelectionRefId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: NovelWireValue;\n    readonly preview?: string;\n    readonly mention: string;\n}',
+  },
+  {
+    name: 'NovelSelectionInput',
+    declaration: 'export type NovelSelectionInput = NovelAssetTypeMap[NovelAssetType][\'selectionInput\'];',
+  },
+  {
+    name: 'NovelSelector',
+    declaration: 'export type NovelSelector = NovelAssetTypeMap[NovelAssetType][\'selector\'];',
+  },
+  {
+    name: 'NovelWireValue',
+    declaration: 'export type NovelWireValue = null | boolean | number | string | NovelWireValue[] | {\n    [key: string]: NovelWireValue;\n};',
   },
   {
     name: 'ObjectJsonSchema',
@@ -4031,6 +4097,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'OneShotSubagentDescriptorData',
     declaration: 'export interface OneShotSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'one-shot\';\n    readonly label?: string;\n}',
+  },
+  {
+    name: 'ParsedNovelAsset',
+    declaration: 'export interface ParsedNovelAsset {\n    readonly id: AssetId;\n    readonly type: NovelAssetType;\n    readonly title: string;\n    readonly frontmatter: Readonly<Record<string, unknown>>;\n    readonly content: NovelAssetContent;\n    readonly source: unknown;\n}',
   },
   {
     name: 'PermissionSelect',
@@ -4273,16 +4343,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SandboxPolicyRequest {\n    session?: Session;\n    mode?: SandboxMode;\n}',
   },
   {
-    name: 'SaveChapterBodyRequest',
-    declaration: 'export interface SaveChapterBodyRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly body: string;\n}',
+    name: 'SaveAssetContentRequest',
+    declaration: 'export interface SaveAssetContentRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly content: NovelAssetContent;\n}',
   },
   {
     name: 'SaveImageAttachment',
     declaration: 'export interface SaveImageAttachment {\n    data: Uint8Array;\n    mediaType: ImageMediaType;\n    name?: string;\n}',
   },
   {
-    name: 'SaveNovelChapterRequest',
-    declaration: 'export interface SaveNovelChapterRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly body: string;\n}',
+    name: 'SaveNovelAssetRequest',
+    declaration: 'export interface SaveNovelAssetRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly content: NovelWireValue;\n}',
   },
   {
     name: 'SaveTextSpill',
@@ -4326,7 +4396,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SelectionRef',
-    declaration: 'export interface SelectionRef {\n    readonly version: 1;\n    readonly id: SelectionRefId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: TextRangeSelector;\n    readonly preview?: string;\n}',
+    declaration: 'export interface SelectionRef {\n    readonly version: 1;\n    readonly id: SelectionRefId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: NovelSelector;\n    readonly preview?: string;\n}',
   },
   {
     name: 'SelectionRefId',
@@ -4995,6 +5065,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TerminalWaitReason',
     declaration: 'export type TerminalWaitReason = \'stdin_read\' | \'inferred_idle\' | \'timeout\' | \'session_exit\';',
+  },
+  {
+    name: 'TextRangeSelectionInput',
+    declaration: 'export interface TextRangeSelectionInput {\n    readonly kind: \'text-range\';\n    readonly startUtf16: number;\n    readonly endUtf16: number;\n}',
   },
   {
     name: 'TextRangeSelector',

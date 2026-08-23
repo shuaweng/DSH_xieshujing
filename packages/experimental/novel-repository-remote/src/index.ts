@@ -14,6 +14,8 @@ import {
   type AssetId,
   type AssetSnapshot,
   type ChangeSet,
+  type NovelAssetContent,
+  type NovelSelectionInput,
   type NovelProjectSnapshot,
   type RevisionId,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
@@ -25,20 +27,22 @@ import type {
   CaptureNovelSelectionRequest,
   NovelAssetDescriptor,
   NovelChangeSetDescriptor,
-  NovelChapterDocument,
+  NovelAssetDocument,
   NovelProjectDescriptor,
   NovelSelectionDescriptor,
-  SaveNovelChapterRequest,
+  NovelWireValue,
+  SaveNovelAssetRequest,
 } from './types.ts'
 
 export type {
   CaptureNovelSelectionRequest,
   NovelAssetDescriptor,
   NovelChangeSetDescriptor,
-  NovelChapterDocument,
+  NovelAssetDocument,
   NovelProjectDescriptor,
   NovelSelectionDescriptor,
-  SaveNovelChapterRequest,
+  NovelWireValue,
+  SaveNovelAssetRequest,
 } from './types.ts'
 
 const DEFAULT_DESCRIPTOR_MAX_BYTES = 256 * 1024
@@ -97,7 +101,7 @@ export class NovelRepositoryRemote extends TypertRemoteService {
   }
 
   /**
-   * List the reconciled chapter catalog for the addressed Session project.
+   * List the reconciled Asset catalog for the addressed Session project.
    * @param agent - addressed Agent whose Session selects the project root.
    * @param signal - caller cancellation.
    * @returns browser-safe current Asset descriptors.
@@ -123,12 +127,12 @@ export class NovelRepositoryRemote extends TypertRemoteService {
   }
 
   /**
-   * Read one current or retained chapter body.
+   * Read one current or retained typed Asset document.
    * @param agent - addressed Agent whose Session selects the project root.
-   * @param assetId - stable chapter identity.
+   * @param assetId - stable Asset identity.
    * @param revisionId - exact retained Revision, or `null` for current.
    * @param signal - caller cancellation.
-   * @returns a browser-safe Revision-bound chapter document.
+   * @returns a browser-safe Revision-bound typed Asset document.
    */
   @Remote('asset')
   async asset(
@@ -136,7 +140,7 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     assetId: AssetId,
     revisionId: RevisionId | null,
     signal: AbortSignal,
-  ): Promise<NovelChapterDocument> {
+  ): Promise<NovelAssetDocument> {
     const project = await this.requireProject(agent, signal)
     const snapshot = await this.ctx.novelRepository.readAsset(
       project,
@@ -145,40 +149,46 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       signal,
       this.ctx.sandboxPolicy.resolve({ session: agent.session }),
     )
-    const result = chapterDocument(snapshot)
-    assertResponseBytes(result, this.responseMaxBytes, 'chapter document')
+    const result = assetDocument(snapshot)
+    assertResponseBytes(result, this.responseMaxBytes, 'Asset document')
     return result
   }
 
   /**
-   * Guardedly save an authored chapter body.
+   * Guardedly save one complete authored typed content value.
    * @param agent - addressed Agent whose Session selects the project root.
-   * @param request - stable target, base Revision, and complete replacement body.
+   * @param request - stable target, base Revision, and complete typed content.
    * @param signal - caller cancellation.
-   * @returns the new browser-safe Revision-bound chapter document.
+   * @returns the new browser-safe Revision-bound Asset document.
    */
-  @Remote('saveChapter')
-  async saveChapter(
+  @Remote('saveAsset')
+  async saveAsset(
     agent: Agent,
-    request: SaveNovelChapterRequest,
+    request: SaveNovelAssetRequest,
     signal: AbortSignal,
-  ): Promise<NovelChapterDocument> {
+  ): Promise<NovelAssetDocument> {
     const project = await this.requireProject(agent, signal)
-    const snapshot = await this.ctx.novelRepository.saveChapterBody(
+    const snapshot = await this.ctx.novelRepository.saveAssetContent(
       project,
-      request,
+      {
+        assetId: request.assetId,
+        baseRevisionId: request.baseRevisionId,
+        // The Remote codec proves lossless JSON; the exact type definition performs
+        // the semantic validation before any authored bytes are materialized.
+        content: request.content as unknown as NovelAssetContent,
+      },
       signal,
       this.ctx.sandboxPolicy.resolve({ session: agent.session }),
     )
-    const result = chapterDocument(snapshot)
-    assertResponseBytes(result, this.responseMaxBytes, 'chapter document')
+    const result = assetDocument(snapshot)
+    assertResponseBytes(result, this.responseMaxBytes, 'Asset document')
     return result
   }
 
   /**
-   * Freeze one exact selection over a retained chapter Revision.
+   * Freeze one exact type-defined selection over a retained Revision.
    * @param agent - addressed Agent whose Session selects the project root.
-   * @param request - exact Revision and UTF-16 body offsets.
+   * @param request - exact Revision and type-defined selection input.
    * @param signal - caller cancellation.
    * @returns a durable browser-safe SelectionRef.
    */
@@ -189,9 +199,20 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     signal: AbortSignal,
   ): Promise<NovelSelectionDescriptor> {
     const project = await this.requireProject(agent, signal)
-    const selection = await this.ctx.novelRepository.captureSelection(project, request, signal)
-    const result = {
-      ...selection,
+    const selection = await this.ctx.novelRepository.captureSelection(project, {
+      assetId: request.assetId,
+      revisionId: request.revisionId,
+      // As above, selection semantics belong to the registered exact Asset type.
+      selector: request.selector as unknown as NovelSelectionInput,
+    }, signal)
+    const result: NovelSelectionDescriptor = {
+      version: selection.version,
+      id: selection.id,
+      projectId: selection.projectId,
+      assetId: selection.assetId,
+      revisionId: selection.revisionId,
+      selector: wireValue(selection.selector, 'Selection selector'),
+      ...(selection.preview === undefined ? {} : { preview: selection.preview }),
       mention: formatNovelReferenceMention({
         projectId: selection.projectId,
         assetId: selection.assetId,
@@ -300,13 +321,13 @@ function assertResponseBytes(value: unknown, maxBytes: number, subject: string):
   }
 }
 
-function chapterDocument(snapshot: AssetSnapshot): NovelChapterDocument {
+function assetDocument(snapshot: AssetSnapshot): NovelAssetDocument {
   const novel = snapshot.frontmatter['novel']
   const title: unknown = typeof novel === 'object' && novel !== null && !Array.isArray(novel)
     ? Reflect.get(novel, 'title')
     : undefined
   if (typeof title !== 'string') {
-    throw new NovelRepositoryError('novel repository remote: chapter title is missing', 'NOVEL_HISTORY_CORRUPT')
+    throw new NovelRepositoryError('novel repository remote: Asset title is missing', 'NOVEL_HISTORY_CORRUPT')
   }
   return {
     id: snapshot.asset.id,
@@ -316,30 +337,58 @@ function chapterDocument(snapshot: AssetSnapshot): NovelChapterDocument {
     revisionId: snapshot.revisionId,
     contentHash: snapshot.contentHash,
     title,
-    body: snapshot.body,
+    content: wireValue(snapshot.content, 'Asset content'),
   }
 }
 
 function changeSetDescriptor(value: ChangeSet): NovelChangeSetDescriptor {
-  const [operation] = value.operations
-  if (operation === undefined || value.operations.length !== 1) {
-    throw new NovelRepositoryError('novel repository remote: ChangeSet operation is invalid', 'NOVEL_HISTORY_CORRUPT')
-  }
   return {
     id: value.id,
     projectId: value.projectId,
     assetId: value.assetId,
+    assetType: value.assetType,
     baseRevisionId: value.baseRevisionId,
     summary: value.summary,
     status: value.status,
     ...(value.resultRevisionId === undefined ? {} : { resultRevisionId: value.resultRevisionId }),
-    operation: {
-      kind: 'replace-text',
-      startUtf16: operation.selector.startUtf16,
-      endUtf16: operation.selector.endUtf16,
-      quoteHash: operation.selector.quoteHash,
-      replacement: operation.replacement,
-    },
+    operations: value.operations.map(operation => wireValue(operation, 'ChangeSet operation')),
+  }
+}
+
+function wireValue(value: unknown, subject: string, ancestors = new Set<object>(), depth = 0): NovelWireValue {
+  if (depth > 64) {
+    throw new NovelRepositoryError(`novel repository remote: ${subject} is nested too deeply`, 'NOVEL_HISTORY_CORRUPT')
+  }
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (Number.isFinite(value) && !Object.is(value, -0)) return value
+    throw new NovelRepositoryError(`novel repository remote: ${subject} contains a non-JSON number`, 'NOVEL_HISTORY_CORRUPT')
+  }
+  if (typeof value !== 'object') {
+    throw new NovelRepositoryError(`novel repository remote: ${subject} is not lossless JSON`, 'NOVEL_HISTORY_CORRUPT')
+  }
+  if (ancestors.has(value)) {
+    throw new NovelRepositoryError(`novel repository remote: ${subject} is cyclic`, 'NOVEL_HISTORY_CORRUPT')
+  }
+  ancestors.add(value)
+  try {
+    if (Array.isArray(value)) return value.map(item => wireValue(item, subject, ancestors, depth + 1))
+    const prototype = Object.getPrototypeOf(value) as unknown
+    if (prototype !== Object.prototype && prototype !== null) {
+      throw new NovelRepositoryError(`novel repository remote: ${subject} has a non-JSON object`, 'NOVEL_HISTORY_CORRUPT')
+    }
+    const output: Record<string, NovelWireValue> = Object.create(null) as Record<string, NovelWireValue>
+    for (const [key, item] of Object.entries(value)) {
+      Object.defineProperty(output, key, {
+        configurable: true,
+        enumerable: true,
+        value: wireValue(item, subject, ancestors, depth + 1),
+        writable: true,
+      })
+    }
+    return output
+  } finally {
+    ancestors.delete(value)
   }
 }
 

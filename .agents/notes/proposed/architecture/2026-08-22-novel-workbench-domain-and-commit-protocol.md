@@ -20,7 +20,7 @@ Current author content remains authoritative in the project files. `.novel/histo
 
 The existing `novel` Agent Preset remains a session-scoped writing capability and a source of persona and skill behavior. It does not own the workbench domain. The MVP adds a separate package-owned `novel-workbench` Preset that consumes Novel tools and omits raw mutation tools for formal asset roots; research and development Presets may retain generic filesystem and shell tools without gaining authority to commit Novel ChangeSets.
 
-PR1, PR2, and the PR3 MVP described below are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
+PR1, PR2, the PR3 MVP, and the PR4 asset type kernel described below are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
 
 This proposal extends the existing Profile, filesystem, Session-history, Remote, and client-presentation decisions. It supersedes none of them.
 
@@ -52,6 +52,16 @@ The explicit Novel Studio overlay disables the ordinary `ui-layout` root occupan
 
 PR3 does not add a file watcher or browser invalidation stream. Repository calls reconcile external files, and an accepted ChangeSet triggers an explicit workbench refetch. It also defers block ids, autosave cadence, search, additional asset types, multi-asset changes, automatic merge, a shipped CLI Profile template, and multi-Agent orchestration.
 
+## PR4 asset type kernel slice
+
+PR4 replaces the chapter-specific dispatch spread across the local Repository, context resolver, Remote projection, and browser canvas with two effect-scoped registries. Host `ctx.novelAssetTypes` owns uniquely named asset definitions; Client `ctx.novelAssetRenderers` owns uniquely named editor and Diff renderers. Duplicate registration fails at load, disposal removes the exact contribution, and lookup of an authored type without its required Host or Client contribution fails explicitly instead of falling back to a generic JSON or text editor.
+
+Each Host definition declares its Frontmatter type, accepted content root and extensions, parsed content value, model projection, selection validation, authored-save materialization, durable-operation decoding, and complete ChangeSet materialization. The Repository continues to own file containment, byte limits, Revision ancestry, guarded publication, ChangeSet authorization, and crash recovery; a type definition never performs filesystem or SQLite I/O. History schema version three records the target asset type with every ChangeSet so replay validates durable operations through the same registered definition without guessing from a mutable current file.
+
+The browser Remote exposes one bounded, lossless JSON envelope for Asset content, save requests, selectors, and ChangeSet operations. Host and Client registries own exact type semantics, so the generated Remote method set does not widen when a type is added. The root workbench selects a renderer by the document's declared type and keeps save, Context Commit Barrier, Agent mention insertion, and review authorization in the shared canvas. The initial `manuscript.chapter` Host definition and Client renderer preserve the PR3 text editor, UTF-16 selection, and `replace-text` behavior. A later asset package can add a Host definition and Client renderer without editing the local Repository, generic Novel tools, Remote gateway, or root workbench layout.
+
+PR4 does not add another authored asset type. `planning.outline` is the first intended proof that the registration API supports a structured content value, node selection, typed operations, and a non-text Diff without widening the shared services.
+
 ## Scope and invariants
 
 - `ProjectId`, `AssetId`, `RevisionId`, `SelectionRefId`, and `ChangeSetId` are opaque branded ids. A path, title, order, or database row number never becomes identity.
@@ -70,7 +80,7 @@ PR3 does not add a file watcher or browser invalidation stream. Repository calls
 | Data | Authority | Derived or cached form | Recovery rule |
 | --- | --- | --- | --- |
 | Project identity, format version, content roots | `novel.yaml` | Workspace detection result | Re-read the file; malformed configuration fails loud |
-| Current asset body and authored metadata | Asset Markdown/YAML file and Frontmatter | Parsed `AssetSnapshot` | Re-read exact bytes; never reconstruct current prose from an index |
+| Current typed Asset content and authored metadata | Asset Markdown/YAML file and Frontmatter | Parsed `AssetSnapshot` | Re-read exact bytes; never reconstruct current authored content from an index |
 | Asset path lookup and type catalog | Project scan | In-memory catalog; future `.novel/index.sqlite` | Delete and rebuild; duplicate ids block mutation |
 | Immutable Revision history | `.novel/history.sqlite` | Read cache | Migrate explicitly or refuse read-write open; never reset automatically |
 | ChangeSet and apply authorization | `.novel/history.sqlite` | Tool result metadata and browser cache | Refetch by `ChangeSetId`; replay state transitions idempotently |
@@ -120,7 +130,7 @@ type ContentHash = `sha256:${string}`
 interface Asset {
   readonly id: AssetId
   readonly projectId: ProjectId
-  readonly type: 'manuscript.chapter'
+  readonly type: NovelAssetType
   readonly projectRelativePath: string
 }
 
@@ -130,7 +140,7 @@ interface AssetSnapshot {
   readonly serializedUtf8: Uint8Array
   readonly contentHash: ContentHash
   readonly frontmatter: Readonly<Record<string, unknown>>
-  readonly body: string
+  readonly content: NovelAssetContent
 }
 
 interface AssetRevision {
@@ -150,7 +160,7 @@ interface SelectionRef {
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly selector: TextRangeSelector
+  readonly selector: NovelSelector
   readonly preview?: string
 }
 
@@ -167,6 +177,7 @@ interface ChangeSet {
   readonly id: ChangeSetId
   readonly projectId: ProjectId
   readonly assetId: AssetId
+  readonly assetType: NovelAssetType
   readonly baseRevisionId: RevisionId
   readonly operations: readonly NovelOperation[]
   readonly actor:
@@ -177,7 +188,7 @@ interface ChangeSet {
 }
 ```
 
-`Asset` is the current scanned catalog value: its path is mutable organization data, while its branded id remains identity across a rename. `AssetSnapshot` is an immutable parsed read model bound to one retained Revision; `frontmatter` and `body` are derived from `serializedUtf8`, never independent authorities. The Repository reconciles current file bytes into a Revision before exposing a Revision-bound snapshot. Provider-local `FsVersion` stays in the internal live observation used for guarded publication; it is neither durable nor sent across Remote.
+`Asset` is the current scanned catalog value: its path is mutable organization data, while its branded id remains identity across a rename. `AssetSnapshot` is an immutable parsed read model bound to one retained Revision; `frontmatter` and typed `content` are derived from `serializedUtf8`, never independent authorities. The Repository reconciles current file bytes into a Revision before exposing a Revision-bound snapshot. Provider-local `FsVersion` stays in the internal live observation used for guarded publication; it is neither durable nor sent across Remote.
 
 Revision ids are content-independent opaque identities. Version one encodes every content and quote hash as `sha256:` followed by exactly 64 lowercase hexadecimal digits over the named exact UTF-8 bytes, so journal comparisons remain stable across restarts and implementations. Full serialized snapshots are retained because correctness and restoration matter more than delta compression. Retention, compaction, export, and deduplication require a later decision with an explicit user-data policy.
 
@@ -235,7 +246,7 @@ Version one does not add a generic Router or Workbench registry. Those abstracti
 
 ## Model tools and browser presentation
 
-The first model-facing Consumers are `novel_list`, `novel_get`, and `novel_propose_changes`. `novel_list` discovers the current Session Project and returns current chapter metadata with canonical exact-Revision references, but no authored body. `novel_get` reads validated Asset or Selection references and returns bounded semantic content plus its UTF-16 length. `novel_propose_changes` accepts Revision-bound UTF-16 offsets while the trusted Repository freezes the range and computes its quote hash; the tool records a ChangeSet and returns its stable id, but cannot apply the proposal.
+The first model-facing Consumers are `novel_list`, `novel_get`, and `novel_propose_changes`. `novel_list` discovers the current Session Project and returns current typed Asset metadata with canonical exact-Revision references, but no authored content. `novel_get` reads validated Asset or Selection references and returns the exact registered model projection plus type-specific proposal instructions. `novel_propose_changes` accepts a Revision-bound, type-defined JSON operation envelope; the registered Host definition validates and enriches it with any required integrity data before the Repository records a ChangeSet. The tool returns the stable ChangeSet id but cannot apply the proposal.
 
 The ChangeSet id and target summary live in JSON-serializable tool `meta`. The Novel client registers the keyed `tool.call.toolview` entry for `novel_propose_changes`, renders the durable proposal on replay, and calls Novel Remote methods for show, apply, or reject. With the client plugin absent, the ordinary generic tool row remains a readable fallback. Browser invalidation events contain project, asset, Revision, or ChangeSet ids and are explicitly admitted by the Remote-event allowlist; clients refetch after an event or reconnect.
 
@@ -245,7 +256,7 @@ Session-aware Remote Consumers resolve `ctx.sandboxPolicy` with the addressed Ag
 
 ## Deferred work
 
-- Additional asset types, including outlines, characters, ideas, scenes, timelines, relations, and view definitions.
+- Additional asset types, including outlines, characters, ideas, scenes, timelines, relations, and view definitions; PR4 supplies their registration path but no additional type.
 - A persistent disposable search index, full-text search, semantic search, inferred mentions, and reverse relations. `novel_list` is only bounded catalog discovery and does not satisfy these search capabilities.
 - File watching, remote filesystem parity, multiple concurrent Host writers, collaboration, and CRDT positions.
 - Persistent block ids, fuzzy relocation, three-way merge, multi-asset ChangeSets, branches, and cross-project references.

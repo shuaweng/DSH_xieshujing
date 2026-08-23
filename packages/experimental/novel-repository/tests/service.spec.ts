@@ -15,9 +15,10 @@ import NovelRepository, {
   type ChangeSetAuthorization,
   type NovelProjectSnapshot,
   type ProposeChangeSetRequest,
-  type SaveChapterBodyRequest,
+  type SaveAssetContentRequest,
   type SelectionRef,
 } from '../src/index.ts'
+import NovelAssetTypeRegistry, { type NovelAssetTypeDefinition } from '../src/asset-types.ts'
 
 class StubNovelRepository extends NovelRepository {
   override discoverProject(_root: FsTarget): Promise<NovelProjectSnapshot | undefined> {
@@ -32,9 +33,9 @@ class StubNovelRepository extends NovelRepository {
     return Promise.reject(new Error('not configured'))
   }
 
-  override saveChapterBody(
+  override saveAssetContent(
     _project: NovelProjectSnapshot,
-    _request: SaveChapterBodyRequest,
+    _request: SaveAssetContentRequest,
   ): Promise<AssetSnapshot> {
     return Promise.reject(new Error('not configured'))
   }
@@ -107,5 +108,65 @@ describe('NovelRepository service definition', () => {
     const ctx = new Context()
     await ctx.plugin(StubNovelRepository)
     await expect(ctx.plugin(StubNovelRepository)).rejects.toThrow(/registered/)
+  })
+})
+
+describe('NovelAssetTypeRegistry', () => {
+  const definition = {
+    type: 'manuscript.chapter',
+    contentRoot: 'manuscript',
+    extensions: ['.md'],
+    model: { description: 'chapter', proposalInstructions: 'replace selected text' },
+    parse: () => { throw new Error('unused') },
+    serializeContent: () => { throw new Error('unused') },
+    captureSelection: () => { throw new Error('unused') },
+    modelText: () => 'unused',
+    prepareOperations: () => [],
+    decodeOperations: () => [],
+    materializeOperations: () => { throw new Error('unused') },
+  } satisfies NovelAssetTypeDefinition
+
+  it('owns exact type contributions for their caller fiber lifetime', async () => {
+    const ctx = new Context()
+    const registryFiber = ctx.plugin(NovelAssetTypeRegistry)
+    await registryFiber
+    const first = ctx.plugin({
+      inject: ['novelAssetTypes'],
+      apply(scope: Context) { scope.novelAssetTypes.register(definition) },
+    })
+    await first
+    const secondDefinition = { ...definition, type: 'bible.test', contentRoot: 'bible' } as never
+    const second = ctx.plugin({
+      inject: ['novelAssetTypes'],
+      apply(scope: Context) { scope.novelAssetTypes.register(secondDefinition) },
+    })
+    await second
+
+    expect(ctx.novelAssetTypes.list().map(value => value.type)).toEqual(['bible.test', 'manuscript.chapter'])
+    expect(ctx.novelAssetTypes.get('bible.test')).toBe(secondDefinition)
+    await expect(ctx.plugin({
+      inject: ['novelAssetTypes'],
+      apply(scope: Context) { scope.novelAssetTypes.register(definition) },
+    })).rejects.toThrow(/already registered/u)
+
+    await second.dispose()
+    expect(() => ctx.novelAssetTypes.get('bible.test')).toThrow(/no registered Host definition/u)
+    expect(ctx.novelAssetTypes.get('manuscript.chapter')).toBe(definition)
+    await first.dispose()
+    await registryFiber.dispose()
+  })
+
+  it('rejects ambiguous or incomplete registrations', async () => {
+    const ctx = new Context()
+    await ctx.plugin(NovelAssetTypeRegistry)
+    for (const invalid of [
+      { ...definition, type: 'Chapter' },
+      { ...definition, extensions: [] },
+      { ...definition, requiredContentRoot: 'yes' },
+      { ...definition, model: { description: '', proposalInstructions: 'x' } },
+      { ...definition, parse: undefined },
+    ]) {
+      expect(() => ctx.novelAssetTypes.register(invalid as never)).toThrow()
+    }
   })
 })

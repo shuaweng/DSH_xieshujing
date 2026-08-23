@@ -8,9 +8,9 @@ This experimental Consumer gives a Novel Agent exact-read and proposal-only muta
 
 ## Behavior
 
-- `novel_list` discovers the Novel Project at the owning Session working directory and returns its current chapter catalog with canonical exact-Revision `dsh-novel:` references. It exposes identities and metadata, not manuscript bodies.
-- `novel_get` accepts canonical `dsh-novel:` references, reads only their retained Revisions through `NovelContextResolver`, and returns each body's exact UTF-16 length for safe range selection.
-- `novel_propose_changes` accepts one exact chapter, base Revision, UTF-16 range, replacement, and summary. It freezes and quote-hashes that range inside the Repository before durably creating a single-asset `ChangeSet`; it never applies the proposal.
+- `novel_list` discovers the Novel Project at the owning Session working directory and returns its current typed Asset catalog with canonical exact-Revision `dsh-novel:` references. It exposes identities and metadata, not authored content.
+- `novel_get` accepts canonical references, reads only retained Revisions, and returns the Asset type plus its registered proposal instructions and exact model projection.
+- `novel_propose_changes` accepts one exact Asset, base Revision, type-defined operation envelope, and summary. The registered Host definition validates and enriches those operations before the Repository durably creates a single-asset `ChangeSet`; it never applies the proposal.
 - Proposal results carry JSON-serializable `novel-change-set` presentation metadata so the browser can restore a review card from Session replay.
 - The package adds a short system-prompt section explaining Revision authority and proposal-only semantics. It registers no shell, SQL, generic read, or generic write tools.
 - All three tools require an owning Agent Session and use its working directory and Session-bound Novel Project rules.
@@ -33,7 +33,7 @@ The tool catalog is stable for every Session using the Novel Workbench Preset, s
 
 ## Known Limitations and Deferred Work
 
-- **Catalog discovery only** — `novel_list` lists current chapter identities, while full-text search, relations, create, present, and delegation tools are deferred.
-- **One operation** — proposals support one `replace-text` operation over one chapter; multi-range and multi-asset ChangeSets are deferred.
+- **Catalog discovery only** — `novel_list` lists current Asset identities, while full-text search, relations, create, present, and delegation tools are deferred.
+- **One shipped operation adapter** — the tool is type-driven, but only one chapter `replace-text` input is installed; multi-range and multi-asset ChangeSets are deferred.
 - **No apply authority** — only the browser Remote can accept or reject a proposal; the model cannot commit it.
 - **No semantic search** — the model can discover canonical chapter references with `novel_list`, but related-content retrieval still requires a future search Consumer.

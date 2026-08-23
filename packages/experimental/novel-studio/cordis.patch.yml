@@ -16,6 +16,9 @@
     - id: novel-studio-paths
       name: '@deepseek-ai/dsh-experimental-novel-studio'
 
+    - id: novel-asset-types
+      name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
+
     - id: novel-repository-local
       name: '@deepseek-ai/dsh-experimental-novel-repository-local'
 

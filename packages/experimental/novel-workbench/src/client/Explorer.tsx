@@ -5,7 +5,7 @@ import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepsee
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   NovelAssetDescriptor,
-  NovelChapterDocument,
+  NovelAssetDocument,
   NovelProjectDescriptor,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type { createNovelWorkbenchStore } from './store.ts'
@@ -13,7 +13,7 @@ import css from './workbench.module.css'
 
 export interface ExplorerInjected {
   load: (sessionId: SessionId) => Promise<{ project?: NovelProjectDescriptor; assets: readonly NovelAssetDescriptor[] }>
-  open: (sessionId: SessionId, assetId: string) => Promise<NovelChapterDocument>
+  open: (sessionId: SessionId, assetId: string) => Promise<NovelAssetDocument>
   onRefresh: (listener: () => void) => () => void
 }
 
@@ -79,7 +79,7 @@ export function Explorer({ useSessions, useStore, actions, load, open, onRefresh
             onClick={() => { openAsset(asset.id) }}
           >
             <span>{asset.title}</span>
-            <small>{asset.projectRelativePath}</small>
+            <small>{asset.type} · {asset.projectRelativePath}</small>
           </button>
         ))}
       </nav>

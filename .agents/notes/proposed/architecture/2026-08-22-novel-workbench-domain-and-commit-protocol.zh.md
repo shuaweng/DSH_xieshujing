@@ -20,7 +20,7 @@ Status: proposed
 
 现有 `novel` Agent Preset 继续作为 Session 级写作能力，并提供 persona 和 skill 行为，但不拥有工作台领域。MVP 增加独立的包内 `novel-workbench` Preset，它使用 Novel 工具，并从正式资产根目录的能力中移除原始修改工具；研究和开发 Preset 可以保留通用文件系统与 shell 工具，但不会因此取得提交 Novel ChangeSet 的权限。
 
-PR1、PR2 和下文所述 PR3 MVP 已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照和编排能力。
+PR1、PR2、下文所述 PR3 MVP 和 PR4 Asset 类型内核已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照和编排能力。
 
 本提案扩展现有 Profile、文件系统、Session 历史、Remote 和客户端展示决策，不取代其中任何一项。
 
@@ -52,6 +52,16 @@ PR3 增加历史 Schema 版本二，其中包含持久单资产 ChangeSet 和 ap
 
 PR3 不添加文件 watcher 或浏览器失效事件流。Repository 调用会协调外部文件，接受 ChangeSet 后会显式重新获取工作台数据。Block id、自动保存节奏、搜索、更多资产类型、多资产变更、自动合并、已发布 CLI Profile template 和多 Agent 编排均暂缓。
 
+## PR4 资产类型内核切片
+
+PR4 用两个随 effect 生命周期管理的 Registry，替换分散在本地 Repository、上下文解析器、Remote 投影和浏览器画布中的章节专用分派。Host `ctx.novelAssetTypes` 拥有名称唯一的资产定义；Client `ctx.novelAssetRenderers` 拥有名称唯一的编辑器与 Diff Renderer。重复注册在加载时失败，dispose 会移除精确贡献；作者资产缺少所需 Host 或 Client 贡献时明确失败，不回退到通用 JSON 或文本编辑器。
+
+每个 Host 定义声明 Frontmatter 类型、可接受的内容根与扩展名、解析后的内容值、模型投影、选区校验、作者保存物化、持久操作解码和完整 ChangeSet 物化。Repository 继续拥有文件 containment、字节上限、Revision 父链、带守卫发布、ChangeSet 授权与崩溃恢复；类型定义绝不执行文件系统或 SQLite I/O。历史 Schema 版本三随每个 ChangeSet 记录目标资产类型，因此重放会通过同一个已注册定义校验持久操作，而不是根据可变当前文件猜测。
+
+浏览器 Remote 为 Asset 内容、保存请求、selector 和 ChangeSet operation 暴露同一个有边界、无损的 JSON 信封。Host 与 Client 注册表拥有精确类型语义，因此新增类型不会扩展生成的 Remote 方法集合。根工作台按文档声明类型选择 Renderer，并把保存、Context Commit Barrier、Agent 引用插入与审阅授权保留在共享画布中。首个 `manuscript.chapter` Host 定义和 Client Renderer 保持 PR3 的文本编辑器、UTF-16 选区与 `replace-text` 行为。后续资产包可以增加 Host 定义与 Client Renderer，无需修改本地 Repository、通用 Novel 工具、Remote Gateway 或工作台根布局。
+
+PR4 不增加另一种作者资产。`planning.outline` 将作为首个验证：注册 API 能支持结构化内容值、节点选区、类型化操作和非文本 Diff，而无需扩大共享 Service。
+
 ## 范围与不变量
 
 - `ProjectId`、`AssetId`、`RevisionId`、`SelectionRefId` 和 `ChangeSetId` 都是不透明品牌 id。路径、标题、顺序或数据库行号绝不成为身份。
@@ -70,7 +80,7 @@ PR3 不添加文件 watcher 或浏览器失效事件流。Repository 调用会�
 | 数据 | 权威 | 派生或缓存形式 | 恢复规则 |
 | --- | --- | --- | --- |
 | 项目身份、格式版本、内容根目录 | `novel.yaml` | Workspace 识别结果 | 重新读取文件；配置损坏时快速失败 |
-| 当前资产正文与作者元数据 | 资产 Markdown/YAML 文件和 Frontmatter | 已解析 `AssetSnapshot` | 重新读取精确字节；绝不从索引重建当前正文 |
+| 当前类型化 Asset 内容与作者元数据 | 资产 Markdown/YAML 文件和 Frontmatter | 已解析 `AssetSnapshot` | 重新读取精确字节；绝不从索引重建当前作者内容 |
 | 资产路径查找与类型目录 | 项目扫描 | 内存目录；未来 `.novel/index.sqlite` | 删除并重建；重复 id 阻止修改 |
 | 不可变 Revision 历史 | `.novel/history.sqlite` | 读取缓存 | 显式迁移或拒绝读写打开；绝不自动重置 |
 | ChangeSet 与应用授权 | `.novel/history.sqlite` | 工具结果元数据和浏览器缓存 | 按 `ChangeSetId` 重新获取；幂等回放状态转换 |
@@ -120,7 +130,7 @@ type ContentHash = `sha256:${string}`
 interface Asset {
   readonly id: AssetId
   readonly projectId: ProjectId
-  readonly type: 'manuscript.chapter'
+  readonly type: NovelAssetType
   readonly projectRelativePath: string
 }
 
@@ -130,7 +140,7 @@ interface AssetSnapshot {
   readonly serializedUtf8: Uint8Array
   readonly contentHash: ContentHash
   readonly frontmatter: Readonly<Record<string, unknown>>
-  readonly body: string
+  readonly content: NovelAssetContent
 }
 
 interface AssetRevision {
@@ -150,7 +160,7 @@ interface SelectionRef {
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly selector: TextRangeSelector
+  readonly selector: NovelSelector
   readonly preview?: string
 }
 
@@ -167,6 +177,7 @@ interface ChangeSet {
   readonly id: ChangeSetId
   readonly projectId: ProjectId
   readonly assetId: AssetId
+  readonly assetType: NovelAssetType
   readonly baseRevisionId: RevisionId
   readonly operations: readonly NovelOperation[]
   readonly actor:
@@ -177,7 +188,7 @@ interface ChangeSet {
 }
 ```
 
-`Asset` 是当前扫描得到的目录值：路径属于可变的组织数据，而品牌化 id 在重命名后仍保持身份。`AssetSnapshot` 是绑定一个已保留 Revision 的不可变解析读取模型；`frontmatter` 与 `body` 都从 `serializedUtf8` 派生，绝不是独立权威。Repository 会先把当前文件字节核对为 Revision，再暴露绑定 Revision 的 snapshot。提供方本地 `FsVersion` 只保留在用于带守卫发布的内部实时观察中；它既不持久化，也不跨 Remote 发送。
+`Asset` 是当前扫描得到的目录值：路径属于可变的组织数据，而品牌化 id 在重命名后仍保持身份。`AssetSnapshot` 是绑定一个已保留 Revision 的不可变解析读取模型；`frontmatter` 与类型化 `content` 都从 `serializedUtf8` 派生，绝不是独立权威。Repository 会先把当前文件字节核对为 Revision，再暴露绑定 Revision 的 snapshot。提供方本地 `FsVersion` 只保留在用于带守卫发布的内部实时观察中；它既不持久化，也不跨 Remote 发送。
 
 Revision id 是与内容无关的不透明身份。版本一把每个内容哈希和引文哈希编码为 `sha256:` 加恰好 64 位小写十六进制字符，输入是相应字段命名的精确 UTF-8 字节，因此日志比较在重启和不同实现之间保持稳定。系统保留完整序列化快照，因为正确性和还原能力比增量压缩更重要。保留策略、压缩、导出和去重需要后续决策，并明确用户数据策略。
 
@@ -235,7 +246,7 @@ CLI 会把自带 Preset 根追加在 Profile 组合贡献的全部根之后，�
 
 ## 模型工具与浏览器展示
 
-首批模型 Consumer 是 `novel_list`、`novel_get` 和 `novel_propose_changes`。`novel_list` 发现当前 Session Project，返回带规范精确 Revision 引用的当前章节元数据，但不返回正文。`novel_get` 读取已验证 Asset 或 Selection 引用，并返回有界语义内容及其 UTF-16 长度。`novel_propose_changes` 接收绑定 Revision 的 UTF-16 偏移，由可信 Repository 冻结该范围并计算 quote hash；工具记录 ChangeSet 并返回其稳定 id，但不能应用提案。
+首批模型 Consumer 是 `novel_list`、`novel_get` 和 `novel_propose_changes`。`novel_list` 发现当前 Session Project，返回带规范精确 Revision 引用的当前类型化 Asset 元数据，但不返回作者内容。`novel_get` 读取已验证 Asset 或 Selection 引用，并返回精确的已注册模型投影以及该类型的提案说明。`novel_propose_changes` 接收绑定 Revision、由类型定义的 JSON operation 信封；已注册 Host 定义会校验并补全必要的完整性数据，再由 Repository 记录 ChangeSet。工具返回稳定 ChangeSet id，但不能应用提案。
 
 ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客户端为 `novel_propose_changes` 注册带键 `tool.call.toolview` 配置项，在回放时渲染持久提案，并调用 Novel Remote 方法来显示、应用或拒绝。缺少客户端插件时，普通通用工具行仍作为可读回退。浏览器失效事件包含项目、资产、Revision 或 ChangeSet id，并显式进入 Remote event allowlist；客户端收到事件或重连后重新获取。
 
@@ -245,7 +256,7 @@ ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客
 
 ## 推迟工作
 
-- 其他资产类型，包括大纲、人物、灵感、场景、时间线、关系和视图定义。
+- 其他资产类型，包括大纲、人物、灵感、场景、时间线、关系和视图定义；PR4 提供注册路径，但不增加额外类型。
 - 持久可丢弃搜索索引、全文搜索、语义搜索、推断提及和反向关系。`novel_list` 只是有边界的目录发现，不满足这些搜索能力。
 - 文件监听、远程文件系统一致性、多个并发 Host 写入者、协作和 CRDT 位置。
 - 永久块 id、模糊重定位、三方合并、多资产 ChangeSet、分支和跨项目引用。

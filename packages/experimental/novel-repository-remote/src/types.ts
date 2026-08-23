@@ -7,7 +7,8 @@ import type {
   RevisionId,
   SelectionRefId,
 } from '@deepseek-ai/dsh-experimental-novel-repository/brand'
-import type { NovelAssetType } from '@deepseek-ai/dsh-experimental-novel-repository/types'
+/** Closed JSON wire value; exact Asset schemas remain owned by the two registries. */
+export type NovelWireValue = null | boolean | number | string | NovelWireValue[] | { [key: string]: NovelWireValue }
 
 /** Read-only project discovery result with no filesystem capability identity. */
 export interface NovelProjectDescriptor {
@@ -29,7 +30,7 @@ export interface NovelProjectDescriptor {
 export interface NovelAssetDescriptor {
   readonly id: AssetId
   readonly projectId: ProjectId
-  readonly type: NovelAssetType
+  readonly type: string
   readonly projectRelativePath: string
   readonly revisionId: RevisionId
   /** Canonical `sha256:` content hash validated by the Host repository. */
@@ -37,24 +38,23 @@ export interface NovelAssetDescriptor {
   readonly title: string
 }
 
-/** Browser-safe chapter body bound to one exact Revision. */
-export interface NovelChapterDocument extends NovelAssetDescriptor {
-  readonly body: string
+/** Browser-safe typed Asset content bound to one exact Revision. */
+export interface NovelAssetDocument extends NovelAssetDescriptor {
+  readonly content: NovelWireValue
 }
 
-/** Guarded browser save of the chapter body only. */
-export interface SaveNovelChapterRequest {
+/** Guarded browser save of one complete typed Asset content value. */
+export interface SaveNovelAssetRequest {
   readonly assetId: AssetId
   readonly baseRevisionId: RevisionId
-  readonly body: string
+  readonly content: NovelWireValue
 }
 
 /** Exact browser range to freeze after any required save completes. */
 export interface CaptureNovelSelectionRequest {
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly startUtf16: number
-  readonly endUtf16: number
+  readonly selector: NovelWireValue
 }
 
 /** Frozen SelectionRef returned directly to the browser. */
@@ -64,15 +64,7 @@ export interface NovelSelectionDescriptor {
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly selector: {
-    readonly kind: 'text-range'
-    readonly startUtf16: number
-    readonly endUtf16: number
-    /** Canonical `sha256:` quote hash validated by the Host repository. */
-    readonly quoteHash: string
-    readonly prefix?: string
-    readonly suffix?: string
-  }
+  readonly selector: NovelWireValue
   readonly preview?: string
   /** Canonical mention inserted into the Agent composer after the commit barrier. */
   readonly mention: string
@@ -83,15 +75,10 @@ export interface NovelChangeSetDescriptor {
   readonly id: ChangeSetId
   readonly projectId: ProjectId
   readonly assetId: AssetId
+  readonly assetType: string
   readonly baseRevisionId: RevisionId
   readonly summary: string
   readonly status: 'proposed' | 'applying' | 'applied' | 'rejected' | 'conflicted'
   readonly resultRevisionId?: RevisionId
-  readonly operation: {
-    readonly kind: 'replace-text'
-    readonly startUtf16: number
-    readonly endUtf16: number
-    readonly quoteHash: string
-    readonly replacement: string
-  }
+  readonly operations: readonly NovelWireValue[]
 }

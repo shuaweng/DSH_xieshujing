@@ -13,7 +13,7 @@ import NovelRepository, {
   type ChangeSetAuthorization,
   type NovelProjectSnapshot,
   type ProposeChangeSetRequest,
-  type SaveChapterBodyRequest,
+  type SaveAssetContentRequest,
   type SelectionRef,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs'
@@ -41,9 +41,9 @@ class StubNovelRepository extends NovelRepository {
     return Promise.resolve(this.snapshot)
   }
 
-  override saveChapterBody(_project: NovelProjectSnapshot, request: SaveChapterBodyRequest): Promise<AssetSnapshot> {
+  override saveAssetContent(_project: NovelProjectSnapshot, request: SaveAssetContentRequest): Promise<AssetSnapshot> {
     if (this.snapshot === undefined) throw new Error('snapshot not configured')
-    return Promise.resolve({ ...this.snapshot, body: request.body })
+    return Promise.resolve({ ...this.snapshot, content: request.content })
   }
 
   override captureSelection(_project: NovelProjectSnapshot, _request: CaptureSelectionRequest): Promise<SelectionRef> {
@@ -221,7 +221,7 @@ describe('NovelRepositoryRemote Host service', () => {
       serializedUtf8: new TextEncoder().encode('serialized bytes stay Host-only'),
       contentHash: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       frontmatter: { novel: { title: '第一章' } },
-      body: '旧正文',
+      content: { kind: 'manuscript', body: '旧正文' },
     }
     repository.snapshot = snapshot
     repository.assets = [{
@@ -230,7 +230,7 @@ describe('NovelRepositoryRemote Host service', () => {
       contentHash: snapshot.contentHash,
       title: '第一章',
     }]
-    repository.selection = {
+    const selection: SelectionRef = {
       version: 1,
       id: SelectionRefId('selection-1'),
       projectId: ProjectId('project-1'),
@@ -244,14 +244,16 @@ describe('NovelRepositoryRemote Host service', () => {
       },
       preview: '旧',
     }
+    repository.selection = selection
     repository.changeSetValue = {
       id: ChangeSetId('changeset-1'),
       projectId: ProjectId('project-1'),
       assetId: AssetId('chapter-1'),
+      assetType: 'manuscript.chapter',
       baseRevisionId: RevisionId('revision-1'),
       operations: [{
         kind: 'replace-text',
-        selector: repository.selection.selector,
+        selector: selection.selector,
         replacement: '新',
       }],
       actor: { kind: 'agent', sessionId: 'agent-1' as ChangeSetAuthorization['sessionId'] },
@@ -273,28 +275,29 @@ describe('NovelRepositoryRemote Host service', () => {
       title: '第一章',
     }])
     await expect(ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-1'), null, signal))
-      .resolves.toMatchObject({ title: '第一章', body: '旧正文' })
-    await expect(ctx.novelRepositoryRemote.saveChapter(agent, {
+      .resolves.toMatchObject({ title: '第一章', content: { kind: 'manuscript', body: '旧正文' } })
+    await expect(ctx.novelRepositoryRemote.saveAsset(agent, {
       assetId: AssetId('chapter-1'),
       baseRevisionId: RevisionId('revision-1'),
-      body: '新正文',
-    }, signal)).resolves.toMatchObject({ title: '第一章', body: '新正文' })
+      content: { kind: 'manuscript', body: '新正文' },
+    }, signal)).resolves.toMatchObject({ title: '第一章', content: { kind: 'manuscript', body: '新正文' } })
     const captured = await ctx.novelRepositoryRemote.captureSelection(agent, {
       assetId: AssetId('chapter-1'),
       revisionId: RevisionId('revision-1'),
-      startUtf16: 0,
-      endUtf16: 1,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
     }, signal)
     expect(captured).toMatchObject({ id: 'selection-1', preview: '旧' })
     expect(captured.mention).toMatch(/^@\[旧\]\(dsh-novel:/u)
-    const { preview: _preview, ...selectionWithoutPreview } = repository.selection
+    const { preview: _preview, ...selectionWithoutPreview } = selection
     repository.selection = selectionWithoutPreview
     const capturedWithoutPreview = await ctx.novelRepositoryRemote.captureSelection(agent, {
-      assetId: AssetId('chapter-1'), revisionId: RevisionId('revision-1'), startUtf16: 0, endUtf16: 1,
+      assetId: AssetId('chapter-1'),
+      revisionId: RevisionId('revision-1'),
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
     }, signal)
     expect(capturedWithoutPreview.mention).toMatch(/^@\[chapter-1\]\(dsh-novel:/u)
     await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))
-      .resolves.toMatchObject({ id: 'changeset-1', status: 'proposed', operation: { replacement: '新' } })
+      .resolves.toMatchObject({ id: 'changeset-1', status: 'proposed', operations: [{ replacement: '新' }] })
     await expect(ctx.novelRepositoryRemote.applyChangeSet(agent, ChangeSetId('changeset-1'), signal))
       .resolves.toMatchObject({ status: 'applied', resultRevisionId: 'revision-2' })
     await expect(ctx.novelRepositoryRemote.rejectChangeSet(agent, ChangeSetId('changeset-1'), signal))
@@ -305,16 +308,16 @@ describe('NovelRepositoryRemote Host service', () => {
     if (!storedChangeSet) throw new Error('expected seeded ChangeSet')
     repository.changeSetValue = { ...storedChangeSet, operations: [] }
     await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))
-      .rejects.toMatchObject({ code: 'NOVEL_HISTORY_CORRUPT' })
+      .resolves.toMatchObject({ operations: [] })
     repository.changeSetValue = {
       ...storedChangeSet,
       operations: [
-        { kind: 'replace-text', selector: repository.selection.selector, replacement: '一' },
-        { kind: 'replace-text', selector: repository.selection.selector, replacement: '二' },
+        { kind: 'replace-text', selector: selection.selector, replacement: '一' },
+        { kind: 'replace-text', selector: selection.selector, replacement: '二' },
       ],
     }
     await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))
-      .rejects.toMatchObject({ code: 'NOVEL_HISTORY_CORRUPT' })
+      .resolves.toMatchObject({ operations: [{ replacement: '一' }, { replacement: '二' }] })
 
     await remoteFiber.dispose()
     await repositoryFiber.dispose()
@@ -430,7 +433,7 @@ describe('NovelRepositoryRemote Host service', () => {
       serializedUtf8: new Uint8Array(),
       contentHash: repository.assets[0]!.contentHash,
       frontmatter: { novel: [] },
-      body: 'body',
+      content: { kind: 'manuscript', body: 'body' },
     }
     await expect(ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-1'), null, signal))
       .rejects.toMatchObject({ code: 'NOVEL_HISTORY_CORRUPT' })

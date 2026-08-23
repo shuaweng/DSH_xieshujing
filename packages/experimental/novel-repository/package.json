@@ -24,6 +24,10 @@
       "types": "./lib/types/brand.d.ts",
       "default": "./lib/types/brand.js"
     },
+    "./asset-types": {
+      "types": "./lib/types/asset-types.d.ts",
+      "default": "./lib/types/asset-types.js"
+    },
     "./types": {
       "types": "./lib/types/types.d.ts",
       "default": "./lib/types/types.js"

@@ -69,6 +69,37 @@ MVP 支持一个 `manuscript.chapter` 编辑器、一个活动 UTF-16 选区，�
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxnovelassettypes--novelassettyperegistry"></a>
+
+### `ctx.novelAssetTypes` — `NovelAssetTypeRegistry`
+
+Effect-scoped Host registry of exact authored Asset type definitions.
+
+```ts cordis-catalog
+/**
+ * Register one exact type for the calling plugin lifetime.
+ * @param definition - parser, selection, model, and mutation behavior for one type.
+ * @returns an idempotent disposer that removes this exact contribution.
+ */
+register(definition: NovelAssetTypeDefinition): () => void
+
+/**
+ * Resolve one required type definition.
+ * @param type - exact Frontmatter type.
+ * @returns the registered definition.
+ * @throws {NovelRepositoryError} when the Project declares an unavailable type.
+ */
+get(type: string): NovelAssetTypeDefinition
+
+/**
+ * List definitions in deterministic type order for project scanning.
+ * @returns a stable copy of current registrations.
+ */
+list(): readonly NovelAssetTypeDefinition[]
+```
+
+Source: [`packages/experimental/novel-repository/src/asset-types.ts`](../../packages/experimental/novel-repository/src/asset-types.ts)
+
 <a id="ctxnovelcontextresolver--novelcontextresolver"></a>
 
 ### `ctx.novelContextResolver` — `NovelContextResolver`
@@ -138,20 +169,20 @@ abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandbo
 abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
 
 /**
- * Guardedly publish a user-authored chapter body and retain its exact new Revision.
+ * Guardedly publish user-authored typed content and retain its exact new Revision.
  * @param project - validated Project declaration returned by this provider.
- * @param request - target, current base Revision, and full replacement body.
+ * @param request - target, current base Revision, and full typed replacement content.
  * @param signal - optional cancellation before filesystem publication.
  * @param sandboxPolicy - optional per-call policy governing authored-file publication and recovery.
  * @returns the committed exact new head.
  * @throws {NovelRepositoryError} when the base is stale or the resulting asset is invalid.
  */
-abstract saveChapterBody( project: NovelProjectSnapshot, request: SaveChapterBodyRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
+abstract saveAssetContent( project: NovelProjectSnapshot, request: SaveAssetContentRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
 
 /**
- * Freeze one exact non-empty UTF-16 body range without rereading mutable latest content.
+ * Freeze one exact type-defined selection without rereading mutable latest content.
  * @param project - validated Project declaration returned by this provider.
- * @param request - retained Revision and body offsets to validate.
+ * @param request - retained Revision and type-defined selection input to validate.
  * @param signal - optional cancellation for the history read.
  * @returns immutable selection identity, quote hash, and bounded diagnostics.
  */
@@ -218,7 +249,7 @@ Project browser projection consuming the provider-neutral repository service.
 @Remote('discover') async discover(agent: Agent, signal: AbortSignal): Promise<NovelProjectDescriptor | undefined>
 
 /**
- * List the reconciled chapter catalog for the addressed Session project.
+ * List the reconciled Asset catalog for the addressed Session project.
  * @param agent - addressed Agent whose Session selects the project root.
  * @param signal - caller cancellation.
  * @returns browser-safe current Asset descriptors.
@@ -226,28 +257,28 @@ Project browser projection consuming the provider-neutral repository service.
 @Remote('assets') async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]>
 
 /**
- * Read one current or retained chapter body.
+ * Read one current or retained typed Asset document.
  * @param agent - addressed Agent whose Session selects the project root.
- * @param assetId - stable chapter identity.
+ * @param assetId - stable Asset identity.
  * @param revisionId - exact retained Revision, or `null` for current.
  * @param signal - caller cancellation.
- * @returns a browser-safe Revision-bound chapter document.
+ * @returns a browser-safe Revision-bound typed Asset document.
  */
-@Remote('asset') async asset( agent: Agent, assetId: AssetId, revisionId: RevisionId | null, signal: AbortSignal, ): Promise<NovelChapterDocument>
+@Remote('asset') async asset( agent: Agent, assetId: AssetId, revisionId: RevisionId | null, signal: AbortSignal, ): Promise<NovelAssetDocument>
 
 /**
- * Guardedly save an authored chapter body.
+ * Guardedly save one complete authored typed content value.
  * @param agent - addressed Agent whose Session selects the project root.
- * @param request - stable target, base Revision, and complete replacement body.
+ * @param request - stable target, base Revision, and complete typed content.
  * @param signal - caller cancellation.
- * @returns the new browser-safe Revision-bound chapter document.
+ * @returns the new browser-safe Revision-bound Asset document.
  */
-@Remote('saveChapter') async saveChapter( agent: Agent, request: SaveNovelChapterRequest, signal: AbortSignal, ): Promise<NovelChapterDocument>
+@Remote('saveAsset') async saveAsset( agent: Agent, request: SaveNovelAssetRequest, signal: AbortSignal, ): Promise<NovelAssetDocument>
 
 /**
- * Freeze one exact selection over a retained chapter Revision.
+ * Freeze one exact type-defined selection over a retained Revision.
  * @param agent - addressed Agent whose Session selects the project root.
- * @param request - exact Revision and UTF-16 body offsets.
+ * @param request - exact Revision and type-defined selection input.
  * @param signal - caller cancellation.
  * @returns a durable browser-safe SelectionRef.
  */

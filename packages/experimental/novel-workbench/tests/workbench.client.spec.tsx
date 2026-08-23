@@ -10,7 +10,7 @@ import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {
   NovelChangeSetDescriptor,
-  NovelChapterDocument,
+  NovelAssetDocument,
   NovelSelectionDescriptor,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import { NovelFrame } from '../src/client/NovelFrame.tsx'
@@ -20,6 +20,10 @@ import { ChangeSetCard, type NovelChangeReview } from '../src/client/ChangeSetCa
 import { createNovelFrameStore, createNovelWorkbenchStore } from '../src/client/store.ts'
 import { zh } from '../src/client/locales.ts'
 import { apply as applyWorkbench, inject as workbenchInject } from '../src/client/index.ts'
+import {
+  manuscriptChapterRenderer,
+  NovelAssetRendererRegistry,
+} from '../src/client/renderers.tsx'
 import { apply as applyHost } from '../src/index.ts'
 import * as invariant from '../src/invariant.ts'
 
@@ -46,16 +50,18 @@ function useSessions<T>(select: (state: SessionListState) => T): T {
   })
 }
 
-function chapter(overrides: Partial<NovelChapterDocument> = {}): NovelChapterDocument {
+const renderers = { get: () => manuscriptChapterRenderer } as never
+
+function chapter(overrides: Partial<NovelAssetDocument> = {}): NovelAssetDocument {
   return {
-    id: 'asset-chapter-1' as NovelChapterDocument['id'],
-    projectId: 'project-1' as NovelChapterDocument['projectId'],
+    id: 'asset-chapter-1' as NovelAssetDocument['id'],
+    projectId: 'project-1' as NovelAssetDocument['projectId'],
     type: 'manuscript.chapter',
     projectRelativePath: 'manuscript/chapter-1.md',
-    revisionId: 'revision-1' as NovelChapterDocument['revisionId'],
+    revisionId: 'revision-1' as NovelAssetDocument['revisionId'],
     contentHash: `sha256:${'a'.repeat(64)}`,
     title: '第一章',
-    body: '旧句继续。',
+    content: { kind: 'manuscript', body: '旧句继续。' },
     ...overrides,
   }
 }
@@ -84,12 +90,16 @@ function changeSet(status: NovelChangeSetDescriptor['status'] = 'proposed'): Nov
     assetId: 'asset-chapter-1' as NovelChangeSetDescriptor['assetId'],
     baseRevisionId: 'revision-1' as NovelChangeSetDescriptor['baseRevisionId'],
     summary: '让句子更克制',
+    assetType: 'manuscript.chapter',
     status,
-    operation: {
-      kind: 'replace-text', startUtf16: 0, endUtf16: 2,
-      quoteHash: `sha256:${'c'.repeat(64)}`,
+    operations: [{
+      kind: 'replace-text',
+      selector: {
+        kind: 'text-range', startUtf16: 0, endUtf16: 2,
+        quoteHash: `sha256:${'c'.repeat(64)}`,
+      },
       replacement: '新句',
-    },
+    }],
   }
 }
 
@@ -132,10 +142,13 @@ describe('Canvas', () => {
     const store = createNovelWorkbenchStore().create()
     act(() => {
       store.actions.open(chapter())
-      store.actions.edit('新句继续。')
-      store.actions.select(0, 2)
+      store.actions.edit({ kind: 'manuscript', body: '新句继续。' })
+      store.actions.select({ kind: 'text-range', startUtf16: 0, endUtf16: 2 })
     })
-    const saved = chapter({ revisionId: 'revision-2' as NovelChapterDocument['revisionId'], body: '新句继续。' })
+    const saved = chapter({
+      revisionId: 'revision-2' as NovelAssetDocument['revisionId'],
+      content: { kind: 'manuscript', body: '新句继续。' },
+    })
     const frozen = selection()
     const order: string[] = []
     const save = vi.fn(async () => { order.push('save'); return saved })
@@ -150,6 +163,7 @@ describe('Canvas', () => {
       save={save}
       capture={capture}
       appendMention={appendMention}
+      renderers={renderers}
       t={t}
     />)
     fireEvent.click(view.getByText(zh.reference))
@@ -157,10 +171,11 @@ describe('Canvas', () => {
     await waitFor(() => { expect(appendMention).toHaveBeenCalledWith(SID, frozen.mention) })
     expect(order).toEqual(['save', 'capture', 'mention'])
     expect(save).toHaveBeenCalledWith(SID, {
-      assetId: saved.id, baseRevisionId: 'revision-1', body: '新句继续。',
+      assetId: saved.id, baseRevisionId: 'revision-1', content: { kind: 'manuscript', body: '新句继续。' },
     })
     expect(capture).toHaveBeenCalledWith(SID, {
-      assetId: saved.id, revisionId: saved.revisionId, startUtf16: 0, endUtf16: 2,
+      assetId: saved.id, revisionId: saved.revisionId,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 2 },
     })
     expect(view.getByText(/第一章 · 0–2/u)).toBeTruthy()
     expect(store.getSnapshot().document?.revisionId).toBe(saved.revisionId)
@@ -171,26 +186,30 @@ describe('Canvas', () => {
     const empty = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={vi.fn()} capture={vi.fn()} appendMention={vi.fn()} t={t}
+      renderers={renderers}
     />)
     expect(empty.getByText(zh.noChapter)).toBeTruthy()
     empty.unmount()
 
     act(() => {
       store.actions.open(chapter())
-      store.actions.edit('手动保存')
-      store.actions.select(1, 3)
+      store.actions.edit({ kind: 'manuscript', body: '手动保存' })
+      store.actions.select({ kind: 'text-range', startUtf16: 1, endUtf16: 3 })
     })
-    const save = vi.fn(async () => chapter({ body: '手动保存', revisionId: 'revision-2' as NovelChapterDocument['revisionId'] }))
+    const save = vi.fn(async () => chapter({
+      content: { kind: 'manuscript', body: '手动保存' },
+      revisionId: 'revision-2' as NovelAssetDocument['revisionId'],
+    }))
     const view = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      save={save} capture={vi.fn()} appendMention={vi.fn()} t={t}
+      save={save} capture={vi.fn()} appendMention={vi.fn()} renderers={renderers} t={t}
     />)
     fireEvent.click(view.getByText(zh.save))
     await waitFor(() => { expect(save).toHaveBeenCalledTimes(1) })
     await waitFor(() => { expect(view.getByText(zh.saved)).toBeTruthy() })
     expect(store.getSnapshot()).toMatchObject({
       dirty: false,
-      selection: { start: 1, end: 3 },
+      selection: { kind: 'text-range', startUtf16: 1, endUtf16: 3 },
       document: { revisionId: 'revision-2' },
     })
     expect((view.getByText(zh.reference).closest('button') as HTMLButtonElement).disabled).toBe(false)
@@ -200,14 +219,15 @@ describe('Canvas', () => {
     const store = createNovelWorkbenchStore().create()
     act(() => {
       store.actions.open(chapter())
-      store.actions.edit('尚未保存的新正文')
-      store.actions.select(0, 4)
+      store.actions.edit({ kind: 'manuscript', body: '尚未保存的新正文' })
+      store.actions.select({ kind: 'text-range', startUtf16: 0, endUtf16: 4 })
     })
     const capture = vi.fn()
     const appendMention = vi.fn()
     const view = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      save={async () => { throw new Error('workspace write denied') }} capture={capture} appendMention={appendMention} t={t}
+      save={async () => { throw new Error('workspace write denied') }} capture={capture} appendMention={appendMention}
+      renderers={renderers} t={t}
     />)
 
     fireEvent.click(view.getByText(zh.reference))
@@ -215,7 +235,10 @@ describe('Canvas', () => {
     await waitFor(() => { expect(view.getByRole('alert').textContent).toContain('workspace write denied') })
     expect(capture).not.toHaveBeenCalled()
     expect(appendMention).not.toHaveBeenCalled()
-    expect(store.getSnapshot()).toMatchObject({ dirty: true, selection: { start: 0, end: 4 } })
+    expect(store.getSnapshot()).toMatchObject({
+      dirty: true,
+      selection: { kind: 'text-range', startUtf16: 0, endUtf16: 4 },
+    })
   })
 
   it('keeps clean selections exact, handles editor events, and ignores incomplete context', async () => {
@@ -223,10 +246,13 @@ describe('Canvas', () => {
     const { preview: _preview, ...selectionWithoutPreview } = selection()
     const capture = vi.fn(async () => selectionWithoutPreview)
     const appendMention = vi.fn()
-    act(() => { store.actions.open(chapter()); store.actions.select(0, 2) })
+    act(() => {
+      store.actions.open(chapter())
+      store.actions.select({ kind: 'text-range', startUtf16: 0, endUtf16: 2 })
+    })
     const view = render(<Canvas
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      save={vi.fn()} capture={capture} appendMention={appendMention} t={t}
+      save={vi.fn()} capture={capture} appendMention={appendMention} renderers={renderers} t={t}
     />)
     fireEvent.click(view.getByText(zh.reference))
     await waitFor(() => { expect(capture).toHaveBeenCalledWith(SID, expect.objectContaining({ revisionId: 'revision-1' })) })
@@ -235,7 +261,11 @@ describe('Canvas', () => {
     fireEvent.change(textarea, { target: { value: '键盘编辑' } })
     Object.defineProperties(textarea, { selectionStart: { value: 1, configurable: true }, selectionEnd: { value: 3, configurable: true } })
     fireEvent.select(textarea)
-    expect(store.getSnapshot()).toMatchObject({ draft: '键盘编辑', dirty: true, selection: { start: 1, end: 3 } })
+    expect(store.getSnapshot()).toMatchObject({
+      draft: { kind: 'manuscript', body: '键盘编辑' },
+      dirty: true,
+      selection: { kind: 'text-range', startUtf16: 1, endUtf16: 3 },
+    })
     view.unmount()
 
     const noSession = render(<Canvas
@@ -243,7 +273,8 @@ describe('Canvas', () => {
       useSessions={((select: (state: SessionListState) => unknown) => select({
         ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
       })) as never}
-      useWorkspaces={vi.fn() as never} save={vi.fn()} capture={vi.fn()} appendMention={vi.fn()} t={t}
+      useWorkspaces={vi.fn() as never} save={vi.fn()} capture={vi.fn()} appendMention={vi.fn()}
+      renderers={renderers} t={t}
     />)
     fireEvent.click(noSession.getByText(zh.save))
     fireEvent.click(noSession.getByText(zh.reference))
@@ -265,8 +296,8 @@ describe('Explorer', () => {
     const first = chapter()
     const second = chapter({ id: 'asset-chapter-2' as never, title: '第二章', projectRelativePath: 'manuscript/chapter-2.md' })
     const assets = [
-      { ...first, body: undefined },
-      { ...second, body: undefined },
+      { ...first, content: undefined },
+      { ...second, content: undefined },
     ] as never
     const project = {
       schema: 1, id: 'project-1', title: '白港', rootDisplayPath: '/story',
@@ -311,7 +342,7 @@ describe('Explorer', () => {
     stringError.view.unmount()
 
     const store = createNovelWorkbenchStore().create()
-    const descriptor = { ...chapter(), body: undefined } as never
+    const descriptor = { ...chapter(), content: undefined } as never
     const openFailure = render(<Explorer
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       load={async () => ({ project: {} as never, assets: [descriptor] })}
@@ -342,7 +373,7 @@ describe('Explorer', () => {
     }
 
     const store = createNovelWorkbenchStore().create()
-    act(() => { store.actions.loaded({} as never, [{ ...chapter(), body: undefined }] as never) })
+    act(() => { store.actions.loaded({} as never, [{ ...chapter(), content: undefined }] as never) })
     const open = vi.fn()
     const view = render(<Explorer
       useStore={hookOf(store)} actions={{ ...store.actions, reset: vi.fn() }}
@@ -356,7 +387,7 @@ describe('Explorer', () => {
 
 describe('ChangeSetCard', () => {
   it('shows the proposed diff and applies it only after an explicit decision', async () => {
-    const read = vi.fn(async () => ({ changeSet: changeSet(), before: '旧句继续。' }))
+    const read = vi.fn(async () => ({ changeSet: changeSet(), before: { kind: 'manuscript' as const, body: '旧句继续。' } }))
     const applyChange = vi.fn(async () => changeSet('applied'))
     const refreshWorkbench = vi.fn()
     const view = render(<ChangeSetCard
@@ -364,7 +395,8 @@ describe('ChangeSetCard', () => {
       openFile={vi.fn()}
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-      read={read} applyChange={applyChange} rejectChange={vi.fn()} refreshWorkbench={refreshWorkbench} t={t}
+      read={read} applyChange={applyChange} rejectChange={vi.fn()} refreshWorkbench={refreshWorkbench}
+      renderers={renderers} t={t}
     />)
 
     await waitFor(() => { expect(view.getByText('旧句')).toBeTruthy() })
@@ -383,8 +415,9 @@ describe('ChangeSetCard', () => {
       openFile={vi.fn()}
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-      read={async () => ({ changeSet: changeSet(), before: '旧句继续。' })}
-      applyChange={vi.fn()} rejectChange={rejectChange} refreshWorkbench={refreshWorkbench} t={t}
+      read={async () => ({ changeSet: changeSet(), before: { kind: 'manuscript', body: '旧句继续。' } })}
+      applyChange={vi.fn()} rejectChange={rejectChange} refreshWorkbench={refreshWorkbench}
+      renderers={renderers} t={t}
     />)
     await waitFor(() => { expect(view.getByText(zh.reject)).toBeTruthy() })
     fireEvent.click(view.getByText(zh.reject))
@@ -397,7 +430,8 @@ describe('ChangeSetCard', () => {
       openFile={vi.fn()}
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-      read={vi.fn()} applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={refreshWorkbench} t={t}
+      read={vi.fn()} applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={refreshWorkbench}
+      renderers={renderers} t={t}
     />)
     expect(fallback.getByText(zh.proposal)).toBeTruthy()
   })
@@ -408,8 +442,9 @@ describe('ChangeSetCard', () => {
       block={settled()} sessionId={SID} toolName="novel_propose_changes" callId="call-1" openFile={vi.fn()}
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-      read={async () => ({ changeSet: changeSet(), before: '旧句继续。' })}
-      applyChange={async () => changeSet('conflicted')} rejectChange={vi.fn()} refreshWorkbench={refreshWorkbench} t={t}
+      read={async () => ({ changeSet: changeSet(), before: { kind: 'manuscript', body: '旧句继续。' } })}
+      applyChange={async () => changeSet('conflicted')} rejectChange={vi.fn()} refreshWorkbench={refreshWorkbench}
+      renderers={renderers} t={t}
     />)
     await waitFor(() => { expect(view.getByText(zh.accept)).toBeTruthy() })
     fireEvent.click(view.getByText(zh.accept))
@@ -424,7 +459,7 @@ describe('ChangeSetCard', () => {
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       read={async () => { throw new Error('cannot read proposal') }}
-      applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} t={t}
+      applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} renderers={renderers} t={t}
     />)
     await waitFor(() => { expect(readFailure.getByText('cannot read proposal')).toBeTruthy() })
     readFailure.unmount()
@@ -434,8 +469,9 @@ describe('ChangeSetCard', () => {
       openFile={vi.fn()}
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-      read={async () => ({ changeSet: changeSet(), before: '旧句继续。' })}
-      applyChange={async () => { throw new Error('apply failed safely') }} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} t={t}
+      read={async () => ({ changeSet: changeSet(), before: { kind: 'manuscript', body: '旧句继续。' } })}
+      applyChange={async () => { throw new Error('apply failed safely') }} rejectChange={vi.fn()} refreshWorkbench={vi.fn()}
+      renderers={renderers} t={t}
     />)
     await waitFor(() => { expect(decisionFailure.getByText(zh.accept)).toBeTruthy() })
     fireEvent.click(decisionFailure.getByText(zh.accept))
@@ -448,7 +484,7 @@ describe('ChangeSetCard', () => {
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       read={async () => { throw 'string failure' }}
-      applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} t={t}
+      applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} renderers={renderers} t={t}
     />)
     await waitFor(() => { expect(nonError.getByText('string failure')).toBeTruthy() })
     nonError.unmount()
@@ -457,8 +493,9 @@ describe('ChangeSetCard', () => {
       block={settled()} sessionId={SID} toolName="novel_propose_changes" callId="call-1" openFile={vi.fn()}
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-      read={async () => ({ changeSet: changeSet(), before: '旧句继续。' })}
-      applyChange={async () => { throw 'string decision failure' }} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} t={t}
+      read={async () => ({ changeSet: changeSet(), before: { kind: 'manuscript', body: '旧句继续。' } })}
+      applyChange={async () => { throw 'string decision failure' }} rejectChange={vi.fn()} refreshWorkbench={vi.fn()}
+      renderers={renderers} t={t}
     />)
     await waitFor(() => { expect(nonErrorDecision.getByText(zh.accept)).toBeTruthy() })
     fireEvent.click(nonErrorDecision.getByText(zh.accept))
@@ -471,8 +508,8 @@ describe('ChangeSetCard', () => {
       openFile={vi.fn()}
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-      read={async () => ({ changeSet: changeSet('conflicted'), before: '旧句继续。' })}
-      applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} t={t}
+      read={async () => ({ changeSet: changeSet('conflicted'), before: { kind: 'manuscript', body: '旧句继续。' } })}
+      applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} renderers={renderers} t={t}
     />)
     await waitFor(() => { expect(conflict.getByText(zh.conflicted)).toBeTruthy() })
     conflict.unmount()
@@ -486,7 +523,8 @@ describe('ChangeSetCard', () => {
         block={block} sessionId={SID} toolName="other" callId="call-x" openFile={vi.fn()}
         useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
         useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-        read={vi.fn()} applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} t={t}
+        read={vi.fn()} applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()}
+        renderers={renderers} t={t}
       />)
       expect(fallback.getByText(zh.proposal)).toBeTruthy()
       fallback.unmount()
@@ -503,16 +541,45 @@ describe('ChangeSetCard', () => {
         block={settled()} sessionId={SID} toolName="novel_propose_changes" callId="call-1" openFile={vi.fn()}
         useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
         useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-        read={() => pending} applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()} t={t}
+        read={() => pending} applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()}
+        renderers={renderers} t={t}
       />)
       view.unmount()
-      settle({ changeSet: changeSet(), before: '旧句继续。' })
+      settle({ changeSet: changeSet(), before: { kind: 'manuscript', body: '旧句继续。' } })
       await act(async () => { await Promise.resolve(); await Promise.resolve() })
     }
   })
 })
 
 describe('Novel workbench stores and browser assembly', () => {
+  it('keeps Client renderers exact and effect-scoped for independently contributed Asset types', async () => {
+    const ctx = new Context()
+    const registryFiber = ctx.plugin(NovelAssetRendererRegistry)
+    await registryFiber
+    const chapterFiber = ctx.plugin({
+      inject: ['novelAssetRenderers'],
+      apply(scope: Context) { scope.novelAssetRenderers.register(manuscriptChapterRenderer) },
+    })
+    await chapterFiber
+    const testRenderer = { ...manuscriptChapterRenderer, type: 'bible.test' }
+    const testFiber = ctx.plugin({
+      inject: ['novelAssetRenderers'],
+      apply(scope: Context) { scope.novelAssetRenderers.register(testRenderer) },
+    })
+    await testFiber
+
+    expect(ctx.novelAssetRenderers.list().map(value => value.type)).toEqual(['bible.test', 'manuscript.chapter'])
+    expect(ctx.novelAssetRenderers.get('bible.test')).toBe(testRenderer)
+    expect(() => ctx.novelAssetRenderers.register(testRenderer)).toThrow(/already registered/u)
+    expect(() => ctx.novelAssetRenderers.register({ ...testRenderer, type: 'Test' })).toThrow(/dotted lowercase/u)
+    expect(() => ctx.novelAssetRenderers.register({ ...testRenderer, type: 'bible.missing', renderDiff: undefined } as never))
+      .toThrow(/missing renderDiff/u)
+    await testFiber.dispose()
+    expect(() => ctx.novelAssetRenderers.get('bible.test')).toThrow(/no registered Client renderer/u)
+    await chapterFiber.dispose()
+    await registryFiber.dispose()
+  })
+
   it('covers every shared state transition and frame action', () => {
     const store = createNovelWorkbenchStore().create()
     const project = {
@@ -523,17 +590,17 @@ describe('Novel workbench stores and browser assembly', () => {
     act(() => {
       store.actions.loaded(project, assets)
       store.actions.open(chapter())
-      store.actions.edit('旧句继续。')
-      store.actions.select(1, 2)
+      store.actions.edit({ kind: 'manuscript', body: '旧句继续。' })
+      store.actions.select({ kind: 'text-range', startUtf16: 1, endUtf16: 2 })
       store.actions.referenced(selection())
-      store.actions.saved(chapter({ revisionId: 'revision-2' as never, body: '旧句继续。' }))
+      store.actions.saved(chapter({ revisionId: 'revision-2' as never, content: { kind: 'manuscript', body: '旧句继续。' } }))
       store.actions.fail('failed')
       store.actions.refresh()
     })
     expect(store.getSnapshot()).toMatchObject({ error: 'failed', reload: 1, dirty: false })
     act(() => { store.actions.reset() })
     expect(store.getSnapshot()).toEqual({
-      assets: [], draft: '', dirty: false, selection: { start: 1, end: 2 }, loading: true, reload: 1,
+      assets: [], dirty: false, loading: true, reload: 1,
     })
 
     const frame = createNovelFrameStore().create()
@@ -566,11 +633,11 @@ describe('Novel workbench stores and browser assembly', () => {
       asset: vi.fn(async (
         _sid: unknown,
         _aid: unknown,
-        revision: NovelChapterDocument['revisionId'] | undefined,
+        revision: NovelAssetDocument['revisionId'] | undefined,
       ) => failAsset
         ? { ok: false as const, error: { code: 'REMOTE_FAILED', message: 'offline', name: 'Error' } }
         : { ok: true as const, value: chapter({ revisionId: revision ?? chapter().revisionId }) }),
-      saveChapter: vi.fn(async () => ({ ok: true as const, value: chapter({ revisionId: 'revision-2' as never }) })),
+      saveAsset: vi.fn(async () => ({ ok: true as const, value: chapter({ revisionId: 'revision-2' as never }) })),
       captureSelection: vi.fn(async () => ({ ok: true as const, value: selection() })),
       changeSet: vi.fn(async () => ({ ok: true as const, value: changeSet() })),
       applyChangeSet: vi.fn(async () => ({ ok: true as const, value: changeSet('applied') })),
@@ -645,7 +712,10 @@ describe('Novel workbench stores and browser assembly', () => {
       rejectChange: (sid: string, id: string) => Promise<NovelChangeSetDescriptor>
       refreshWorkbench: () => void
     })()
-    await expect(review.read(SID, 'changeset-1')).resolves.toMatchObject({ changeSet: { id: 'changeset-1' }, before: '旧句继续。' })
+    await expect(review.read(SID, 'changeset-1')).resolves.toMatchObject({
+      changeSet: { id: 'changeset-1' },
+      before: { kind: 'manuscript', body: '旧句继续。' },
+    })
     await expect(review.applyChange(SID, 'changeset-1')).resolves.toMatchObject({ status: 'applied' })
     await expect(review.rejectChange(SID, 'changeset-1')).resolves.toMatchObject({ status: 'rejected' })
     const refreshed = vi.fn()

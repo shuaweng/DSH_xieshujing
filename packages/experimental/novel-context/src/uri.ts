@@ -4,8 +4,7 @@ import {
   AssetId,
   ProjectId,
   RevisionId,
-  type ContentHash,
-  type TextRangeSelector,
+  type NovelSelector,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import { NovelContextError } from './error.ts'
 import type { NovelReferenceInput } from './types.ts'
@@ -17,7 +16,7 @@ interface NovelReferencePayload {
   p: string
   a: string
   r: string
-  s?: { k: 't'; b: number; e: number; q: string; p?: string; x?: string }
+  s?: NovelSelector
 }
 
 /**
@@ -30,16 +29,7 @@ export function encodeNovelReferenceUri(reference: NovelReferenceInput): string 
     p: reference.projectId,
     a: reference.assetId,
     r: reference.revisionId,
-    ...(reference.selector === undefined ? {} : {
-      s: {
-        k: 't',
-        b: reference.selector.startUtf16,
-        e: reference.selector.endUtf16,
-        q: reference.selector.quoteHash,
-        ...(reference.selector.prefix === undefined ? {} : { p: reference.selector.prefix }),
-        ...(reference.selector.suffix === undefined ? {} : { x: reference.selector.suffix }),
-      },
-    }),
+    ...(reference.selector === undefined ? {} : { s: structuredClone(reference.selector) }),
   }
   return `${NOVEL_REFERENCE_SCHEME}${Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url')}`
 }
@@ -102,31 +92,26 @@ export function parseNovelReferenceText(text: string): { text: string; reference
   return { text: rendered, references }
 }
 
-function parseSelector(value: unknown): TextRangeSelector | undefined {
+function parseSelector(value: unknown): NovelSelector | undefined {
   if (value === undefined) return undefined
-  if (
-    !isRecord(value)
-    || value['k'] !== 't'
-    || !Number.isSafeInteger(value['b'])
-    || !Number.isSafeInteger(value['e'])
-    || typeof value['q'] !== 'string'
-    || (value['p'] !== undefined && typeof value['p'] !== 'string')
-    || (value['x'] !== undefined && typeof value['x'] !== 'string')
-  ) throw new TypeError('selector is invalid')
-  const prefix = value['p']
-  const suffix = value['x']
-  return {
-    kind: 'text-range',
-    startUtf16: value['b'] as number,
-    endUtf16: value['e'] as number,
-    quoteHash: value['q'] as ContentHash,
-    ...(prefix === undefined ? {} : { prefix }),
-    ...(suffix === undefined ? {} : { suffix }),
+  if (!isRecord(value) || typeof value['kind'] !== 'string' || !isJsonValue(value)) {
+    throw new TypeError('selector is invalid')
   }
+  return structuredClone(value) as unknown as NovelSelector
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isJsonValue(value: unknown, depth = 0): boolean {
+  if (depth > 32) return false
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0)
+  if (Array.isArray(value)) return value.every(child => isJsonValue(child, depth + 1))
+  if (!isRecord(value)) return false
+  return Object.entries(value).every(([key, child]) =>
+    key.length > 0 && key !== '__proto__' && isJsonValue(child, depth + 1))
 }
 
 function invalidUri(uri: string, cause?: unknown): NovelContextError {

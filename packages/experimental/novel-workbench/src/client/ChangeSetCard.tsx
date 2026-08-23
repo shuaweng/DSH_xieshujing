@@ -3,17 +3,19 @@
 import { useEffect, useState } from 'react'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
-import type { NovelChangeSetDescriptor } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
+import type { NovelChangeSetDescriptor, NovelWireValue } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
+import type { NovelAssetRendererRegistry } from './renderers.tsx'
 import css from './workbench.module.css'
 
 const NO_DECISION_EFFECT = (): void => {}
 
 export interface NovelChangeReview {
   changeSet: NovelChangeSetDescriptor
-  before: string
+  before: NovelWireValue
 }
 
 export interface ChangeSetInjected {
+  renderers: NovelAssetRendererRegistry
   read: (sessionId: string, changeSetId: string) => Promise<NovelChangeReview>
   applyChange: (sessionId: string, changeSetId: string) => Promise<NovelChangeSetDescriptor>
   rejectChange: (sessionId: string, changeSetId: string) => Promise<NovelChangeSetDescriptor>
@@ -25,7 +27,7 @@ type ChangeSetCardProps = ToolCallViewProps
   & InjectFace<ChangeSetInjected>
 
 /** Durable proposal status and explicit accept/reject controls. */
-export function ChangeSetCard({ block, sessionId, read, applyChange, rejectChange, refreshWorkbench, t }: ChangeSetCardProps) {
+export function ChangeSetCard({ block, sessionId, read, applyChange, rejectChange, refreshWorkbench, renderers, t }: ChangeSetCardProps) {
   const changeSetId = settledChangeSetId(block)
   const [review, setReview] = useState<NovelChangeReview>()
   const [error, setError] = useState<string>()
@@ -66,19 +68,13 @@ export function ChangeSetCard({ block, sessionId, read, applyChange, rejectChang
 
   if (changeSetId === undefined) return <div className={css.changeCard}>{t('proposal')}</div>
   const changeSet = review?.changeSet
-  const operation = changeSet?.operation
-  const before = operation === undefined || review === undefined
-    ? ''
-    : review.before.slice(operation.startUtf16, operation.endUtf16)
+  const diff = changeSet === undefined || review === undefined
+    ? undefined
+    : renderers.get(changeSet.assetType).renderDiff(review.before, changeSet.operations)
   return (
     <article className={css.changeCard} data-status={changeSet?.status}>
       <header><strong>{t('proposal')}</strong><span>{changeSet?.summary ?? changeSetId}</span></header>
-      {operation !== undefined && (
-        <div className={css.diff}>
-          <del>{before}</del>
-          <ins>{operation.replacement}</ins>
-        </div>
-      )}
+      {diff}
       {error !== undefined && <p className={css.error}>{error}</p>}
       {review?.changeSet.status === 'proposed' && (
         <footer>

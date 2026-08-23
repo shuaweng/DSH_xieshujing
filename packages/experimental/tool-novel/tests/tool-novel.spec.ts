@@ -10,6 +10,7 @@ import {
   type RevisionId,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
+import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 import NovelContextResolver, {
   encodeNovelReferenceUri,
 } from '../../novel-context/src/index.ts'
@@ -61,6 +62,7 @@ async function harness(): Promise<{
   const ctx = new Context()
   await ctx.plugin(LocalFileSystem, { cwd: dir })
   await ctx.plugin(SandboxPolicy, { mode: 'workspace-write', workspaceRoot: dir })
+  await ctx.plugin(NovelAssetTypeRegistry)
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
@@ -97,7 +99,7 @@ describe('Novel model tools', () => {
     expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('novel_')).sort())
       .toEqual(['novel_get', 'novel_list', 'novel_propose_changes'])
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.ctx })
-    expect(renderPrompt(assembly)).toContain('绝不代表文件已经修改')
+    expect(renderPrompt(assembly)).toContain('never means the file changed')
 
     const read = ctx.tools.get('novel_get')!
     expect(read.output.render({}, { assets: [] })).toEqual([{ type: 'text', text: '[]' }])
@@ -109,17 +111,18 @@ describe('Novel model tools', () => {
     const propose = ctx.tools.get('novel_propose_changes')!
     const value = {
       changeSetId: 'changeset-1', projectId: 'project-tool', assetId: 'chapter-tool',
-      baseRevisionId: 'revision-1', summary: '摘要', status: 'proposed' as const,
+      assetType: 'manuscript.chapter', baseRevisionId: 'revision-1', summary: '摘要', status: 'proposed' as const,
     }
     expect(propose.output.render({}, value as never)).toEqual([{
-      type: 'text', text: '已创建修改提案 changeset-1：摘要。等待用户审阅，尚未修改正文。',
+      type: 'text', text: '已创建修改提案 changeset-1：摘要。等待用户审阅，尚未修改资产。',
     }])
     expect(propose.output.presentationMeta?.({}, value as never)).toMatchObject({
       kind: 'novel-change-set', changeSetId: 'changeset-1', summary: '摘要',
     })
     expect(propose.presentCall?.({
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: 'revision-1',
-      start_utf16: 0, end_utf16: 1, replacement: '新', summary: '摘要',
+      operations: [{ kind: 'replace-text', startUtf16: 0, endUtf16: 1, replacement: '新' }],
+      summary: '摘要',
     })).toEqual({
       card: 'generic', title: '提出小说修改', kind: 'edit', rawInput: '摘要',
     })
@@ -170,9 +173,7 @@ describe('Novel model tools', () => {
       project_id: 'project-tool',
       asset_id: 'chapter-tool',
       base_revision_id: revisionId,
-      start_utf16: 2,
-      end_utf16: 4,
-      replacement: '放晴',
+      operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }],
       summary: '把天气改为放晴',
     })
     expect(result.isError).toBe(false)
@@ -204,12 +205,12 @@ describe('Novel model tools', () => {
 
     await expect(execute(ctx, agent, 'novel_propose_changes', {
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
-      start_utf16: 4, end_utf16: 2, replacement: '放晴', summary: '摘要',
+      operations: [{ kind: 'replace-text', startUtf16: 4, endUtf16: 2, replacement: '放晴' }], summary: '摘要',
     })).resolves.toMatchObject({ isError: true })
 
     await expect(execute(ctx, undefined, 'novel_propose_changes', {
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
-      start_utf16: 2, end_utf16: 4, replacement: '放晴', summary: '摘要',
+      operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }], summary: '摘要',
     })).resolves.toMatchObject({ isError: true })
   })
 })

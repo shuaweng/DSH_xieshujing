@@ -13,12 +13,13 @@ import {
   type AssetRevision,
   type ChangeSet,
   type ContentHash,
+  type NovelAssetType,
   type NovelOperation,
   type RevisionOrigin,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 
 /** Physical schema containing revisions, proposals, and recoverable apply intent. */
-export const NOVEL_HISTORY_SCHEMA_VERSION = 2
+export const NOVEL_HISTORY_SCHEMA_VERSION = 3
 /** SQLite application id reserved for DSH Novel history. */
 export const NOVEL_HISTORY_APPLICATION_ID = 0x44534E48
 
@@ -43,6 +44,7 @@ interface ChangeSetRow {
   id: string
   project_id: string
   asset_id: string
+  asset_type: string
   base_revision_id: string
   operations_json: string
   actor_json: string
@@ -89,14 +91,18 @@ async function createPrivateFile(path: string): Promise<void> {
  * @param busyTimeoutMs - maximum SQLite lock wait in milliseconds.
  * @returns a validated history connection with current schema.
  */
-export async function openHistory(path: string, busyTimeoutMs: number): Promise<NovelHistory> {
+export async function openHistory(
+  path: string,
+  busyTimeoutMs: number,
+  decodeOperations: (assetType: string, value: unknown) => readonly NovelOperation[],
+): Promise<NovelHistory> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 })
   await createPrivateFile(path)
   const { DatabaseSync } = await import('node:sqlite')
   const db = new DatabaseSync(path, { timeout: busyTimeoutMs })
   try {
     configure(db, path)
-    return new NovelHistory(db)
+    return new NovelHistory(db, decodeOperations)
   } catch (error: unknown) {
     db.close()
     throw error
@@ -128,7 +134,7 @@ function configure(db: DatabaseSync, path: string): void {
       'NOVEL_HISTORY_CORRUPT',
     )
   }
-  if (version !== 0 && version !== 1 && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== 2 && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
     throw new NovelRepositoryError(
       `novel repository: history database "${path}" uses unsupported schema ${version}`,
       'NOVEL_HISTORY_SCHEMA_UNSUPPORTED',
@@ -168,6 +174,7 @@ function configure(db: DatabaseSync, path: string): void {
         id                 TEXT PRIMARY KEY,
         project_id         TEXT NOT NULL,
         asset_id           TEXT NOT NULL,
+        asset_type         TEXT NOT NULL,
         base_revision_id   TEXT NOT NULL REFERENCES revisions(id),
         operations_json    TEXT NOT NULL,
         actor_json         TEXT NOT NULL,
@@ -188,6 +195,10 @@ function configure(db: DatabaseSync, path: string): void {
         created_at            TEXT NOT NULL
       ) STRICT;
     `)
+    const changeSetColumns = db.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>
+    if (version > 0 && version < 3 && !changeSetColumns.some(column => column.name === 'asset_type')) {
+      db.exec("ALTER TABLE change_sets ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'manuscript.chapter'")
+    }
     if (version === 0) db.exec(`PRAGMA application_id = ${NOVEL_HISTORY_APPLICATION_ID}`)
     if (version < NOVEL_HISTORY_SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${NOVEL_HISTORY_SCHEMA_VERSION}`)
     db.exec('COMMIT')
@@ -199,7 +210,10 @@ function configure(db: DatabaseSync, path: string): void {
 
 /** Synchronous transaction facade over one project-owned database handle. */
 export class NovelHistory {
-  constructor(private readonly db: DatabaseSync) {}
+  constructor(
+    private readonly db: DatabaseSync,
+    private readonly decodeOperations: (assetType: string, value: unknown) => readonly NovelOperation[],
+  ) {}
 
   /** Close the owned SQLite connection. */
   close(): void {
@@ -276,13 +290,14 @@ export class NovelHistory {
   proposeChangeSet(changeSet: ChangeSet): void {
     this.db.prepare(`
       INSERT INTO change_sets (
-        id, project_id, asset_id, base_revision_id, operations_json,
-        actor_json, summary, status, result_revision_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, asset_id, asset_type, base_revision_id,
+        operations_json, actor_json, summary, status, result_revision_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       changeSet.id,
       changeSet.projectId,
       changeSet.assetId,
+      changeSet.assetType,
       changeSet.baseRevisionId,
       JSON.stringify(changeSet.operations),
       JSON.stringify(changeSet.actor),
@@ -300,10 +315,10 @@ export class NovelHistory {
   changeSet(changeSetId: ChangeSetId): ChangeSet | undefined {
     const row = this.db.prepare(`
       SELECT id, project_id, asset_id, base_revision_id, operations_json,
-             actor_json, summary, status, result_revision_id
+             asset_type, actor_json, summary, status, result_revision_id
       FROM change_sets WHERE id = ?
     `).get(changeSetId) as ChangeSetRow | undefined
-    return row === undefined ? undefined : changeSetFromRow(row)
+    return row === undefined ? undefined : changeSetFromRow(row, this.decodeOperations)
   }
 
   /**
@@ -474,40 +489,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function parseOperations(value: unknown): readonly NovelOperation[] {
-  if (!Array.isArray(value) || value.length !== 1) throw corrupt('operations must contain exactly one item')
-  const operation: unknown = value[0]
-  if (!isRecord(operation) || operation['kind'] !== 'replace-text' || typeof operation['replacement'] !== 'string') {
-    throw corrupt('operation is not a replace-text operation')
-  }
-  const selector = operation['selector']
-  if (
-    !isRecord(selector)
-    || selector['kind'] !== 'text-range'
-    || !Number.isSafeInteger(selector['startUtf16'])
-    || !Number.isSafeInteger(selector['endUtf16'])
-    || typeof selector['quoteHash'] !== 'string'
-    || (selector['prefix'] !== undefined && typeof selector['prefix'] !== 'string')
-    || (selector['suffix'] !== undefined && typeof selector['suffix'] !== 'string')
-  ) {
-    throw corrupt('replace-text selector is invalid')
-  }
-  const prefix = selector['prefix']
-  const suffix = selector['suffix']
-  return [{
-    kind: 'replace-text',
-    selector: {
-      kind: 'text-range',
-      startUtf16: selector['startUtf16'] as number,
-      endUtf16: selector['endUtf16'] as number,
-      quoteHash: selector['quoteHash'] as ContentHash,
-      ...(prefix === undefined ? {} : { prefix }),
-      ...(suffix === undefined ? {} : { suffix }),
-    },
-    replacement: operation['replacement'],
-  }]
-}
-
 function parseActor(value: unknown): ChangeSet['actor'] {
   if (!isRecord(value) || (value['kind'] !== 'agent' && value['kind'] !== 'user')) throw corrupt('actor is invalid')
   if (value['kind'] === 'agent') {
@@ -520,16 +501,27 @@ function parseActor(value: unknown): ChangeSet['actor'] {
     : { kind: 'user', sessionId: value['sessionId'] as SessionId }
 }
 
-function changeSetFromRow(row: ChangeSetRow): ChangeSet {
+function changeSetFromRow(
+  row: ChangeSetRow,
+  decodeOperations: (assetType: string, value: unknown) => readonly NovelOperation[],
+): ChangeSet {
   if (!['proposed', 'applying', 'applied', 'rejected', 'conflicted'].includes(row.status)) {
     throw corrupt(`ChangeSet status ${JSON.stringify(row.status)} is invalid`)
+  }
+  let operations: readonly NovelOperation[]
+  try {
+    operations = decodeOperations(row.asset_type, parseJson(row.operations_json, 'operations'))
+  } catch (error: unknown) {
+    if (error instanceof NovelRepositoryError && error.code === 'NOVEL_HISTORY_CORRUPT') throw error
+    throw corrupt(`ChangeSet operations for Asset type ${JSON.stringify(row.asset_type)} are invalid`, error)
   }
   return {
     id: ChangeSetId(row.id),
     projectId: ProjectId(row.project_id),
     assetId: AssetId(row.asset_id),
+    assetType: row.asset_type as NovelAssetType,
     baseRevisionId: RevisionId(row.base_revision_id),
-    operations: parseOperations(parseJson(row.operations_json, 'operations')),
+    operations,
     actor: parseActor(parseJson(row.actor_json, 'actor')),
     summary: row.summary,
     status: row.status as ChangeSet['status'],

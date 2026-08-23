@@ -8,11 +8,11 @@ This experimental Host Consumer turns canonical, Revision-bound Novel references
 
 ## Behavior
 
-- `dsh-novel:` URIs carry one project, asset, retained Revision, optional UTF-16 text selector, and display label; `formatNovelReferenceMention()` wraps the URI in a readable Markdown mention for Composer drafts.
+- `dsh-novel:` URIs carry one project, asset, retained Revision, optional type-defined JSON selector, and display label; `formatNovelReferenceMention()` wraps the URI in a readable Markdown mention for Composer drafts.
 - `NovelContextResolver` intercepts direct user messages at `agent/pre-step`, removes only recognized canonical mentions from the readable message, resolves exact retained Revisions, and appends one immutable `user/message` with source kind `novel-context` immediately after it.
 - Referenced prose is serialized as deterministic JSON inside an explicit untrusted-material frame. A reference never grants instructions, permissions, or tool authority.
 - One request may contain at most eight references and 256 KiB of resolved UTF-8 text by default. Both positive-integer limits are configurable, duplicate references are folded, and overflow fails before the model request.
-- A text selector is valid only when its UTF-16 boundaries do not split a surrogate pair and its quote hash matches the exact retained Revision. The resolver never falls back to the current file.
+- The resolver asks the target Asset's registered Host definition to validate and project its selector. The shipped text selector rejects surrogate-pair splits and quote drift; no selector ever falls back to the current file.
 - The first durable Novel context message binds the Session to one Project; later Novel context for another Project fails explicitly.
 
 ## Model Experience

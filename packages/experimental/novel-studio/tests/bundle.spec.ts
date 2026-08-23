@@ -86,6 +86,7 @@ describe('experimental Novel Studio bundle', () => {
     })
     expect(parsed.flatMap(row => row.insert ?? [])).toEqual([
       { id: 'novel-studio-paths', name: '@deepseek-ai/dsh-experimental-novel-studio' },
+      { id: 'novel-asset-types', name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types' },
       { id: 'novel-repository-local', name: '@deepseek-ai/dsh-experimental-novel-repository-local' },
       { id: 'novel-context', name: '@deepseek-ai/dsh-experimental-novel-context' },
       { id: 'novel-repository-remote', name: '@deepseek-ai/dsh-experimental-novel-repository-remote' },

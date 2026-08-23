@@ -21,8 +21,59 @@ export type {
 /** SHA-256 over the named exact UTF-8 bytes. */
 export type ContentHash = `sha256:${string}`
 
-/** Asset kinds supported by the first Novel workbench format. */
-export type NovelAssetType = 'manuscript.chapter'
+/** Parsed authored content of one Markdown chapter. */
+export interface ManuscriptChapterContent {
+  readonly kind: 'manuscript'
+  readonly body: string
+}
+
+/** Version-one semantic range over the exact Markdown body of one Revision. */
+export interface TextRangeSelector {
+  readonly kind: 'text-range'
+  readonly startUtf16: number
+  readonly endUtf16: number
+  readonly quoteHash: ContentHash
+  readonly prefix?: string
+  readonly suffix?: string
+}
+
+/** Unfrozen browser range submitted for validation against one Revision. */
+export interface TextRangeSelectionInput {
+  readonly kind: 'text-range'
+  readonly startUtf16: number
+  readonly endUtf16: number
+}
+
+/** First typed manuscript mutation accepted from a model proposal. */
+export interface ReplaceTextOperation {
+  readonly kind: 'replace-text'
+  readonly selector: TextRangeSelector
+  readonly replacement: string
+}
+
+/**
+ * Merge-extensible authored Asset values keyed by their Frontmatter type.
+ * Type packages augment this map and register matching runtime definitions.
+ */
+export interface NovelAssetTypeMap {
+  'manuscript.chapter': {
+    readonly content: ManuscriptChapterContent
+    readonly selectionInput: TextRangeSelectionInput
+    readonly selector: TextRangeSelector
+    readonly operation: ReplaceTextOperation
+  }
+}
+
+/** Asset kinds contributed to the Novel workbench. */
+export type NovelAssetType = Extract<keyof NovelAssetTypeMap, string>
+/** Parsed authored content contributed by every Asset type. */
+export type NovelAssetContent = NovelAssetTypeMap[NovelAssetType]['content']
+/** Browser selection inputs contributed by every selectable Asset type. */
+export type NovelSelectionInput = NovelAssetTypeMap[NovelAssetType]['selectionInput']
+/** Frozen selectors contributed by every selectable Asset type. */
+export type NovelSelector = NovelAssetTypeMap[NovelAssetType]['selector']
+/** Durable operations contributed by every mutable Asset type. */
+export type NovelOperation = NovelAssetTypeMap[NovelAssetType]['operation']
 
 /** Origin of one immutable Revision. */
 export type RevisionOrigin = 'initial-scan' | 'user-edit' | 'agent-apply' | 'external-edit'
@@ -83,7 +134,7 @@ export interface AssetSnapshot {
   readonly serializedUtf8: Uint8Array
   readonly contentHash: ContentHash
   readonly frontmatter: Readonly<Record<string, unknown>>
-  readonly body: string
+  readonly content: NovelAssetContent
 }
 
 /** Current catalog row used by list and browser navigation Consumers. */
@@ -106,16 +157,6 @@ export interface AssetRevision {
   readonly createdAt: string
 }
 
-/** Version-one semantic range over the exact Markdown body of one Revision. */
-export interface TextRangeSelector {
-  readonly kind: 'text-range'
-  readonly startUtf16: number
-  readonly endUtf16: number
-  readonly quoteHash: ContentHash
-  readonly prefix?: string
-  readonly suffix?: string
-}
-
 /** Frozen semantic selection suitable for durable prompt references. */
 export interface SelectionRef {
   readonly version: 1
@@ -123,34 +164,23 @@ export interface SelectionRef {
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly selector: TextRangeSelector
+  readonly selector: NovelSelector
   readonly preview?: string
 }
 
-/** Request to replace only the authored body while retaining validated Frontmatter. */
-export interface SaveChapterBodyRequest {
+/** Request to publish validated authored content while retaining Asset identity. */
+export interface SaveAssetContentRequest {
   readonly assetId: AssetId
   readonly baseRevisionId: RevisionId
-  readonly body: string
+  readonly content: NovelAssetContent
 }
 
 /** Request to freeze a non-empty browser selection over one retained Revision. */
 export interface CaptureSelectionRequest {
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly startUtf16: number
-  readonly endUtf16: number
+  readonly selector: NovelSelectionInput
 }
-
-/** First typed manuscript mutation accepted from a model proposal. */
-export interface ReplaceTextOperation {
-  readonly kind: 'replace-text'
-  readonly selector: TextRangeSelector
-  readonly replacement: string
-}
-
-/** Typed operations supported by the first ChangeSet format. */
-export type NovelOperation = ReplaceTextOperation
 
 /** Request to retain one proposal without changing authored files. */
 export interface ProposeChangeSetRequest {
@@ -173,6 +203,7 @@ export interface ChangeSet {
   readonly id: ChangeSetId
   readonly projectId: ProjectId
   readonly assetId: AssetId
+  readonly assetType: NovelAssetType
   readonly baseRevisionId: RevisionId
   readonly operations: readonly NovelOperation[]
   readonly actor:
