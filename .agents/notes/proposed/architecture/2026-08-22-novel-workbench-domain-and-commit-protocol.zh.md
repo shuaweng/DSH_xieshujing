@@ -225,6 +225,8 @@ Session 中第一条被接受的 `novel-context` 消息派生出其 Novel Projec
 
 该 Profile 组合 `@deepseek-ai/dsh-base`、`@deepseek-ai/dsh-web-app` 和 Novel bundle。默认 `web` 与 `headless` Profile 不加载 Repository、Novel 工具、Novel Remote 或 Novel UI，但可以继续列出现有 Session 级 `novel` Agent Preset。
 
+源码 checkout 的开发路径会把 Web App 与 Novel bundle 安装到这个显式 Profile 中，并让 Novel 层位于最后。单独使用 Cordis `--patch` 不是有效安装路径：patch 能插入配置行，却不会把这些配置行命名的包加入 Profile 模块解析闭包。本地 `link:` 开发还要直接链接私有 Novel 运行时包，因为 pnpm 不会安装目录链接背后的 workspace 依赖。
+
 首个技术切片可以在现有对话界面中注册 Novel view，并在输入 dock 中注册 Context Tray。这只是测试支架，不是最终产品布局。在把垂直链路称作小说工作台前，`novel-studio` 会用该 Profile 唯一的 root occupant 替换 `ui-layout`，在已声明的右侧 `conversation` slot 中保留现有 Conversation 组件，并增加项目级 `novel.explorer` 与 `novel.canvas` slot。切换 Session 不会卸载已打开的正文画布。
 
 版本一不增加通用 Router 或 Workbench 注册表。这些抽象需要第二个具体工作台 Consumer。工作台选择属于 Profile，Agent persona 与工具组合属于 Session Preset。

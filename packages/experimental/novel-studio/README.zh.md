@@ -4,15 +4,33 @@
 
 ## 用途
 
-这个实验包是显式 Novel Studio Profile overlay。它组合文件优先 Novel Repository、持久上下文、安全模型工具、浏览器 Remote 和 Agent 原生工作台，而不修改已发布的 `web` 或 `headless` Profile template。
+这个实验包是显式 Novel Studio Profile bundle。它组合文件优先 Novel Repository、持久上下文、安全模型工具、浏览器 Remote 和 Agent 原生工作台，而不修改已发布的 `web` 或 `headless` Profile template。
 
 ## 行为
 
-- 应在现有 base 与 Web App 组合包之后组合本 overlay。它插入 `novel-repository-local`、`novel-context`、`novel-repository-remote`、独立 Client adapter 和 `novel-workbench`。
-- overlay 只禁用普通 `ui-layout` entry，并把 Novel workbench 安装为唯一根占位者。原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染和 Session service 仍安装在该根声明的插槽中。
+- 应在现有 base 与 Web App 组合包之后加入本 bundle。它插入 `novel-repository-local`、`novel-context`、`novel-repository-remote`、独立 Client adapter 和 `novel-workbench`。
+- bundle 只禁用普通 `ui-layout` entry，并把 Novel workbench 安装为唯一根占位者。原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染和 Session service 仍安装在该根声明的插槽中。
 - 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，且只包含 `novel_get` 和 `novel_propose_changes`；不包含通用 shell 或文件系统修改工具。
 - `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
-- 默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。本包仍不添加已发布的全局 Profile template；调用方通过 Cordis overlay 显式启用。
+- 默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。本包仍不添加已发布的全局 Profile template；调用方把它安装到显式 Profile 中。
+
+## 从源码 checkout 启动
+
+源码 checkout 使用显式初始化的 `novel-studio` Profile。不能只传 `--patch packages/experimental/novel-studio/cordis.patch.yml`：patch 可以修改配置行，却不能安装新增配置行所引用的包。先链接 Web App，再链接 Novel Studio；由于 pnpm `link:` 不会安装被链接包的 workspace 依赖，还需链接私有运行时包：
+
+```sh
+pnpm dsh plugin --profile novel-studio add link:./packages/bundle/web-app
+pnpm dsh plugin --profile novel-studio add link:./packages/experimental/novel-studio
+pnpm dsh plugin --profile novel-studio add \
+  link:./packages/experimental/novel-repository \
+  link:./packages/experimental/novel-context \
+  link:./packages/experimental/novel-repository-client \
+  link:./packages/experimental/novel-repository-local \
+  link:./packages/experimental/novel-repository-remote \
+  link:./packages/experimental/novel-workbench \
+  link:./packages/experimental/tool-novel
+pnpm dsh --profile novel-studio --port 3080
+```
 
 ## 模型体验
 
@@ -32,7 +50,7 @@ Preset 组合在页面和选区变化时保持稳定。请求局部 Novel 上下
 
 ## 已知限制与暂缓事项
 
-- **没有已发布 Profile 入口**：调用方必须在 base 与 Web App 之后显式组合本 overlay；没有内建 `novel-studio` CLI template 或路由切换器。
+- **没有已发布 Profile 入口**：调用方必须在 base 与 Web App 之后显式安装本 bundle；没有内建 `novel-studio` CLI template 或路由切换器。
 - **MVP 资产范围**：只支持 `manuscript.chapter`、一个活动文本选区和单操作 ChangeSet。
 - **没有搜索或实时文件事件**：资产搜索、关系、文件监听和浏览器失效事件流尚未实现。
 - **没有编排**：Role Profile、Task Blackboard、`novel_delegate` 和多 Agent 工作流尚未实现。
