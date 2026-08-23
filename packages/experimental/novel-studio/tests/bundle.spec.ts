@@ -15,6 +15,7 @@ import {
 import NovelStudioPaths from '../src/index.ts'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
+const workbenchPackageRoot = fileURLToPath(new URL('../../novel-workbench', import.meta.url))
 const installAnchor = resolve(packageRoot, 'package.json')
 const temporaryHomes: string[] = []
 
@@ -42,6 +43,17 @@ function profileRows(name: string, bundles: readonly string[]): ReturnType<typeo
 }
 
 describe('experimental Novel Studio bundle', () => {
+  it('lets the workbench provide layout before conversation and sidebar activate', () => {
+    const manifest = JSON.parse(
+      readFileSync(resolve(workbenchPackageRoot, 'package.json'), 'utf8'),
+    ) as { dsh?: { client?: { inject?: string[] } } }
+    const inject = manifest.dsh?.client?.inject ?? []
+
+    expect(inject).not.toContain('@deepseek-ai/dsh-client-ui-conversation')
+    expect(inject).not.toContain('@deepseek-ai/dsh-client-ui-layout')
+    expect(inject).toContain('@deepseek-ai/dsh-client-ui-slots')
+  })
+
   it('provides the package-owned preset root as a scoped runtime service', async () => {
     const ctx = new Context()
     const fiber = ctx.plugin(NovelStudioPaths)
