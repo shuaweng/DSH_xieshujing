@@ -124,6 +124,7 @@ export function apply(ctx: Context): void {
     locale: NS,
     store,
     inject: (): ExplorerInjected => ({
+      renderers,
       load: async (sessionId) => {
         const project = await unwrapRemote(remote.discover(sessionId), 'discover Novel Project')
         return {

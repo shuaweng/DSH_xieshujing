@@ -225,10 +225,14 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       throw new Error(`Selection reference was not committed; page errors: ${JSON.stringify(tripwire.pageErrors)}; body: ${JSON.stringify(await page.locator('body').innerText())}`, { cause })
     }
 
-    await page.getByLabel('Typeface').selectOption('kai')
-    await page.getByRole('button', { name: 'Increase font size' }).click()
+    await page.getByRole('button', { name: 'Change reader skin' }).click()
+    await page.getByRole('dialog', { name: 'Reader skins' }).waitFor()
     await page.getByRole('button', { name: 'Warm parchment' }).click()
-    await expect.poll(() => page.locator('[data-reader-paper]').getAttribute('data-reader-paper')).toBe('warm')
+    await page.getByRole('button', { name: 'Typeface and size' }).click()
+    await page.getByRole('dialog', { name: 'Typeface and size' }).waitFor()
+    await page.getByRole('button', { name: 'Kai serif' }).click()
+    await page.getByRole('button', { name: 'Increase font size' }).click()
+    await expect.poll(() => page.locator('[data-reader-skin]').getAttribute('data-reader-skin')).toBe('warm')
     await expect.poll(() => page.locator('[data-reader-font]').getAttribute('data-reader-font')).toBe('kai')
     await page.getByRole('separator', { name: 'Resize conversation and workbench' }).press('ArrowRight')
     await expect.poll(() => page.getByRole('separator', { name: 'Resize conversation and workbench' }).getAttribute('aria-valuenow')).toBe('426')

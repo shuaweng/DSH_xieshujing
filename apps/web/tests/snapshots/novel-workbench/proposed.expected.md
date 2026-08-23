@@ -48,28 +48,21 @@
     - text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}
   - separator "Resize conversation and workbench"
   - complementary "Manuscript":
-    - text: "N"
     - strong: Novel Workbench
-    - text: Manuscript
+    - strong: 白港
+    - text: 1 chapters Drafts Total 1 chapters
     - navigation:
-      - button "第一章 manuscript.chapter · manuscript/chapter-1.md"
-  - text: manuscript.chapter · manuscript/chapter-1.md
-  - heading "第一章" [level=1]
+      - button "第一章 12 characters"
+    - text: Chapter characters
+    - strong: "12"
+  - navigation "Current novel location":
+    - strong: 白港
+    - text: 第一章
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent" [disabled]
-  - strong: "12"
-  - text: characters Typeface
-  - combobox "Typeface":
-    - option "Song serif" [selected]
-    - option "Kai serif"
-    - option "Sans serif"
-  - button "Decrease font size": −
-  - status: 18px
-  - button "Increase font size": ＋
-  - group "Reading background":
-    - button "Paper white" [pressed]
-    - button "Warm parchment"
-    - button "Reading green"
-    - button "Night"
-  - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
+  - article:
+    - heading "第一章" [level=1]
+    - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
+  - button "Change reader skin"
+  - button "Typeface and size": A

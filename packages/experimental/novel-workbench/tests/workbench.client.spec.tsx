@@ -288,7 +288,7 @@ describe('Canvas', () => {
     fireEvent.click(noSession.getByText(zh.reference))
   })
 
-  it('presents manuscript character count, reader preferences, and Unicode-safe short references', () => {
+  it('presents reader skin and typography popovers with Unicode-safe short references', () => {
     const store = createNovelWorkbenchStore().create()
     act(() => { store.actions.open(chapter()) })
     const view = render(<Canvas
@@ -296,12 +296,15 @@ describe('Canvas', () => {
       save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
     />)
 
-    expect(view.getByText((_, element) => element?.textContent?.trim() === '5 字')).toBeTruthy()
-    fireEvent.change(view.getByLabelText(zh.font), { target: { value: 'kai' } })
-    fireEvent.click(view.getByRole('button', { name: zh.increaseFont }))
+    fireEvent.click(view.getByRole('button', { name: zh.skinSettings }))
+    expect(view.getByRole('dialog', { name: zh.chooseSkin })).toBeTruthy()
     fireEvent.click(view.getByRole('button', { name: zh.green }))
-    expect(store.getSnapshot()).toMatchObject({ readerFont: 'kai', readerFontSize: 19, readerPaper: 'green' })
-    expect(view.container.querySelector('[data-reader-paper="green"][data-reader-font="kai"]')).not.toBeNull()
+    fireEvent.click(view.getByRole('button', { name: zh.typography }))
+    expect(view.getByRole('dialog', { name: zh.typography })).toBeTruthy()
+    fireEvent.click(view.getByRole('button', { name: zh.fontKai }))
+    fireEvent.click(view.getByRole('button', { name: zh.increaseFont }))
+    expect(store.getSnapshot()).toMatchObject({ readerFont: 'kai', readerFontSize: 19, readerSkin: 'green' })
+    expect(view.container.querySelector('[data-reader-skin="green"][data-reader-font="kai"]')).not.toBeNull()
     expect(shortReferenceLabel('一二三四五六七八九十十一十二')).toBe('[一二三四五六七八九十…]')
     expect(shortReferenceLabel('😀 一\n二')).toBe('[😀 一 二]')
   })
@@ -335,10 +338,11 @@ describe('Explorer', () => {
     const onRefresh = vi.fn((listener: () => void) => { refresh = listener; return () => { refresh = undefined } })
     const view = render(<Explorer
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
-      load={load} open={open} onRefresh={onRefresh} t={t}
+      renderers={renderers} load={load} open={open} onRefresh={onRefresh} t={t}
     />)
     await waitFor(() => { expect(view.getByText('第一章')).toBeTruthy() })
     await waitFor(() => { expect(store.getSnapshot().document?.id).toBe(first.id) })
+    expect(view.getByText(zh.chapterCharacters).parentElement?.textContent).toContain('5')
     fireEvent.click(view.getByText('第二章'))
     await waitFor(() => { expect(store.getSnapshot().document?.id).toBe(second.id) })
     await waitFor(() => { expect(view.getByText('第二章').closest('button')?.getAttribute('data-active')).toBe('true') })
@@ -353,7 +357,7 @@ describe('Explorer', () => {
       const store = createNovelWorkbenchStore().create()
       const view = render(<Explorer
         useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
-        load={load as never} open={open} onRefresh={() => () => {}} t={t}
+        renderers={renderers} load={load as never} open={open} onRefresh={() => () => {}} t={t}
       />)
       return { store, view }
     }
@@ -371,6 +375,7 @@ describe('Explorer', () => {
     const descriptor = { ...chapter(), content: undefined } as never
     const openFailure = render(<Explorer
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
+      renderers={renderers}
       load={async () => ({ project: {} as never, assets: [descriptor] })}
       open={async () => { throw new Error('open failed') }} onRefresh={() => () => {}} t={t}
     />)
@@ -389,7 +394,7 @@ describe('Explorer', () => {
       })
       const view = render(<Explorer
         useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
-        load={() => promise} open={vi.fn()} onRefresh={() => () => {}} t={t}
+        renderers={renderers} load={() => promise} open={vi.fn()} onRefresh={() => () => {}} t={t}
       />)
       view.unmount()
       if (pending === 'resolve') resolveLoad({ project: {} as never, assets: [] })
@@ -404,7 +409,7 @@ describe('Explorer', () => {
     const view = render(<Explorer
       useStore={hookOf(store)} actions={{ ...store.actions, reset: vi.fn() }}
       useSessions={sessionHook(undefined) as never} useWorkspaces={vi.fn() as never}
-      load={vi.fn()} open={open} onRefresh={() => () => {}} t={t}
+      renderers={renderers} load={vi.fn()} open={open} onRefresh={() => () => {}} t={t}
     />)
     fireEvent.click(view.getByText('第一章'))
     expect(open).not.toHaveBeenCalled()
@@ -618,7 +623,7 @@ describe('Novel workbench stores and browser assembly', () => {
       store.actions.open(chapter())
       store.actions.edit({ kind: 'manuscript', body: '旧句继续。' })
       store.actions.select({ kind: 'text-range', startUtf16: 1, endUtf16: 2 })
-      store.actions.setReaderPaper('night')
+      store.actions.setReaderSkin('night')
       store.actions.setReaderFont('sans')
       store.actions.setReaderFontSize(99)
       store.actions.saved(chapter({ revisionId: 'revision-2' as never, content: { kind: 'manuscript', body: '旧句继续。' } }))
@@ -626,11 +631,11 @@ describe('Novel workbench stores and browser assembly', () => {
       store.actions.refresh()
     })
     expect(store.getSnapshot()).toMatchObject({
-      error: 'failed', reload: 1, dirty: false, readerPaper: 'night', readerFont: 'sans', readerFontSize: 28,
+      error: 'failed', reload: 1, dirty: false, readerSkin: 'night', readerFont: 'sans', readerFontSize: 28,
     })
     act(() => { store.actions.reset() })
     expect(store.getSnapshot()).toEqual({
-      assets: [], dirty: false, readerPaper: 'night', readerFont: 'sans', readerFontSize: 28, loading: true, reload: 1,
+      assets: [], dirty: false, readerSkin: 'night', readerFont: 'sans', readerFontSize: 28, loading: true, reload: 1,
     })
 
     const frame = createNovelFrameStore().create()

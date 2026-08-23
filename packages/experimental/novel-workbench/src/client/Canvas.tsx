@@ -1,6 +1,6 @@
 /** Typed Asset canvas, Context Commit Barrier, and optional reader presentation. */
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
@@ -11,7 +11,7 @@ import type {
   SaveNovelAssetRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type { NovelAssetRendererRegistry } from './renderers.tsx'
-import type { NovelReaderFont, NovelReaderPaper, createNovelWorkbenchStore } from './store.ts'
+import type { NovelReaderFont, NovelReaderSkin, createNovelWorkbenchStore } from './store.ts'
 import css from './workbench.module.css'
 
 export interface CanvasInjected {
@@ -26,7 +26,7 @@ type CanvasProps = PropsRuntime<'novel.canvas'>
   & PropsLocale<'novel-workbench'>
   & InjectFace<CanvasInjected>
 
-const PAPERS: readonly NovelReaderPaper[] = ['paper', 'warm', 'green', 'night']
+const SKINS: readonly NovelReaderSkin[] = ['paper', 'warm', 'green', 'rose', 'blue', 'night']
 
 /** One exact-revision typed Asset editor with a compact Agent context handoff. */
 export function Canvas({ useSessions, useStore, actions, renderers, save, capture, appendReference, t }: CanvasProps) {
@@ -83,11 +83,14 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
     return <div className={css.empty}>{errorMessage(error)}</div>
   }
   const reader = renderer.reader
-  const characterCount = reader?.countCharacters(state.draft)
   return (
     <div className={css.editorShell}>
       <header className={css.editorHeader}>
-        <div><small>{state.document.type} · {state.document.projectRelativePath}</small><h1>{state.document.title}</h1></div>
+        <nav className={css.breadcrumb} aria-label={t('location')}>
+          <strong>{state.project?.title ?? t('studio')}</strong>
+          <span aria-hidden="true">/</span>
+          <span>{state.document.title}</span>
+        </nav>
         <div className={css.editorActions}>
           {state.error === undefined
             ? <span>{busy ? t('saving') : state.dirty ? '' : t('saved')}</span>
@@ -98,55 +101,143 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
           </button>
         </div>
       </header>
-      {reader === undefined ? null : (
-        <div className={css.readerToolbar} aria-label={t('readerSettings')}>
-          <span className={css.characterCount}><strong>{characterCount?.toLocaleString()}</strong> {t('characters')}</span>
-          <label className={css.fontControl}>
-            <span>{t('font')}</span>
-            <select
-              aria-label={t('font')}
-              value={state.readerFont}
-              onChange={(event) => { actions.setReaderFont(event.target.value as NovelReaderFont) }}
-            >
-              <option value="song">{t('fontSong')}</option>
-              <option value="kai">{t('fontKai')}</option>
-              <option value="sans">{t('fontSans')}</option>
-            </select>
-          </label>
-          <div className={css.fontSizeControl} aria-label={t('fontSize')}>
-            <button type="button" aria-label={t('decreaseFont')} onClick={() => { actions.setReaderFontSize(state.readerFontSize - 1) }}>−</button>
-            <output>{state.readerFontSize}px</output>
-            <button type="button" aria-label={t('increaseFont')} onClick={() => { actions.setReaderFontSize(state.readerFontSize + 1) }}>＋</button>
-          </div>
-          <div className={css.paperControl} role="group" aria-label={t('paperColor')}>
-            {PAPERS.map(paper => (
-              <button
-                key={paper}
-                type="button"
-                className={css.paperSwatch}
-                data-paper={paper}
-                aria-label={t(paper)}
-                aria-pressed={state.readerPaper === paper}
-                onClick={() => { actions.setReaderPaper(paper) }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
       <div
         className={css.editorStage}
         data-reader={reader === undefined ? undefined : ''}
-        data-reader-paper={reader === undefined ? undefined : state.readerPaper}
+        data-reader-skin={reader === undefined ? undefined : state.readerSkin}
         data-reader-font={reader === undefined ? undefined : state.readerFont}
         style={reader === undefined ? undefined : { '--novel-reader-size': `${state.readerFontSize}px` } as CSSProperties}
       >
-        {renderer.renderEditor({
-          document: state.document,
-          content: state.draft,
-          ariaLabel: `${state.document.title} · ${t('editor')}`,
-          onContentChange: actions.edit,
-          onSelectionChange: actions.select,
-        })}
+        {reader === undefined
+          ? renderer.renderEditor({
+            document: state.document,
+            content: state.draft,
+            ariaLabel: `${state.document.title} · ${t('editor')}`,
+            onContentChange: actions.edit,
+            onSelectionChange: actions.select,
+          })
+          : (
+            <>
+              <div className={css.editorScroll}>
+                <article className={css.editorPaper}>
+                  <header className={css.documentTitle}>
+                    <h1>{state.document.title}</h1>
+                  </header>
+                  {renderer.renderEditor({
+                    document: state.document,
+                    content: state.draft,
+                    ariaLabel: `${state.document.title} · ${t('editor')}`,
+                    onContentChange: actions.edit,
+                    onSelectionChange: actions.select,
+                  })}
+                </article>
+              </div>
+              <ReaderControls
+                activeSkin={state.readerSkin}
+                activeFont={state.readerFont}
+                fontSize={state.readerFontSize}
+                setSkin={actions.setReaderSkin}
+                setFont={actions.setReaderFont}
+                setFontSize={actions.setReaderFontSize}
+                t={t}
+              />
+            </>
+          )}
+      </div>
+    </div>
+  )
+}
+
+interface ReaderControlsProps {
+  readonly activeSkin: NovelReaderSkin
+  readonly activeFont: NovelReaderFont
+  readonly fontSize: number
+  readonly setSkin: (skin: NovelReaderSkin) => void
+  readonly setFont: (font: NovelReaderFont) => void
+  readonly setFontSize: (size: number) => void
+  readonly t: CanvasProps['t']
+}
+
+/** Compact reader dock: human-facing skins and typography stay out of the model contract. */
+function ReaderControls({ activeSkin, activeFont, fontSize, setSkin, setFont, setFontSize, t }: ReaderControlsProps) {
+  const [panel, setPanel] = useState<'skin' | 'font'>()
+  const root = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (panel === undefined) return undefined
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target)) setPanel(undefined)
+    }
+    const dismissKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setPanel(undefined) }
+    document.addEventListener('pointerdown', dismiss)
+    document.addEventListener('keydown', dismissKey)
+    return () => {
+      document.removeEventListener('pointerdown', dismiss)
+      document.removeEventListener('keydown', dismissKey)
+    }
+  }, [panel])
+
+  return (
+    <div className={css.readerControls} ref={root} aria-label={t('readerSettings')}>
+      {panel === 'skin' && (
+        <section className={css.readerPopover} role="dialog" aria-label={t('chooseSkin')}>
+          <strong>{t('chooseSkin')}</strong>
+          <div className={css.skinGrid}>
+            {SKINS.map(skin => (
+              <button
+                key={skin}
+                type="button"
+                className={css.skinChoice}
+                data-skin={skin}
+                aria-label={t(skin)}
+                aria-pressed={activeSkin === skin}
+                onClick={() => { setSkin(skin) }}
+              >
+                <span className={css.skinPreview} aria-hidden="true" />
+                <small>{t(skin)}</small>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {panel === 'font' && (
+        <section className={css.readerPopover} role="dialog" aria-label={t('typography')}>
+          <strong>{t('typography')}</strong>
+          <div className={css.fontChoices} role="group" aria-label={t('font')}>
+            {(['song', 'kai', 'sans'] as const).map(font => (
+              <button
+                key={font}
+                type="button"
+                data-font={font}
+                aria-pressed={activeFont === font}
+                onClick={() => { setFont(font) }}
+              >{t(font === 'song' ? 'fontSong' : font === 'kai' ? 'fontKai' : 'fontSans')}</button>
+            ))}
+          </div>
+          <div className={css.fontSizeControl} aria-label={t('fontSize')}>
+            <button type="button" aria-label={t('decreaseFont')} onClick={() => { setFontSize(fontSize - 1) }}>−</button>
+            <output>{fontSize}px</output>
+            <button type="button" aria-label={t('increaseFont')} onClick={() => { setFontSize(fontSize + 1) }}>＋</button>
+          </div>
+        </section>
+      )}
+      <div className={css.readerDock}>
+        <button
+          type="button"
+          className={css.skinTrigger}
+          data-skin={activeSkin}
+          aria-label={t('skinSettings')}
+          aria-expanded={panel === 'skin'}
+          onClick={() => { setPanel(current => current === 'skin' ? undefined : 'skin') }}
+        ><span aria-hidden="true" /></button>
+        <span className={css.dockDivider} aria-hidden="true" />
+        <button
+          type="button"
+          className={css.fontTrigger}
+          aria-label={t('typography')}
+          aria-expanded={panel === 'font'}
+          onClick={() => { setPanel(current => current === 'font' ? undefined : 'font') }}
+        >A</button>
       </div>
     </div>
   )

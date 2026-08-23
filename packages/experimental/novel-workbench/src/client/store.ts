@@ -8,8 +8,8 @@ import type {
   NovelWireValue,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 
-/** Calm reader surfaces shipped for manuscript Assets. */
-export type NovelReaderPaper = 'paper' | 'warm' | 'green' | 'night'
+/** Coordinated workspace, paper, and text palettes shipped for manuscript Assets. */
+export type NovelReaderSkin = 'paper' | 'warm' | 'green' | 'rose' | 'blue' | 'night'
 /** Human-readable type families shipped for manuscript Assets. */
 export type NovelReaderFont = 'song' | 'kai' | 'sans'
 
@@ -21,7 +21,7 @@ export interface NovelWorkbenchState {
   draft?: NovelWireValue
   dirty: boolean
   selection?: NovelWireValue
-  readerPaper: NovelReaderPaper
+  readerSkin: NovelReaderSkin
   readerFont: NovelReaderFont
   readerFontSize: number
   loading: boolean
@@ -36,7 +36,7 @@ type Actions = {
   saved: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   edit: (draft: NovelWorkbenchState, content: NovelWireValue) => void
   select: (draft: NovelWorkbenchState, selection?: NovelWireValue) => void
-  setReaderPaper: (draft: NovelWorkbenchState, paper: NovelReaderPaper) => void
+  setReaderSkin: (draft: NovelWorkbenchState, skin: NovelReaderSkin) => void
   setReaderFont: (draft: NovelWorkbenchState, font: NovelReaderFont) => void
   setReaderFontSize: (draft: NovelWorkbenchState, size: number) => void
   fail: (draft: NovelWorkbenchState, message: string) => void
@@ -74,7 +74,7 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
     init: (): NovelWorkbenchState => ({
       assets: [],
       dirty: false,
-      readerPaper: 'paper',
+      readerSkin: 'paper',
       readerFont: 'song',
       readerFontSize: 18,
       loading: true,
@@ -119,7 +119,7 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
         if (selection === undefined) delete draft.selection
         else draft.selection = structuredClone(selection)
       },
-      setReaderPaper: (draft, paper) => { draft.readerPaper = paper },
+      setReaderSkin: (draft, skin) => { draft.readerSkin = skin },
       setReaderFont: (draft, font) => { draft.readerFont = font },
       setReaderFontSize: (draft, size) => { draft.readerFontSize = Math.min(28, Math.max(14, Math.round(size))) },
       fail: (draft, message) => { draft.loading = false; draft.error = message },
