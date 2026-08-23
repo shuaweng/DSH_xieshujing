@@ -128,12 +128,17 @@ describe('NovelFrame', () => {
     />)
 
     expect(view.container.querySelector('[data-novel-workbench]')).not.toBeNull()
-    expect(view.getByLabelText(zh.chapters)).toBeTruthy()
+    expect(view.getByLabelText(zh.assetSidebar)).toBeTruthy()
     expect(view.getByLabelText(zh.agent)).toBeTruthy()
     const resizer = view.getByRole('separator', { name: zh.resizePanels })
     expect(resizer.getAttribute('aria-valuenow')).toBe('410')
     expect(calls).toEqual(['sidebar', 'conversation', 'details', 'novel.explorer', 'novel.canvas', 'shell.overlay'])
     expect(view.container.querySelector('[data-details-open]')).toBeNull()
+
+    fireEvent.click(view.getByRole('button', { name: zh.collapseExplorer }))
+    expect(frameStore.getSnapshot().explorerCollapsed).toBe(true)
+    fireEvent.click(view.getByRole('button', { name: zh.expandExplorer }))
+    expect(frameStore.getSnapshot().explorerCollapsed).toBe(false)
 
     act(() => { frameStore.actions.toggleSidebar(); frameStore.actions.openDetails() })
     expect(view.container.querySelector('[data-details-open]')).not.toBeNull()
@@ -178,7 +183,8 @@ describe('Canvas', () => {
     await waitFor(() => { expect(appendReference).toHaveBeenCalledWith(SID, frozen, '[新句]') })
     expect(order).toEqual(['save', 'capture', 'reference'])
     expect(save).toHaveBeenCalledWith(SID, {
-      assetId: saved.id, baseRevisionId: 'revision-1', content: { kind: 'manuscript', body: '新句继续。' },
+      assetId: saved.id, baseRevisionId: 'revision-1', title: '第一章',
+      content: { kind: 'manuscript', body: '新句继续。' },
     })
     expect(capture).toHaveBeenCalledWith(SID, {
       assetId: saved.id, revisionId: saved.revisionId,
@@ -201,10 +207,12 @@ describe('Canvas', () => {
 
     act(() => {
       store.actions.open(chapter())
+      store.actions.editTitle('雨夜归人')
       store.actions.edit({ kind: 'manuscript', body: '手动保存' })
       store.actions.select({ kind: 'text-range', startUtf16: 1, endUtf16: 3 })
     })
     const save = vi.fn(async () => chapter({
+      title: '雨夜归人',
       content: { kind: 'manuscript', body: '手动保存' },
       revisionId: 'revision-2' as NovelAssetDocument['revisionId'],
     }))
@@ -212,6 +220,7 @@ describe('Canvas', () => {
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={save} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
     />)
+    expect((view.getByLabelText(zh.chapterTitle) as HTMLInputElement).value).toBe('雨夜归人')
     fireEvent.click(view.getByText(zh.save))
     await waitFor(() => { expect(save).toHaveBeenCalledTimes(1) })
     await waitFor(() => { expect(view.getByText(zh.saved)).toBeTruthy() })
@@ -219,7 +228,9 @@ describe('Canvas', () => {
       dirty: false,
       selection: { kind: 'text-range', startUtf16: 1, endUtf16: 3 },
       document: { revisionId: 'revision-2' },
+      titleDraft: '雨夜归人',
     })
+    expect(save).toHaveBeenCalledWith(SID, expect.objectContaining({ title: '雨夜归人' }))
     expect((view.getByText(zh.reference).closest('button') as HTMLButtonElement).disabled).toBe(false)
   })
 
@@ -342,7 +353,8 @@ describe('Explorer', () => {
     />)
     await waitFor(() => { expect(view.getByText('第一章')).toBeTruthy() })
     await waitFor(() => { expect(store.getSnapshot().document?.id).toBe(first.id) })
-    expect(view.getByText(zh.chapterCharacters).parentElement?.textContent).toContain('5')
+    expect(view.getByText(zh.chapters).parentElement?.textContent).toContain('2 章')
+    expect(view.getByText(zh.outline).parentElement?.textContent).toContain('0 章')
     fireEvent.click(view.getByText('第二章'))
     await waitFor(() => { expect(store.getSnapshot().document?.id).toBe(second.id) })
     await waitFor(() => { expect(view.getByText('第二章').closest('button')?.getAttribute('data-active')).toBe('true') })
@@ -640,9 +652,13 @@ describe('Novel workbench stores and browser assembly', () => {
 
     const frame = createNovelFrameStore().create()
     act(() => {
-      frame.actions.toggleSidebar(); frame.actions.openDetails(); frame.actions.closeDetails(); frame.actions.setAgentWidth(999)
+      frame.actions.toggleSidebar()
+      frame.actions.toggleExplorer()
+      frame.actions.openDetails()
+      frame.actions.closeDetails()
+      frame.actions.setAgentWidth(999)
     })
-    expect(frame.getSnapshot()).toEqual({ sidebarCollapsed: false, detailsOpen: false, agentWidth: 640 })
+    expect(frame.getSnapshot()).toEqual({ sidebarCollapsed: false, explorerCollapsed: true, detailsOpen: false, agentWidth: 640 })
   })
 
   it('wires slots, remotes, Composer mentions, reviews, layout, locale, and theme teardown', async () => {

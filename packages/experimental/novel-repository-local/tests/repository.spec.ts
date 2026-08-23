@@ -420,7 +420,7 @@ describe('LocalNovelRepository', () => {
       .rejects.toMatchObject({ code: 'NOVEL_ASSET_DUPLICATE_ID' })
   })
 
-  it('guardedly saves only the body and rejects stale writes after external changes', async () => {
+  it('guardedly saves title and body while preserving identity, then rejects stale external writes', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))
     await writeFile(join(dir, 'novel.yaml'), manifest())
@@ -432,10 +432,12 @@ describe('LocalNovelRepository', () => {
     const saved = await ctx.novelRepository.saveAssetContent(novel, {
       assetId: initial!.asset.id,
       baseRevisionId: initial!.revisionId,
+      title: '雨夜归人',
       content: { kind: 'manuscript', body: '作者新稿' },
     })
     expect(saved.content).toEqual({ kind: 'manuscript', body: '作者新稿' })
-    expect(await readFile(path, 'utf8')).toBe(chapter('chapter-one', '第一章', '作者新稿'))
+    expect(saved.frontmatter).toMatchObject({ novel: { id: 'chapter-one', title: '雨夜归人' } })
+    expect(await readFile(path, 'utf8')).toBe(chapter('chapter-one', '雨夜归人', '作者新稿'))
 
     await writeFile(path, chapter('chapter-one', '第一章', '编辑器外部新稿'))
     await expect(ctx.novelRepository.saveAssetContent(novel, {

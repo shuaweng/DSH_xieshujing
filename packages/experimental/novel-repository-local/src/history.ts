@@ -89,6 +89,7 @@ async function createPrivateFile(path: string): Promise<void> {
  * Open and validate one Novel history database without resetting unknown data.
  * @param path - absolute SQLite database path owned by the Novel Project.
  * @param busyTimeoutMs - maximum SQLite lock wait in milliseconds.
+ * @param decodeOperations - exact Asset-type decoder used to validate persisted ChangeSet operations.
  * @returns a validated history connection with current schema.
  */
 export async function openHistory(

@@ -1196,7 +1196,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'novel.canvas\', () => ctx.slots.register(\n      { name: \'novel.canvas\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/experimental/novel-workbench/src/client/index.ts:38',
+    source: 'packages/experimental/novel-workbench/src/client/index.ts:71',
   },
   {
     key: 'novel.explorer',
@@ -1220,7 +1220,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'novel.explorer\', () => ctx.slots.register(\n      { name: \'novel.explorer\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/experimental/novel-workbench/src/client/index.ts:32',
+    source: 'packages/experimental/novel-workbench/src/client/index.ts:65',
   },
   {
     key: 'root',

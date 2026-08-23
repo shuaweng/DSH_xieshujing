@@ -58,7 +58,7 @@ export interface NovelAssetTypeDefinition {
     readonly proposalInstructions: string
   }
   parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset
-  serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent): NovelAssetMaterialization
+  serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent, title?: string): NovelAssetMaterialization
   captureSelection(
     snapshot: AssetSnapshot,
     input: NovelSelectionInput,

@@ -172,6 +172,8 @@ export interface SelectionRef {
 export interface SaveAssetContentRequest {
   readonly assetId: AssetId
   readonly baseRevisionId: RevisionId
+  /** Optional authored display title, persisted through the Asset type serializer. */
+  readonly title?: string
   readonly content: NovelAssetContent
 }
 

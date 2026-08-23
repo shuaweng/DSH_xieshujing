@@ -621,7 +621,7 @@ Source: [`packages/experimental/agent-team/src/types.ts:125`](../packages/experi
 
 ## `@deepseek-ai/dsh-experimental-novel-context`
 
-Requires: `fs` · `novelRepository`
+Requires: `fs` · `novelRepository` · `novelAssetTypes`
 
 ```ts config-catalog
 /** Resolver safety bounds. */
@@ -639,7 +639,7 @@ Source: [`packages/experimental/novel-context/src/index.ts:42`](../packages/expe
 
 ## `@deepseek-ai/dsh-experimental-novel-repository-local`
 
-Requires: `fs`
+Requires: `fs` · `novelAssetTypes`
 
 ```ts config-catalog
 /** Local provider bounds and SQLite lock policy. */
@@ -661,7 +661,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/novel-repository-local/src/index.ts:58`](../packages/experimental/novel-repository-local/src/index.ts)
+Source: [`packages/experimental/novel-repository-local/src/index.ts:57`](../packages/experimental/novel-repository-local/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-novel-repository-remote"></a>
 
@@ -679,7 +679,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/novel-repository-remote/src/index.ts:49`](../packages/experimental/novel-repository-remote/src/index.ts)
+Source: [`packages/experimental/novel-repository-remote/src/index.ts:53`](../packages/experimental/novel-repository-remote/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-tool-agent-team"></a>
 
@@ -3334,7 +3334,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-experimental-novel-repository-client` ([`packages/experimental/novel-repository-client/src/index.ts`](../packages/experimental/novel-repository-client/src/index.ts))
 - `@deepseek-ai/dsh-experimental-novel-studio` ([`packages/experimental/novel-studio/src/index.ts`](../packages/experimental/novel-studio/src/index.ts))
 - `@deepseek-ai/dsh-experimental-novel-workbench` ([`packages/experimental/novel-workbench/src/index.ts`](../packages/experimental/novel-workbench/src/index.ts))
-- `@deepseek-ai/dsh-experimental-tool-novel` — requires `tools` · `systemPrompt` · `novelContextResolver` · `novelRepository` · `fs` · `sandboxPolicy` ([`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts))
+- `@deepseek-ai/dsh-experimental-tool-novel` — requires `tools` · `systemPrompt` · `novelContextResolver` · `novelRepository` · `novelAssetTypes` · `fs` · `sandboxPolicy` ([`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts))
 - `@deepseek-ai/dsh-fs-e2b` — requires `e2b` ([`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts))
 - `@deepseek-ai/dsh-fs-observation-policy` ([`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts))
 - `@deepseek-ai/dsh-goal-round-driver` — requires `agents` · `goals` · `sessions` ([`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts))

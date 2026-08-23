@@ -4044,7 +4044,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'NovelAssetTypeDefinition',
-    declaration: 'export interface NovelAssetTypeDefinition {\n    readonly type: NovelAssetType;\n    readonly contentRoot: string;\n    readonly requiredContentRoot?: boolean;\n    readonly extensions: readonly string[];\n    readonly model: {\n        readonly description: string;\n        readonly proposalInstructions: string;\n    };\n    parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset;\n    serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent): NovelAssetMaterialization;\n    captureSelection(snapshot: AssetSnapshot, input: NovelSelectionInput, options: NovelSelectionCaptureOptions): CapturedNovelSelection;\n    modelText(snapshot: AssetSnapshot, selector?: NovelSelector): string;\n    prepareOperations(snapshot: AssetSnapshot, input: unknown): readonly NovelOperation[];\n    decodeOperations(value: unknown): readonly NovelOperation[];\n    materializeOperations(snapshot: AssetSnapshot, operations: readonly NovelOperation[]): NovelAssetMaterialization;\n}',
+    declaration: 'export interface NovelAssetTypeDefinition {\n    readonly type: NovelAssetType;\n    readonly contentRoot: string;\n    readonly requiredContentRoot?: boolean;\n    readonly extensions: readonly string[];\n    readonly model: {\n        readonly description: string;\n        readonly proposalInstructions: string;\n    };\n    parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset;\n    serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent, title?: string): NovelAssetMaterialization;\n    captureSelection(snapshot: AssetSnapshot, input: NovelSelectionInput, options: NovelSelectionCaptureOptions): CapturedNovelSelection;\n    modelText(snapshot: AssetSnapshot, selector?: NovelSelector): string;\n    prepareOperations(snapshot: AssetSnapshot, input: unknown): readonly NovelOperation[];\n    decodeOperations(value: unknown): readonly NovelOperation[];\n    materializeOperations(snapshot: AssetSnapshot, operations: readonly NovelOperation[]): NovelAssetMaterialization;\n}',
   },
   {
     name: 'NovelAssetTypeMap',
@@ -4344,7 +4344,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SaveAssetContentRequest',
-    declaration: 'export interface SaveAssetContentRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly content: NovelAssetContent;\n}',
+    declaration: 'export interface SaveAssetContentRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly title?: string;\n    readonly content: NovelAssetContent;\n}',
   },
   {
     name: 'SaveImageAttachment',
@@ -4352,7 +4352,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SaveNovelAssetRequest',
-    declaration: 'export interface SaveNovelAssetRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly content: NovelWireValue;\n}',
+    declaration: 'export interface SaveNovelAssetRequest {\n    readonly assetId: AssetId;\n    readonly baseRevisionId: RevisionId;\n    readonly title?: string;\n    readonly content: NovelWireValue;\n}',
   },
   {
     name: 'SaveTextSpill',

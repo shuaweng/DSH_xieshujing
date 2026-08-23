@@ -173,6 +173,7 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       {
         assetId: request.assetId,
         baseRevisionId: request.baseRevisionId,
+        ...(request.title === undefined ? {} : { title: request.title }),
         // The Remote codec proves lossless JSON; the exact type definition performs
         // the semantic validation before any authored bytes are materialized.
         content: request.content as unknown as NovelAssetContent,

@@ -38,7 +38,7 @@ PR2 在同一能力 seam 上加入第一种作者资产 `manuscript.chapter`。�
 
 第一版持久 `.novel/history.sqlite` schema 保存完整的不可变 Revision 字节和协调后的当前 head。初次观察、受保护的浏览器保存与外部字节分歧分别记为 `initial-scan`、`user-edit` 和 `external-edit`；`agent-apply` 为 PR3 预留。未知、无版本、外来或损坏的数据库会明确失败，绝不会被重置。数据库使用私有文件、WAL、外键、`trusted_schema = OFF`、`synchronous = FULL`、DSH Novel application id 与 strict tables。
 
-浏览器 Consumer 增加有边界的项目级资产列表、章节读取、仅正文的版本保护保存与选区冻结方法。正文保存保留精确解析出的 Frontmatter 前缀，校验生成后的完整文件，同时要求当前基础 Revision 与 Provider 内部 `FsVersion` 一致，并且只在文件系统发布成功后记录新 Revision。SelectionRef 在一个已保留 Revision 上按 Unicode code-point 边界冻结非空 UTF-16 范围；引用哈希、有边界的上下文和预览均从该不可变正文派生。PR2 不加入提示上下文、模型工具、ChangeSet 持久化或工作台布局。
+浏览器 Consumer 增加有边界的项目级资产列表、章节读取、作者内容的版本保护保存与选区冻结方法。保存会保留所有未改动 Frontmatter 的精确源码，允许已注册类型替换经过校验的作者标题标量和类型化内容，校验生成后的完整文件，同时要求当前基础 Revision 与 Provider 内部 `FsVersion` 一致，并且只在文件系统发布成功后记录新 Revision。SelectionRef 在一个已保留 Revision 上按 Unicode code-point 边界冻结非空 UTF-16 范围；引用哈希、有边界的上下文和预览均从该不可变正文派生。PR2 不加入提示上下文、模型工具、ChangeSet 持久化或工作台布局。
 
 ## PR3 Agent 原生 MVP 切片
 
@@ -66,7 +66,7 @@ PR4 不增加另一种作者资产。`planning.outline` 将作为首个验证：
 
 Composer 是显式冻结选区唯一可见的披露位置。Novel Client 插入普通 reference occurrence，其 label 最多包含前十个 Unicode 字符与一个省略号。隐藏的 occurrence identity 保留完整规范 `dsh-novel:` mention，已注册 Input Trigger codec 只在普通 Composer 提交时序列化该精确 mention。剪贴板投影仍是紧凑的人类 label。删除重复的画布 Context Tray 不改变任何模型输入：上下文解析器和不可变 Session 事件继续作为权威。
 
-阅读展示是可选 Client Renderer 能力，而不是共享画布中针对 `manuscript.chapter` 的分支。Renderer 可以提供作者字符统计；资产浏览器把统计放入底部状态栏，共享画布则在该精确 Renderer 外提供画布/纸张/文字联动皮肤浮层，以及字体和字号浮层。项目/章节面包屑与作者标题取代写作表面的技术类型和路径元数据。这些偏好以及 Agent/工作台分栏宽度都只是客户端视图状态，绝不进入 Frontmatter、Revision 历史、Context Manifest、system prompt 或工具 Schema。面板边界是同时支持指针和键盘、宽度有界的无障碍 separator；丢弃当前值不会改变作者内容。
+阅读展示是可选 Client Renderer 能力，而不是共享画布中针对 `manuscript.chapter` 的分支。Renderer 可以提供作者字符统计；共享的全宽底栏呈现该统计，并提供画布/纸张/文字联动皮肤浮层及字体和字号浮层。纸张填满头部与底栏之间的画布，纵向滚动属于工作台视口而不是可编辑纸张。项目/章节面包屑与可编辑的作者标题取代写作表面的技术类型和路径元数据。资产浏览器始终呈现书籍级“正文”和“大纲”分支（包括空分支），并可独立收起。视图偏好、资产栏可见性以及 Agent/工作台分栏宽度都只是客户端状态，绝不进入 Frontmatter、Revision 历史、Context Manifest、system prompt 或工具 Schema。面板边界是同时支持指针和键盘、宽度有界的无障碍 separator；丢弃当前值不会改变作者内容。
 
 ## 范围与不变量
 

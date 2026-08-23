@@ -157,8 +157,9 @@ flowchart LR
   svc_novelContextResolver["ctx.novelContextResolver<br/>Experimental exact Novel context resolver"]
   pkg_tool_novel["tool-novel"]
   pkg_novel_repository["novel-repository"]
-  svc_novelRepository["ctx.novelRepository<br/>Experimental Novel Project repository seam"]
+  svc_novelAssetTypes["ctx.novelAssetTypes<br/>Experimental Novel Asset type registry"]
   pkg_novel_repository_local["novel-repository-local"]
+  svc_novelRepository["ctx.novelRepository<br/>Experimental Novel Project repository seam"]
   pkg_novel_repository_remote["novel-repository-remote"]
   svc_novelRepositoryRemote["ctx.novelRepositoryRemote<br/>Experimental Novel Project Remote Consumer"]
   pkg_novel_studio["novel-studio"]
@@ -258,6 +259,7 @@ flowchart LR
   pkg_message_feedback --> svc_messageFeedback
   pkg_modules --> svc_clientModules
   pkg_novel_context --> svc_novelContextResolver
+  pkg_novel_repository --> svc_novelAssetTypes
   pkg_novel_repository --> svc_novelRepository
   pkg_novel_repository_local --> svc_novelRepository
   pkg_novel_repository_remote --> svc_novelRepositoryRemote
@@ -357,6 +359,9 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_novelAssetTypes --> pkg_novel_context
+  svc_novelAssetTypes --> pkg_novel_repository_local
+  svc_novelAssetTypes --> pkg_tool_novel
   svc_novelContextResolver --> pkg_tool_novel
   svc_novelRepository --> pkg_novel_context
   svc_novelRepository --> pkg_novel_repository_remote
@@ -492,6 +497,7 @@ flowchart LR
 | `ctx.codeRuntime` | `seam` | [`code-runtime`](../packages/code-runtime/code-runtime) | `code-runtime-worker` | [`tools`](../packages/core/tools) | - | Runs one model-written program against host-provided async bindings; backends differ by substrate and language (the tool registry consumes it for Code Mode). |
 | `ctx.fs` | `seam` | [`fs`](../packages/fs/fs) | [`fs-local`](../packages/fs/fs-local), [`fs-sandbox`](../packages/fs/fs-sandbox), [`fs-e2b`](../packages/e2b/fs-e2b) | [`tool-fs`](../packages/fs/tool-fs) | [`fs-observation-policy`](../packages/fs/fs-observation-policy) | tool-fs executes read/write/edit through ctx.fs; fs-sandbox fences mutations by the shared sandbox mode; fs-observation-policy contributes observed-state checks through the fs/* event gate. |
 | `ctx.novelContextResolver` | `core` | `novel-context` | - | `tool-novel` | - | Resolves canonical Revision-bound references, enforces one-Project Session binding and context budgets, and appends frozen untrusted Novel context to the Session log before model execution. |
+| `ctx.novelAssetTypes` | `core` | `novel-repository` | - | `novel-context`, `novel-repository-local`, `tool-novel` | - | Owns effect-scoped exact-type parsing, serialization, selection, model projection, mutation validation, and Diff materialization contributions shared by the repository and model-facing tools. |
 | `ctx.novelRepository` | `seam` | `novel-repository` | `novel-repository-local` | `novel-context`, `novel-repository-remote`, `tool-novel` | - | The local provider reconciles chapter files into immutable SQLite Revisions and publishes explicit ChangeSets through a crash-recoverable journal; default Profiles load neither the seam nor its consumers. |
 | `ctx.novelRepositoryRemote` | `core` | `novel-repository-remote` | - | [`api-gateway`](../packages/api/gateway) | - | Uses the Agent resolved by the existing Gateway identity policy and exposes bounded discovery, chapter saves, selection capture, and explicit ChangeSet review through the novelRepository wire namespace; a separate Client-only adapter mounts the generated contribution. |
 | `ctx.novelStudioPaths` | `bundle` | `novel-studio` | - | [`agent-presets`](../packages/preset/agent-presets) | - | Publishes the private overlay package's Preset root so the isolated Novel Studio composition can select its safe proposal-only Agent without repository-relative paths. |

@@ -18,6 +18,8 @@ export interface NovelWorkbenchState {
   project?: NovelProjectDescriptor
   assets: readonly NovelAssetDescriptor[]
   document?: NovelAssetDocument
+  /** Editable authored title kept beside typed content until one guarded save commits both. */
+  titleDraft?: string
   draft?: NovelWireValue
   dirty: boolean
   selection?: NovelWireValue
@@ -35,6 +37,7 @@ type Actions = {
   open: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   saved: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   edit: (draft: NovelWorkbenchState, content: NovelWireValue) => void
+  editTitle: (draft: NovelWorkbenchState, title: string) => void
   select: (draft: NovelWorkbenchState, selection?: NovelWireValue) => void
   setReaderSkin: (draft: NovelWorkbenchState, skin: NovelReaderSkin) => void
   setReaderFont: (draft: NovelWorkbenchState, font: NovelReaderFont) => void
@@ -46,12 +49,14 @@ type Actions = {
 /** Transient root panel visibility controlled through the ordinary layout service. */
 export interface NovelFrameState {
   sidebarCollapsed: boolean
+  explorerCollapsed: boolean
   detailsOpen: boolean
   agentWidth: number
 }
 
 type NovelFrameActions = {
   toggleSidebar: (draft: NovelFrameState) => void
+  toggleExplorer: (draft: NovelFrameState) => void
   openDetails: (draft: NovelFrameState) => void
   closeDetails: (draft: NovelFrameState) => void
   setAgentWidth: (draft: NovelFrameState, width: number) => void
@@ -60,6 +65,7 @@ type NovelFrameActions = {
 /** Browser-bound panel actions exposed through the ordinary DSH layout service. */
 export interface NovelFramePanelActions {
   toggleSidebar: () => void
+  toggleExplorer: () => void
   openDetails: () => void
   closeDetails: () => void
   setAgentWidth: (width: number) => void
@@ -84,6 +90,7 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       reset: (draft) => {
         delete draft.project
         delete draft.document
+        delete draft.titleDraft
         delete draft.error
         draft.assets = []
         delete draft.draft
@@ -99,6 +106,7 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       },
       open: (draft, document) => {
         draft.document = document
+        draft.titleDraft = document.title
         draft.draft = structuredClone(document.content)
         draft.dirty = false
         delete draft.selection
@@ -106,13 +114,20 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       },
       saved: (draft, document) => {
         draft.document = document
+        draft.titleDraft = document.title
         draft.draft = structuredClone(document.content)
+        draft.assets = draft.assets.map(asset => asset.id === document.id ? descriptorOf(document) : asset)
         draft.dirty = false
         delete draft.error
       },
       edit: (draft, content) => {
         draft.draft = structuredClone(content)
-        draft.dirty = JSON.stringify(draft.document?.content) !== JSON.stringify(content)
+        draft.dirty = isDirty(draft)
+        delete draft.error
+      },
+      editTitle: (draft, title) => {
+        draft.titleDraft = title
+        draft.dirty = isDirty(draft)
         delete draft.error
       },
       select: (draft, selection) => {
@@ -134,12 +149,23 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
  */
 export function createNovelFrameStore(): EngineStoreHandle<NovelFrameState, NovelFrameActions> {
   return defineStore({
-    init: (): NovelFrameState => ({ sidebarCollapsed: true, detailsOpen: false, agentWidth: 410 }),
+    init: (): NovelFrameState => ({ sidebarCollapsed: true, explorerCollapsed: false, detailsOpen: false, agentWidth: 410 }),
     actions: {
       toggleSidebar: (draft) => { draft.sidebarCollapsed = !draft.sidebarCollapsed },
+      toggleExplorer: (draft) => { draft.explorerCollapsed = !draft.explorerCollapsed },
       openDetails: (draft) => { draft.detailsOpen = true },
       closeDetails: (draft) => { draft.detailsOpen = false },
       setAgentWidth: (draft, width) => { draft.agentWidth = Math.min(640, Math.max(300, Math.round(width))) },
     },
   })
+}
+
+function isDirty(state: NovelWorkbenchState): boolean {
+  return state.titleDraft !== state.document?.title
+    || JSON.stringify(state.document?.content) !== JSON.stringify(state.draft)
+}
+
+function descriptorOf(document: NovelAssetDocument): NovelAssetDescriptor {
+  const { content: _content, ...descriptor } = document
+  return descriptor
 }

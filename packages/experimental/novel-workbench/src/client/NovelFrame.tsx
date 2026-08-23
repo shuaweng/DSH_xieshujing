@@ -1,6 +1,6 @@
 /** Stable three-surface Novel shell: assets, authored canvas, and Agent conversation. */
 
-import { useRef, useState } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import type { PropsLocale, PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { createNovelFrameStore } from './store.ts'
 import css from './workbench.module.css'
@@ -13,15 +13,21 @@ export type NovelFrameProps = PropsRuntime<'root'>
 /** Root occupant preserving the canvas while the current Session changes. */
 export function NovelFrame({ renderSlot, t, useStore, actions }: NovelFrameProps) {
   const sidebarCollapsed = useStore(state => state.sidebarCollapsed)
+  const explorerCollapsed = useStore(state => state.explorerCollapsed)
   const detailsOpen = useStore(state => state.detailsOpen)
   const agentWidth = useStore(state => state.agentWidth)
   const sidebarWidth = sidebarCollapsed ? 56 : 230
+  const explorerWidth = explorerCollapsed ? 0 : 230
+  const explorerBoundary = sidebarWidth + agentWidth + 8 + explorerWidth
   return (
     <main
       className={css.frame}
       data-novel-workbench
       data-details-open={detailsOpen || undefined}
-      style={{ gridTemplateColumns: `${sidebarWidth}px ${agentWidth}px 8px clamp(180px, 17vw, 230px) minmax(320px, 1fr)` }}
+      style={{
+        gridTemplateColumns: `${sidebarWidth}px ${agentWidth}px 8px ${explorerWidth}px minmax(320px, 1fr)`,
+        '--novel-workbench-left': `${sidebarWidth + agentWidth + 8}px`,
+      } as CSSProperties}
     >
       <aside className={css.dshSidebar} aria-label="DeepSeek Harness">
         {renderSlot('sidebar', { collapsed: sidebarCollapsed, width: sidebarWidth })}
@@ -36,9 +42,17 @@ export function NovelFrame({ renderSlot, t, useStore, actions }: NovelFrameProps
         resetLabel={t('resetPanelWidth')}
         onChange={actions.setAgentWidth}
       />
-      <aside className={css.explorer} aria-label={t('chapters')}>
+      <aside className={css.explorer} aria-label={t('assetSidebar')} data-collapsed={explorerCollapsed || undefined}>
         {renderSlot('novel.explorer', {})}
       </aside>
+      <button
+        type="button"
+        className={css.explorerToggle}
+        style={{ left: explorerBoundary }}
+        aria-label={explorerCollapsed ? t('expandExplorer') : t('collapseExplorer')}
+        title={explorerCollapsed ? t('expandExplorer') : t('collapseExplorer')}
+        onClick={actions.toggleExplorer}
+      >{explorerCollapsed ? '›' : '‹'}</button>
       <section className={css.canvas}>{renderSlot('novel.canvas', {})}</section>
       <div className={css.overlay}>{renderSlot('shell.overlay', {})}</div>
     </main>

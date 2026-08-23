@@ -1,6 +1,6 @@
 /** Client registry connecting typed Novel Asset values to human editing surfaces. */
 
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type {
   NovelAssetDocument,
@@ -94,24 +94,12 @@ export const manuscriptChapterRenderer: NovelAssetRendererDefinition = {
   },
   renderEditor({ content, ariaLabel, onContentChange, onSelectionChange }) {
     const chapter = manuscriptContent(content)
-    return (
-      <textarea
-        className={css.editor}
-        aria-label={ariaLabel}
-        value={chapter.body}
-        spellCheck
-        onChange={(event) => {
-          onContentChange({ kind: 'manuscript', body: event.target.value })
-        }}
-        onSelect={(event) => {
-          const startUtf16 = event.currentTarget.selectionStart
-          const endUtf16 = event.currentTarget.selectionEnd
-          onSelectionChange(endUtf16 <= startUtf16
-            ? undefined
-            : { kind: 'text-range', startUtf16, endUtf16 })
-        }}
-      />
-    )
+    return <ManuscriptEditor
+      body={chapter.body}
+      ariaLabel={ariaLabel}
+      onContentChange={onContentChange}
+      onSelectionChange={onSelectionChange}
+    />
   },
   renderDiff(before, operations) {
     const chapter = manuscriptContent(before)
@@ -131,6 +119,42 @@ export const manuscriptChapterRenderer: NovelAssetRendererDefinition = {
     }
     return `${selector['startUtf16']}–${selector['endUtf16']}`
   },
+}
+
+interface ManuscriptEditorProps {
+  readonly body: string
+  readonly ariaLabel: string
+  readonly onContentChange: NovelAssetEditorProps['onContentChange']
+  readonly onSelectionChange: NovelAssetEditorProps['onSelectionChange']
+}
+
+/** Grow with the manuscript so the workbench viewport owns scrolling instead of the paper textarea. */
+function ManuscriptEditor({ body, ariaLabel, onContentChange, onSelectionChange }: ManuscriptEditorProps) {
+  const editor = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    if (editor.current === null) return
+    editor.current.style.height = '0px'
+    editor.current.style.height = `${Math.max(540, editor.current.scrollHeight)}px`
+  }, [body])
+  return (
+    <textarea
+      ref={editor}
+      className={css.editor}
+      aria-label={ariaLabel}
+      value={body}
+      spellCheck
+      onChange={(event) => {
+        onContentChange({ kind: 'manuscript', body: event.target.value })
+      }}
+      onSelect={(event) => {
+        const startUtf16 = event.currentTarget.selectionStart
+        const endUtf16 = event.currentTarget.selectionEnd
+        onSelectionChange(endUtf16 <= startUtf16
+          ? undefined
+          : { kind: 'text-range', startUtf16, endUtf16 })
+      }}
+    />
+  )
 }
 
 function manuscriptContent(content: NovelWireValue): { kind: 'manuscript'; body: string } {

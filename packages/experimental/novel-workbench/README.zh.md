@@ -11,9 +11,9 @@
 - Novel Studio Profile 禁用普通 `ui-layout` 根占位者。本包成为唯一根占位者，并声明原生 `sidebar`、`conversation`、`details`、`shell.overlay`、`novel.explorer` 和 `novel.canvas` 插槽。
 - 桌面组合把 Agent 对话放在左侧，把正文浏览器与创作画布放在右侧，同时在最外侧保留可折叠的原生 DSH Session 侧栏。无障碍拖拽分隔条（也支持方向键）可以调整对话与工作台的宽度分配。
 - 原生 DSH 侧栏仍然可用并默认折叠；它可以展开以搜索和导航会话。切换 Session 不会替换根工作台组件。
-- 资产浏览器发现当前 Session 的 Novel Project，以克制的草稿箱/章节层级展示资产，打开绑定精确 Revision 的类型化 Asset 文档，并把由当前章节 Renderer 计算的字数放在底部状态栏。
+- 资产浏览器发现当前 Session 的 Novel Project，呈现稳定的“书籍 → 正文 / 大纲”分支（包括空分支），打开绑定精确 Revision 的类型化 Asset 文档，并可独立于 DSH Session 侧栏收起。
 - `ctx.novelAssetRenderers` 拥有 effect 作用域内、按精确类型匹配的编辑器、选区描述、可选阅读展示和 Diff contribution。共享画布拥有版本保护保存、Context Commit Barrier、Agent 引用插入和审阅权威；缺少 renderer 时会明确拒绝，而不是展示误导性的通用编辑器。
-- 内置正文 Renderer 编辑章节正文、捕获 UTF-16 范围、统计排除空白后的作者字符，并启用居中的纸张画布与六套画布/纸张/文字联动皮肤。右下角紧凑浮层用于切换皮肤、字体和字号；画布头部只展示项目/章节面包屑，技术类型与路径不进入写作表面。
+- 内置正文 Renderer 通过同一次带 Revision 保护的保存编辑章节名称与正文、捕获 UTF-16 范围、统计排除空白后的作者字符，并启用全高居中的纸张画布与六套画布/纸张/文字联动皮肤。全宽工作台底栏承载字数、皮肤、字体与字号控制；滚动由工作台视口拥有，技术类型与路径不进入写作表面。
 - “引用选区到 Agent”先保存脏的类型化草稿，保存失败即安全停止，然后冻结选区。Composer 只显示 `@[引用文字前十个字…]`；隐藏的 occurrence 保留完整规范 `dsh-novel:` mention，并在提交时把精确值序列化给 Agent。
 - `novel_propose_changes` 工具结果渲染持久的行内 Diff 卡片。接受和拒绝调用 Session 所属 Remote 方法；接受后从权威 Repository 状态刷新资产浏览器和画布。
 - 工作台在对话插槽所有者挂载后延迟解析 conversation service，在避免 Client 插件依赖循环的同时继续使用 DSH 普通 Composer 草稿状态。

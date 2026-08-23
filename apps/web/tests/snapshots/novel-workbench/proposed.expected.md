@@ -47,14 +47,20 @@
     - button "Send message" [disabled]
     - text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}
   - separator "Resize conversation and workbench"
-  - complementary "Manuscript":
+  - complementary "Novel Asset sidebar":
     - strong: Novel Workbench
     - strong: 白港
-    - text: 1 chapters Drafts Total 1 chapters
     - navigation:
-      - button "第一章 12 characters"
-    - text: Chapter characters
-    - strong: "12"
+      - group:
+        - text: ›
+        - strong: Manuscript
+        - text: 1 chapters
+        - button "第一章 12 characters"
+      - group:
+        - text: ›
+        - strong: Outline
+        - text: 0 chapters
+  - button "Collapse Asset sidebar": ‹
   - navigation "Current novel location":
     - strong: 白港
     - text: 第一章
@@ -62,7 +68,9 @@
   - button "Save" [disabled]
   - button "Reference selection to Agent" [disabled]
   - article:
-    - heading "第一章" [level=1]
+    - textbox "Chapter title": 第一章
     - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
+  - text: Chapter characters：
+  - strong: "12"
   - button "Change reader skin"
   - button "Typeface and size": A

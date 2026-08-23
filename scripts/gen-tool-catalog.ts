@@ -61,6 +61,7 @@ import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import NovelContextResolver from '@deepseek-ai/dsh-experimental-novel-context'
+import NovelAssetTypeRegistry from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import LocalNovelRepository from '@deepseek-ai/dsh-experimental-novel-repository-local'
 import * as ToolNovel from '@deepseek-ai/dsh-experimental-tool-novel'
 import SandboxPolicyService from '@deepseek-ai/dsh-sandbox-policy'
@@ -569,11 +570,12 @@ const TOOL_PACKAGES: ToolPackage[] = [
     pkg: '@deepseek-ai/dsh-experimental-tool-novel',
     dir: 'tool-novel',
     source: 'packages/experimental/tool-novel/src/index.ts',
-    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.novelContextResolver', 'ctx.novelRepository', 'ctx.fs', 'ctx.sandboxPolicy', 'an owning Agent Session at execution time'],
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.novelContextResolver', 'ctx.novelRepository', 'ctx.novelAssetTypes', 'ctx.fs', 'ctx.sandboxPolicy', 'an owning Agent Session at execution time'],
     writes: ['tool/call', 'durable proposal-only ChangeSet from novel_propose_changes', 'tool/result'],
     async mount(ctx) {
       await ctx.plugin(LocalFileSystem)
       await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write' })
+      await ctx.plugin(NovelAssetTypeRegistry)
       await ctx.plugin(LocalNovelRepository)
       await ctx.plugin(NovelContextResolver)
       await ctx.plugin(ToolNovel)

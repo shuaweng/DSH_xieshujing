@@ -47,6 +47,7 @@ export interface NovelAssetDocument extends NovelAssetDescriptor {
 export interface SaveNovelAssetRequest {
   readonly assetId: AssetId
   readonly baseRevisionId: RevisionId
+  readonly title?: string
   readonly content: NovelWireValue
 }
 

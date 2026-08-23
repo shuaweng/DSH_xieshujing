@@ -42,6 +42,7 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
       const saved = await save(sessionId, {
         assetId: state.document.id,
         baseRevisionId: state.document.revisionId,
+        title: state.titleDraft ?? state.document.title,
         content: state.draft,
       })
       actions.saved(saved)
@@ -83,13 +84,15 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
     return <div className={css.empty}>{errorMessage(error)}</div>
   }
   const reader = renderer.reader
+  const title = state.titleDraft ?? state.document.title
+  const characterCount = reader?.countCharacters(state.draft)
   return (
-    <div className={css.editorShell}>
+    <div className={css.editorShell} data-reader-shell={reader === undefined ? undefined : ''}>
       <header className={css.editorHeader}>
         <nav className={css.breadcrumb} aria-label={t('location')}>
           <strong>{state.project?.title ?? t('studio')}</strong>
           <span aria-hidden="true">/</span>
-          <span>{state.document.title}</span>
+          <span>{title}</span>
         </nav>
         <div className={css.editorActions}>
           {state.error === undefined
@@ -112,7 +115,7 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
           ? renderer.renderEditor({
             document: state.document,
             content: state.draft,
-            ariaLabel: `${state.document.title} · ${t('editor')}`,
+            ariaLabel: `${title} · ${t('editor')}`,
             onContentChange: actions.edit,
             onSelectionChange: actions.select,
           })
@@ -121,29 +124,37 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
               <div className={css.editorScroll}>
                 <article className={css.editorPaper}>
                   <header className={css.documentTitle}>
-                    <h1>{state.document.title}</h1>
+                    <input
+                      className={css.documentTitleInput}
+                      aria-label={t('chapterTitle')}
+                      value={title}
+                      onChange={(event) => { actions.editTitle(event.target.value) }}
+                    />
                   </header>
                   {renderer.renderEditor({
                     document: state.document,
                     content: state.draft,
-                    ariaLabel: `${state.document.title} · ${t('editor')}`,
+                    ariaLabel: `${title} · ${t('editor')}`,
                     onContentChange: actions.edit,
                     onSelectionChange: actions.select,
                   })}
                 </article>
               </div>
-              <ReaderControls
-                activeSkin={state.readerSkin}
-                activeFont={state.readerFont}
-                fontSize={state.readerFontSize}
-                setSkin={actions.setReaderSkin}
-                setFont={actions.setReaderFont}
-                setFontSize={actions.setReaderFontSize}
-                t={t}
-              />
             </>
           )}
       </div>
+      {reader !== undefined && (
+        <ReaderControls
+          activeSkin={state.readerSkin}
+          activeFont={state.readerFont}
+          fontSize={state.readerFontSize}
+          characterCount={characterCount ?? 0}
+          setSkin={actions.setReaderSkin}
+          setFont={actions.setReaderFont}
+          setFontSize={actions.setReaderFontSize}
+          t={t}
+        />
+      )}
     </div>
   )
 }
@@ -152,6 +163,7 @@ interface ReaderControlsProps {
   readonly activeSkin: NovelReaderSkin
   readonly activeFont: NovelReaderFont
   readonly fontSize: number
+  readonly characterCount: number
   readonly setSkin: (skin: NovelReaderSkin) => void
   readonly setFont: (font: NovelReaderFont) => void
   readonly setFontSize: (size: number) => void
@@ -159,9 +171,9 @@ interface ReaderControlsProps {
 }
 
 /** Compact reader dock: human-facing skins and typography stay out of the model contract. */
-function ReaderControls({ activeSkin, activeFont, fontSize, setSkin, setFont, setFontSize, t }: ReaderControlsProps) {
+function ReaderControls({ activeSkin, activeFont, fontSize, characterCount, setSkin, setFont, setFontSize, t }: ReaderControlsProps) {
   const [panel, setPanel] = useState<'skin' | 'font'>()
-  const root = useRef<HTMLDivElement>(null)
+  const root = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (panel === undefined) return undefined
@@ -178,7 +190,10 @@ function ReaderControls({ activeSkin, activeFont, fontSize, setSkin, setFont, se
   }, [panel])
 
   return (
-    <div className={css.readerControls} ref={root} aria-label={t('readerSettings')}>
+    <footer className={css.readerStatusBar} ref={root} aria-label={t('readerSettings')}>
+      <div className={css.readerStats}>
+        <span>{t('chapterCharacters')}：<strong>{characterCount.toLocaleString()}</strong></span>
+      </div>
       {panel === 'skin' && (
         <section className={css.readerPopover} role="dialog" aria-label={t('chooseSkin')}>
           <strong>{t('chooseSkin')}</strong>
@@ -239,7 +254,7 @@ function ReaderControls({ activeSkin, activeFont, fontSize, setSkin, setFont, se
           onClick={() => { setPanel(current => current === 'font' ? undefined : 'font') }}
         >A</button>
       </div>
-    </div>
+    </footer>
   )
 }
 

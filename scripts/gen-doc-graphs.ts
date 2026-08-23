@@ -478,6 +478,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Resolves canonical Revision-bound references, enforces one-Project Session binding and context budgets, and appends frozen untrusted Novel context to the Session log before model execution.',
   },
   {
+    key: 'novelAssetTypes',
+    pkg: 'novel-repository',
+    title: 'Experimental Novel Asset type registry',
+    mode: 'core',
+    consumers: ['novel-context', 'novel-repository-local', 'tool-novel'],
+    note: 'Owns effect-scoped exact-type parsing, serialization, selection, model projection, mutation validation, and Diff materialization contributions shared by the repository and model-facing tools.',
+  },
+  {
     key: 'novelRepository',
     pkg: 'novel-repository',
     title: 'Experimental Novel Project repository seam',

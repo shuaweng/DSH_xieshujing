@@ -1,7 +1,7 @@
 /** Strict authored-file parsing and the built-in manuscript Asset definition. */
 
 import { createHash } from 'node:crypto'
-import { parseDocument } from 'yaml'
+import { isScalar, parseDocument, stringify } from 'yaml'
 import {
   AssetId,
   NovelRepositoryError,
@@ -126,7 +126,12 @@ export function declaredAssetType(bytes: Uint8Array, path: string): string {
   return type
 }
 
-/** Parse one exact UTF-8 manuscript chapter serialization. */
+/**
+ * Parse one exact UTF-8 manuscript chapter serialization.
+ * @param bytes - complete authored chapter bytes.
+ * @param path - project-relative path used in diagnostics.
+ * @returns the validated typed chapter and type-private source offsets.
+ */
 export function parseChapter(bytes: Uint8Array, path: string): ParsedNovelAsset {
   const parsed = parseFrontmatterFile(bytes, path)
   if (parsed.novel['type'] !== 'manuscript.chapter') {
@@ -161,13 +166,17 @@ export const manuscriptChapterTypeDefinition: NovelAssetTypeDefinition = {
     proposalInstructions: 'Use operations [{"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}]. Offsets must select a non-empty range from novel_get.',
   },
   parse: parseChapter,
-  serializeContent(snapshot, content) {
+  serializeContent(snapshot, content, title) {
     const chapter = chapterContent(content)
     if (containsUnpairedSurrogate(chapter.body)) invalidAsset(snapshot.asset.projectRelativePath, 'chapter body contains an unpaired UTF-16 surrogate')
     const parsedBase = parseChapter(snapshot.serializedUtf8, snapshot.asset.projectRelativePath)
     const source = manuscriptSource(parsedBase)
     const beforeText = new TextDecoder().decode(snapshot.serializedUtf8)
-    return materialization(`${beforeText.slice(0, source.bodyStartUtf16)}${chapter.body}`, snapshot)
+    const withBody = `${beforeText.slice(0, source.bodyStartUtf16)}${chapter.body}`
+    return materialization(
+      title === undefined ? withBody : replaceFrontmatterTitle(withBody, snapshot.asset.projectRelativePath, title),
+      snapshot,
+    )
   },
   captureSelection(snapshot, input, options) {
     const chapter = chapterContent(snapshot.content)
@@ -272,12 +281,45 @@ export const manuscriptChapterTypeDefinition: NovelAssetTypeDefinition = {
   },
 }
 
-/** Hash exact UTF-8 bytes using the canonical lowercase SHA-256 encoding. */
+/** Replace only the parsed `novel.title` scalar so author comments and key order remain byte-stable. */
+function replaceFrontmatterTitle(text: string, path: string, title: string): string {
+  if (title.trim().length === 0 || title.trim() !== title) {
+    invalidAsset(path, 'novel.title must be a non-empty string without surrounding whitespace')
+  }
+  if (title.length > 240) invalidAsset(path, 'novel.title must contain at most 240 UTF-16 code units')
+  if (containsControlCharacter(title) || containsUnpairedSurrogate(title)) {
+    invalidAsset(path, 'novel.title contains invalid characters')
+  }
+  const firstNewline = text.indexOf('\n')
+  const closing = firstNewline < 0 ? undefined : closingFrontmatter(text, firstNewline + 1)
+  if (firstNewline < 0 || closing === undefined) invalidAsset(path, 'the YAML Frontmatter is not closed')
+  const yamlStart = firstNewline + 1
+  const document = parseDocument(text.slice(yamlStart, closing.start), {
+    prettyErrors: true,
+    uniqueKeys: true,
+  })
+  const titleNode = document.getIn(['novel', 'title'], true)
+  if (!isScalar(titleNode) || titleNode.range == null) invalidAsset(path, 'novel.title must be a scalar string')
+  const [start, end] = titleNode.range
+  const serializedTitle = stringify(title).trimEnd()
+  return `${text.slice(0, yamlStart + start)}${serializedTitle}${text.slice(yamlStart + end)}`
+}
+
+/**
+ * Hash exact UTF-8 bytes using the canonical lowercase SHA-256 encoding.
+ * @param bytes - exact bytes whose immutable content identity is required.
+ * @returns the branded lowercase SHA-256 content hash.
+ */
 export function contentHash(bytes: Uint8Array): ContentHash {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`
 }
 
-/** Test whether an offset splits a UTF-16 surrogate pair. */
+/**
+ * Test whether an offset splits a UTF-16 surrogate pair.
+ * @param text - JavaScript string addressed in UTF-16 code units.
+ * @param offset - candidate UTF-16 boundary.
+ * @returns whether the boundary lies between a paired high and low surrogate.
+ */
 export function splitsSurrogatePair(text: string, offset: number): boolean {
   if (offset <= 0 || offset >= text.length) return false
   const before = text.charCodeAt(offset - 1)
@@ -285,7 +327,11 @@ export function splitsSurrogatePair(text: string, offset: number): boolean {
   return before >= 0xD800 && before <= 0xDBFF && after >= 0xDC00 && after <= 0xDFFF
 }
 
-/** Test whether a JavaScript string contains an unpaired surrogate. */
+/**
+ * Test whether a JavaScript string contains an unpaired surrogate.
+ * @param text - JavaScript string to validate.
+ * @returns whether any high or low surrogate lacks its matching pair.
+ */
 export function containsUnpairedSurrogate(text: string): boolean {
   for (let index = 0; index < text.length; index += 1) {
     const code = text.charCodeAt(index)

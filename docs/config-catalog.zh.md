@@ -623,7 +623,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-experimental-novel-context`
 
-需要：`fs` · `novelRepository`
+需要：`fs` · `novelRepository` · `novelAssetTypes`
 
 ```ts config-catalog
 /** Resolver safety bounds. */
@@ -641,7 +641,7 @@ export interface Config {
 
 ## `@deepseek-ai/dsh-experimental-novel-repository-local`
 
-需要：`fs`
+需要：`fs` · `novelAssetTypes`
 
 ```ts config-catalog
 /** Local provider bounds and SQLite lock policy. */
@@ -663,7 +663,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/experimental/novel-repository-local/src/index.ts:58`](../packages/experimental/novel-repository-local/src/index.ts)
+来源：[`packages/experimental/novel-repository-local/src/index.ts:57`](../packages/experimental/novel-repository-local/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-novel-repository-remote"></a>
 
@@ -681,7 +681,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/experimental/novel-repository-remote/src/index.ts:49`](../packages/experimental/novel-repository-remote/src/index.ts)
+来源：[`packages/experimental/novel-repository-remote/src/index.ts:53`](../packages/experimental/novel-repository-remote/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-tool-agent-team"></a>
 
@@ -3336,7 +3336,7 @@ export interface Config {
 - `@deepseek-ai/dsh-experimental-novel-repository-client`（[`packages/experimental/novel-repository-client/src/index.ts`](../packages/experimental/novel-repository-client/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-novel-studio`（[`packages/experimental/novel-studio/src/index.ts`](../packages/experimental/novel-studio/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-novel-workbench`（[`packages/experimental/novel-workbench/src/index.ts`](../packages/experimental/novel-workbench/src/index.ts)）
-- `@deepseek-ai/dsh-experimental-tool-novel` — 需要 `tools` · `systemPrompt` · `novelContextResolver` · `novelRepository` · `fs` · `sandboxPolicy`（[`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)）
+- `@deepseek-ai/dsh-experimental-tool-novel` — 需要 `tools` · `systemPrompt` · `novelContextResolver` · `novelRepository` · `novelAssetTypes` · `fs` · `sandboxPolicy`（[`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)）
 - `@deepseek-ai/dsh-fs-e2b` — 需要 `e2b`（[`packages/e2b/fs-e2b/src/index.ts`](../packages/e2b/fs-e2b/src/index.ts)）
 - `@deepseek-ai/dsh-fs-observation-policy`（[`packages/fs/fs-observation-policy/src/index.ts`](../packages/fs/fs-observation-policy/src/index.ts)）
 - `@deepseek-ai/dsh-goal-round-driver` — 需要 `agents` · `goals` · `sessions`（[`packages/goal/goal-round-driver/src/index.ts`](../packages/goal/goal-round-driver/src/index.ts)）

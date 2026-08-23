@@ -259,7 +259,7 @@ export class LocalNovelRepository extends NovelRepository {
       if (current === undefined) throw assetNotFound(request.assetId)
       if (current.snapshot.revisionId !== request.baseRevisionId) throw staleRevision(request.baseRevisionId)
       const definition = this.ctx.novelAssetTypes.get(current.snapshot.asset.type)
-      const materialized = definition.serializeContent(current.snapshot, request.content)
+      const materialized = definition.serializeContent(current.snapshot, request.content, request.title)
       const bytes = materialized.serializedUtf8
       if (bytes.byteLength > this.config.assetMaxBytes) {
         throw new NovelRepositoryError(

@@ -214,9 +214,11 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     await expect.poll(() => editor.inputValue()).toBe('她沉默片刻没有再解释。雨还在下。')
 
     const authored = '她只看着窗外。雨还在下。'
-    await editor.fill(authored)
-    await editor.press('Home')
-    for (let offset = 0; offset < authored.length; offset += 1) await editor.press('Shift+ArrowRight')
+    await page.getByRole('textbox', { name: 'Chapter title' }).fill('雨夜归人')
+    const renamedEditor = page.getByRole('textbox', { name: '雨夜归人 · Chapter manuscript' })
+    await renamedEditor.fill(authored)
+    await renamedEditor.press('Home')
+    for (let offset = 0; offset < authored.length; offset += 1) await renamedEditor.press('Shift+ArrowRight')
     await page.getByRole('button', { name: 'Reference selection to Agent' }).click()
     const composer = page.getByRole('complementary', { name: 'Agent conversation' }).locator('textarea')
     try {
@@ -237,6 +239,13 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     await page.getByRole('separator', { name: 'Resize conversation and workbench' }).press('ArrowRight')
     await expect.poll(() => page.getByRole('separator', { name: 'Resize conversation and workbench' }).getAttribute('aria-valuenow')).toBe('426')
 
+    await page.getByRole('button', { name: 'Collapse Asset sidebar' }).click()
+    await page.getByRole('button', { name: 'Expand Asset sidebar' }).waitFor()
+    await page.getByRole('button', { name: 'Expand Asset sidebar' }).click()
+    await page.getByRole('button', { name: 'Collapse Asset sidebar' }).waitFor()
+
+    expect(await readFile(join(scaffold.workspaceCwd, 'manuscript', 'chapter-1.md'), 'utf8'))
+      .toContain('title: 雨夜归人')
     expect(await readFile(join(scaffold.workspaceCwd, 'manuscript', 'chapter-1.md'), 'utf8'))
       .toContain('她只看着窗外。雨还在下。')
     await compareOrRefreshGolden(

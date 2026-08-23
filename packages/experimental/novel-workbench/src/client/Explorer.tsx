@@ -31,6 +31,7 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
     assets: value.assets,
     project: value.project,
     document: value.document,
+    titleDraft: value.titleDraft,
     draft: value.draft,
     active: value.document?.id,
     loading: value.loading,
@@ -76,37 +77,67 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
       characterCount = undefined
     }
   }
+  const manuscriptAssets = state.assets.filter(asset => asset.type.startsWith('manuscript.'))
+  const outlineAssets = state.assets.filter(asset => asset.type.startsWith('planning.'))
+  const otherAssets = state.assets.filter(asset =>
+    !asset.type.startsWith('manuscript.') && !asset.type.startsWith('planning.'))
+  const titleOf = (asset: NovelAssetDescriptor) =>
+    asset.id === state.active ? state.titleDraft ?? asset.title : asset.title
 
   return (
     <div className={css.explorerInner}>
       <header className={css.brand}><strong>{t('studio')}</strong></header>
       <div className={css.projectTitle}>
         <strong>{state.project?.title ?? t('chapters')}</strong>
-        <small>{state.assets.length} {t('chapterUnit')}</small>
       </div>
-      <div className={css.sectionTitle}><span>{t('drafts')}</span><small>{t('total')} {state.assets.length} {t('chapterUnit')}</small></div>
       {state.loading && <p className={css.muted}>{t('loading')}</p>}
       {state.error !== undefined && <p className={css.error}>{state.error}</p>}
       <nav className={css.assetList}>
-        {state.assets.map(asset => (
+        <AssetGroup title={t('chapters')} assets={manuscriptAssets} active={state.active} unit={t('chapterUnit')}
+          titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
+        <AssetGroup title={t('outline')} assets={outlineAssets} active={state.active} unit={t('chapterUnit')}
+          titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
+        {otherAssets.length > 0 && (
+          <AssetGroup title={t('otherAssets')} assets={otherAssets} active={state.active} unit={t('assetUnit')}
+            titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
+        )}
+      </nav>
+    </div>
+  )
+}
+
+interface AssetGroupProps {
+  readonly title: string
+  readonly assets: readonly NovelAssetDescriptor[]
+  readonly active: string | undefined
+  readonly unit: string
+  readonly titleOf: (asset: NovelAssetDescriptor) => string
+  readonly openAsset: (assetId: string) => void
+  readonly characterCount: number | undefined
+  readonly characters: string
+}
+
+/** One semantic branch under the current Book; empty branches remain visible for stable orientation. */
+function AssetGroup({ title, assets, active, unit, titleOf, openAsset, characterCount, characters }: AssetGroupProps) {
+  return (
+    <details className={css.assetGroup} open>
+      <summary><strong>{title}</strong><small>{assets.length} {unit}</small></summary>
+      <div className={css.assetGroupItems}>
+        {assets.map(asset => (
           <button
             type="button"
             key={asset.id}
             className={css.assetButton}
-            data-active={asset.id === state.active || undefined}
+            data-active={asset.id === active || undefined}
             onClick={() => { openAsset(asset.id) }}
           >
-            <span>{asset.title}</span>
-            {asset.id === state.active && characterCount !== undefined
-              ? <small>{characterCount.toLocaleString()} {t('characters')}</small>
+            <span>{titleOf(asset)}</span>
+            {asset.id === active && characterCount !== undefined
+              ? <small>{characterCount.toLocaleString()} {characters}</small>
               : null}
           </button>
         ))}
-      </nav>
-      <footer className={css.chapterCount}>
-        <span>{t('chapterCharacters')}</span>
-        <strong>{characterCount?.toLocaleString() ?? '—'}</strong>
-      </footer>
-    </div>
+      </div>
+    </details>
   )
 }

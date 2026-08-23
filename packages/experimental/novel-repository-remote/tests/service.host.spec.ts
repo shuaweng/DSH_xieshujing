@@ -43,7 +43,15 @@ class StubNovelRepository extends NovelRepository {
 
   override saveAssetContent(_project: NovelProjectSnapshot, request: SaveAssetContentRequest): Promise<AssetSnapshot> {
     if (this.snapshot === undefined) throw new Error('snapshot not configured')
-    return Promise.resolve({ ...this.snapshot, content: request.content })
+    const novel = this.snapshot.frontmatter['novel'] as Record<string, unknown>
+    return Promise.resolve({
+      ...this.snapshot,
+      content: request.content,
+      frontmatter: {
+        ...this.snapshot.frontmatter,
+        novel: { ...novel, ...(request.title === undefined ? {} : { title: request.title }) },
+      },
+    })
   }
 
   override captureSelection(_project: NovelProjectSnapshot, _request: CaptureSelectionRequest): Promise<SelectionRef> {
@@ -279,8 +287,9 @@ describe('NovelRepositoryRemote Host service', () => {
     await expect(ctx.novelRepositoryRemote.saveAsset(agent, {
       assetId: AssetId('chapter-1'),
       baseRevisionId: RevisionId('revision-1'),
+      title: '雨夜归人',
       content: { kind: 'manuscript', body: '新正文' },
-    }, signal)).resolves.toMatchObject({ title: '第一章', content: { kind: 'manuscript', body: '新正文' } })
+    }, signal)).resolves.toMatchObject({ title: '雨夜归人', content: { kind: 'manuscript', body: '新正文' } })
     const captured = await ctx.novelRepositoryRemote.captureSelection(agent, {
       assetId: AssetId('chapter-1'),
       revisionId: RevisionId('revision-1'),
