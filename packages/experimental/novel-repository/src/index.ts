@@ -17,6 +17,7 @@ import type {
   ChangeSetAuthorization,
   ChangeSetId,
   NovelProjectSnapshot,
+  NovelSelectionInput,
   ProposeChangeSetRequest,
   RevisionId,
   SaveAssetContentRequest,
@@ -47,6 +48,7 @@ export type {
   NovelOperation,
   NovelSelectionInput,
   NovelSelector,
+  NovelSelectorFor,
   NovelProjectSnapshot,
   NovelRepositoryErrorCode,
   ProposeChangeSetRequest,
@@ -84,7 +86,7 @@ export abstract class NovelRepository extends Service {
    * @param project - validated Project declaration returned by this provider.
    * @param signal - optional cancellation for filesystem and history work.
    * @param sandboxPolicy - optional per-call write policy used if reconciliation must recover an apply journal.
-   * @returns current chapter rows in deterministic project-path order.
+   * @returns current typed Asset rows in deterministic project-path order.
    */
   abstract listAssets(
     project: NovelProjectSnapshot,
@@ -99,7 +101,7 @@ export abstract class NovelRepository extends Service {
    * @param revisionId - exact retained Revision; omission reconciles and returns the current file head.
    * @param signal - optional cancellation for filesystem and history work.
    * @param sandboxPolicy - optional per-call write policy used if current-head reconciliation must recover an apply journal.
-   * @returns exact serialized bytes and parsed chapter values.
+   * @returns exact serialized bytes and parsed typed Asset values.
    * @throws {NovelRepositoryError} when the asset or Revision is absent or invalid.
    */
   abstract readAsset(
@@ -131,13 +133,13 @@ export abstract class NovelRepository extends Service {
    * @param project - validated Project declaration returned by this provider.
    * @param request - retained Revision and type-defined selection input to validate.
    * @param signal - optional cancellation for the history read.
-   * @returns immutable selection identity, quote hash, and bounded diagnostics.
+   * @returns immutable type-defined selection identity and bounded diagnostics.
    */
-  abstract captureSelection(
+  abstract captureSelection<Input extends NovelSelectionInput>(
     project: NovelProjectSnapshot,
-    request: CaptureSelectionRequest,
+    request: CaptureSelectionRequest<Input>,
     signal?: AbortSignal,
-  ): Promise<SelectionRef>
+  ): Promise<SelectionRef<Input>>
 
   /**
    * Retain one validated proposal without publishing it to authored files.

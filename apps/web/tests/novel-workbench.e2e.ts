@@ -19,6 +19,7 @@ import {
   Session,
   SessionId,
 } from '@deepseek-ai/dsh-session'
+import type { ChangeSet } from '@deepseek-ai/dsh-experimental-novel-repository'
 import {
   assertFixtureInventory,
   captureStableAria,
@@ -34,24 +35,13 @@ import { newEnglishPage, saveFailureShot } from './support.ts'
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/novel-workbench', import.meta.url))
 const PROPOSED_EXPECTED = join(SNAPSHOT_DIR, 'proposed.expected.md')
 const APPLIED_EXPECTED = join(SNAPSHOT_DIR, 'applied-and-context.expected.md')
+const OUTLINE_EXPECTED = join(SNAPSHOT_DIR, 'outline.expected.md')
 const NOVEL_OVERLAY = fileURLToPath(new URL('../../../packages/experimental/novel-studio/cordis.patch.yml', import.meta.url))
 const NOVEL_PRESETS = fileURLToPath(new URL('../../../packages/experimental/novel-studio/presets', import.meta.url))
 const NOVEL_INSTALL_ANCHOR = fileURLToPath(new URL('../../../packages/experimental/novel-studio/package.json', import.meta.url))
 const MODE = webSnapshotMode()
 const SESSION_ID = SessionId('novel-workbench-web-e2e')
 const CALL_ID = CallId('novel-proposal-call')
-
-interface ProposalFixture {
-  readonly id: string
-  readonly projectId: string
-  readonly assetId: string
-  readonly baseRevisionId: string
-  readonly summary: string
-  readonly operations: readonly {
-    readonly selector: { readonly startUtf16: number; readonly endUtf16: number; readonly quoteHash: string }
-    readonly replacement: string
-  }[]
-}
 
 /** Capture the semantic workbench while masking the opaque revision-bearing URI payload. */
 async function captureNovelWorkbench(page: Page, workspaceCwd: string): Promise<string> {
@@ -66,9 +56,9 @@ async function chromeBackgrounds(page: Page): Promise<readonly string[]> {
 }
 
 /** Closed, keyless Session log carrying the real proposal's durable presentation metadata. */
-function proposalFixture(changeSet: ProposalFixture): string {
+function proposalFixture(changeSet: ChangeSet): string {
   const operation = changeSet.operations[0]
-  if (operation === undefined) throw new Error('proposal fixture requires one operation')
+  if (operation?.kind !== 'replace-text') throw new Error('proposal fixture requires one manuscript operation')
   const session = Session.create(SESSION_ID)
   session.append('turn/start', { turn: 1 })
   session.append('user/message', createUserMessage({
@@ -137,6 +127,7 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       agentPresets: { roots: [{ path: NOVEL_PRESETS, trust: 'system' }], default: 'novel-workbench' },
     })
     await mkdir(join(scaffold.workspaceCwd, 'manuscript'))
+    await mkdir(join(scaffold.workspaceCwd, 'planning'))
     await writeFile(join(scaffold.workspaceCwd, 'novel.yaml'), [
       'kind: novel-project',
       'schema: 1',
@@ -144,6 +135,7 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       'title: 白港',
       'contentRoots:',
       '  manuscript: manuscript',
+      '  planning: planning',
       '',
     ].join('\n'))
     await writeFile(join(scaffold.workspaceCwd, 'manuscript', 'chapter-1.md'), [
@@ -155,6 +147,23 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       '  title: 第一章',
       '---',
       '她没有再解释。雨还在下。',
+    ].join('\n'))
+    await writeFile(join(scaffold.workspaceCwd, 'planning', 'main-outline.yaml'), [
+      'novel:',
+      '  schema: 1',
+      '  id: outline-white-harbor-main',
+      '  type: planning.outline',
+      '  title: Main Outline',
+      'nodes:',
+      '  - id: act-one',
+      '    title: Act One',
+      '    summary: The protagonist reaches White Harbor.',
+      '    children:',
+      '      - id: opening',
+      '        title: Opening',
+      '        goal: Establish the rain-soaked harbor.',
+      '        children: []',
+      '',
     ].join('\n'))
 
     const project = await scaffold.ctx.novelRepository.discoverProject(
@@ -265,7 +274,30 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       await captureNovelWorkbench(page, scaffold.workspaceCwd),
       MODE,
     )
-    await assertFixtureInventory(SNAPSHOT_DIR, ['applied-and-context.expected.md', 'proposed.expected.md'])
+
+    await page.getByRole('button', { name: 'Main Outline', exact: true }).click()
+    await page.getByRole('region', { name: 'Main Outline · Structured outline' }).waitFor()
+    await page.getByRole('button', { name: 'Opening', exact: true }).click()
+    await page.getByRole('textbox', { name: 'Outline title' }).fill('White Harbor Story Outline')
+    await page.getByRole('textbox', { name: 'Summary · optional' }).fill('Open with hunger, rain, and an uncertain arrival.')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByText('Saved', { exact: true }).waitFor()
+    await composer.fill('')
+    await page.getByRole('button', { name: 'Reference selection to Agent' }).click()
+    await expect.poll(() => composer.inputValue()).toBe('@[Opening] ')
+    const outlineFile = await readFile(join(scaffold.workspaceCwd, 'planning', 'main-outline.yaml'), 'utf8')
+    expect(outlineFile).toContain('title: White Harbor Story Outline')
+    expect(outlineFile).toContain('summary: Open with hunger, rain, and an uncertain arrival.')
+    await compareOrRefreshGolden(
+      OUTLINE_EXPECTED,
+      await captureNovelWorkbench(page, scaffold.workspaceCwd),
+      MODE,
+    )
+    await assertFixtureInventory(SNAPSHOT_DIR, [
+      'applied-and-context.expected.md',
+      'outline.expected.md',
+      'proposed.expected.md',
+    ])
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 60_000)

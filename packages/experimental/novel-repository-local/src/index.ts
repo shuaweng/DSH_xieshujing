@@ -25,6 +25,7 @@ import NovelRepository, {
   type ChangeSet,
   type ChangeSetAuthorization,
   type NovelProjectSnapshot,
+  type NovelSelectionInput,
   type ProjectId,
   type ProposeChangeSetRequest,
   type RevisionId as RevisionIdValue,
@@ -57,11 +58,11 @@ const MAX_BUFFER_BYTES = Math.min(bufferConstants.MAX_LENGTH, bufferConstants.MA
 export interface Config {
   /** Inclusive byte limit for the complete `novel.yaml`; defaults to 64 KiB. */
   manifestMaxBytes?: number
-  /** Inclusive byte limit for one complete chapter file; defaults to 4 MiB. */
+  /** Inclusive byte limit for one complete Asset file; defaults to 4 MiB. */
   assetMaxBytes?: number
-  /** Maximum chapter assets accepted from one scan; defaults to 10,000. */
+  /** Maximum Assets accepted from one scan; defaults to 10,000. */
   maxAssets?: number
-  /** Maximum directory nesting below the manuscript root; defaults to 64. */
+  /** Maximum directory nesting below any registered content root; defaults to 64. */
   scanMaxDepth?: number
   /** Maximum SQLite lock wait; defaults to five seconds. */
   busyTimeoutMs?: number
@@ -307,12 +308,12 @@ export class LocalNovelRepository extends NovelRepository {
     })
   }
 
-  override async captureSelection(
+  override async captureSelection<Input extends NovelSelectionInput>(
     project: NovelProjectSnapshot,
-    request: CaptureSelectionRequest,
+    request: CaptureSelectionRequest<Input>,
     signal?: AbortSignal,
-  ): Promise<SelectionRef> {
-    return await this.withProject(project, (state) => {
+  ): Promise<SelectionRef<Input>> {
+    const selection = await this.withProject(project, (state) => {
       signal?.throwIfAborted()
       const snapshot = this.snapshotFromHistory(project, state, request.assetId, request.revisionId)
       const captured = this.ctx.novelAssetTypes.get(snapshot.asset.type).captureSelection(
@@ -333,6 +334,7 @@ export class LocalNovelRepository extends NovelRepository {
         ...(captured.preview === undefined ? {} : { preview: captured.preview }),
       }
     })
+    return selection as SelectionRef<Input>
   }
 
   override async proposeChangeSet(

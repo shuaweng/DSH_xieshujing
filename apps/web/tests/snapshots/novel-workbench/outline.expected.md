@@ -1,0 +1,89 @@
+- main:
+  - complementary "DeepSeek Harness":
+    - button "New session"
+    - button "Collapse sidebar":
+      - img
+    - button "New session":
+      - img
+      - text: New Session
+    - button "Search sessions" [expanded]:
+      - img
+    - textbox "Search sessions...": 把开头改得更克制
+    - button "Clear search":
+      - img
+    - tree "Search results":
+      - treeitem "{{workspace}} {{workspace}} 把开头改得更克制。" [selected]
+    - button "Settings":
+      - img
+      - text: Settings
+  - complementary "Agent conversation":
+    - navigation "Session hierarchy":
+      - button "{{workspace}}" [disabled]
+    - img
+    - text: 小说工作台
+    - button "Session log":
+      - text: Session log
+      - img
+    - tablist:
+      - tab "Chat" [selected]
+      - tab "Trajectory"
+    - text: 把开头改得更克制。 {{clock}}
+    - button "Copy":
+      - img
+    - article:
+      - strong: Novel Asset change proposal
+      - text: 以动作替代直接解释
+      - deletion: 她
+      - insertion: 她沉默片刻
+      - paragraph: Applied
+    - textbox "Message the agent": "@[Opening]"
+    - button "Commands":
+      - img
+    - 'button "Access mode, current: Workspace Write"'
+    - button "Select model, current DeepSeek-V4-Flash":
+      - text: DeepSeek-V4-Flash
+      - img
+    - button "Send message"
+    - text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}
+  - separator "Resize conversation and workbench"
+  - complementary "Novel Asset sidebar":
+    - strong: Novel Workbench
+    - strong: 白港
+    - navigation:
+      - group:
+        - text: ›
+        - strong: Manuscript
+        - text: 1 chapters
+        - button "雨夜归人"
+      - group:
+        - text: ›
+        - strong: Outline
+        - text: 1 items
+        - button "White Harbor Story Outline"
+  - button "Collapse Asset sidebar": ‹
+  - navigation "Current novel location":
+    - strong: 白港
+    - text: White Harbor Story Outline
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Reference selection to Agent"
+  - region "White Harbor Story Outline · Structured outline":
+    - text: Outline title
+    - textbox "Outline title": White Harbor Story Outline
+    - navigation "Outline structure":
+      - list:
+        - listitem:
+          - button "Act One"
+          - list:
+            - listitem:
+              - button "Opening" [pressed]
+    - text: Node title
+    - textbox "Node title": Opening
+    - text: Summary · optional
+    - textbox "Summary · optional": Open with hunger, rain, and an uncertain arrival.
+    - text: Goal · optional
+    - textbox "Goal · optional": Establish the rain-soaked harbor.
+    - text: Conflict · optional
+    - textbox "Conflict · optional"
+    - text: Turn · optional
+    - textbox "Turn · optional"

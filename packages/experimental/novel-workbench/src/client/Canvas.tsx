@@ -85,6 +85,7 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
   }
   const reader = renderer.reader
   const title = state.titleDraft ?? state.document.title
+  const editorLabel = renderer.editorLabel?.() ?? t('editor')
   const characterCount = reader?.countCharacters(state.draft)
   return (
     <div className={css.editorShell} data-reader-shell={reader === undefined ? undefined : ''}>
@@ -115,8 +116,10 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
           ? renderer.renderEditor({
             document: state.document,
             content: state.draft,
-            ariaLabel: `${title} · ${t('editor')}`,
+            title,
+            ariaLabel: `${title} · ${editorLabel}`,
             onContentChange: actions.edit,
+            onTitleChange: actions.editTitle,
             onSelectionChange: actions.select,
           })
           : (
@@ -134,8 +137,10 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
                   {renderer.renderEditor({
                     document: state.document,
                     content: state.draft,
-                    ariaLabel: `${title} · ${t('editor')}`,
+                    title,
+                    ariaLabel: `${title} · ${editorLabel}`,
                     onContentChange: actions.edit,
+                    onTitleChange: actions.editTitle,
                     onSelectionChange: actions.select,
                   })}
                 </article>

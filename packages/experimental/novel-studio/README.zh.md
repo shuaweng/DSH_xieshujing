@@ -8,7 +8,7 @@
 
 ## 行为
 
-- 应在现有 base 与 Web App 组合包之后加入本 bundle。它会先插入 Host Asset 类型注册表，再加入 `novel-repository-local`，随后加入 context、Remote、独立 Client adapter 和 `novel-workbench`。
+- 应在现有 base 与 Web App 组合包之后加入本 bundle。它会先插入 Host Asset 类型注册表、独立 `planning.outline` Host/Client contribution 与 `novel-repository-local`，随后加入 context、Remote、独立 Client adapter 和 `novel-workbench`。
 - bundle 只禁用普通 `ui-layout` entry，并把 Novel workbench 安装为唯一根占位者。原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染和 Session service 仍安装在该根声明的插槽中。
 - 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含 `novel_list`、`novel_get` 和 `novel_propose_changes`；不包含通用 shell 或文件系统修改工具。
 - `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
@@ -23,6 +23,7 @@ pnpm dsh plugin --profile novel-studio add link:./packages/bundle/web-app
 pnpm dsh plugin --profile novel-studio add link:./packages/experimental/novel-studio
 pnpm dsh plugin --profile novel-studio add \
   link:./packages/experimental/novel-repository \
+  link:./packages/experimental/novel-asset-outline \
   link:./packages/experimental/novel-context \
   link:./packages/experimental/novel-repository-client \
   link:./packages/experimental/novel-repository-local \
@@ -51,6 +52,6 @@ Preset 组合在页面和选区变化时保持稳定。请求局部 Novel 上下
 ## 已知限制与暂缓事项
 
 - **没有已发布 Profile 入口**：调用方必须在 base 与 Web App 之后显式安装本 bundle；没有内建 `novel-studio` CLI template 或路由切换器。
-- **MVP 资产范围**：Host 与 Client 注册表可以扩展，但当前只安装 `manuscript.chapter`、一个活动文本选区和单操作 ChangeSet。
+- **MVP 资产范围**：Host 与 Client 注册表已安装 `manuscript.chapter` 与 `planning.outline`、一个活动类型化选区和单操作 ChangeSet；人物、灵感、关系与大纲结构编辑仍暂缓。
 - **没有搜索或实时文件事件**：资产搜索、关系、文件监听和浏览器失效事件流尚未实现。
 - **没有编排**：Role Profile、Task Blackboard、`novel_delegate` 和多 Agent 工作流尚未实现。

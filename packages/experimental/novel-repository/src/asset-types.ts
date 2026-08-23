@@ -101,7 +101,7 @@ export class NovelAssetTypeRegistry extends Service {
 
   /**
    * Resolve one required type definition.
-   * @param type - exact Frontmatter type.
+   * @param type - exact authored `novel.type` declaration.
    * @returns the registered definition.
    * @throws {NovelRepositoryError} when the Project declares an unavailable type.
    */

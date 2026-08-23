@@ -60,6 +60,7 @@
     { "path": "./packages/api/remotes/tsconfig.client.json" },
     { "path": "./packages/experimental/novel-repository-client" },
     { "path": "./packages/experimental/novel-workbench" },
+    { "path": "./packages/experimental/novel-asset-outline/tsconfig.client.json" },
     { "path": "./packages/client/runtime" },
     { "path": "./packages/extensions/cordis-client-runner" },
     { "path": "./packages/extensions/ui-cordis" },

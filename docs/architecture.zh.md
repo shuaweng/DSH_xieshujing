@@ -107,6 +107,8 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 
 [实验性 Agent Teams](subsystems/agent-team.zh.md) 是 `ctx.agentTeams` 上的私有显式启用协作 seam，在可继续 subagent 之上提供持久 roster、任务板和 mailbox。
 
+实验性[小说工作台](subsystems/novel-workbench.zh.md)把同一规则应用了两次：`ctx.novelAssetTypes` 为一个精确 Asset 类型拥有 Host 解析、模型投影、选区与修改语义，`ctx.novelAssetRenderers` 则拥有其 Client 编辑器与 Diff。因此增加 `planning.outline` 时，是在共享 Repository、Remote API、工作台 Canvas 与稳定 Novel 工具旁贡献两个 effect 作用域内的定义，而不是向这些层增加类型分支。
+
 ## 新行为的归属位置
 
 新行为附加到已有文档记录的扩展点。改动循环本身时，本映射随之更新。
@@ -125,6 +127,7 @@ seam 正是替换一个提供方就能改变整个产品的原因。文件系统
 | 拦截请求、工具或轮次 | 使用相应的 `agent/*` 或 `tools/*` 事件；`agent/turn-stopping` 会停止轮次 |
 | 添加模型可见上下文 | 调用 `agent.inject()`；它会落到下一次获准的请求中 |
 | 添加 UI 或编辑器集成 | 驱动 `ctx.agents` 并从 `session/event` 渲染 |
+| 添加 Novel Asset 类型 | 在 `ctx.novelAssetTypes` 注册精确 Host 行为，并在 `ctx.novelAssetRenderers` 注册 Client 行为 |
 | 添加 Web Client Chat 节点 | 注册 `ConversationNodeDefinition` + keyed renderer |
 | 添加持久会话状态 | 扩展 `SessionEventMap`；从日志渲染和回放 |
 | 生成会话标题 | 注册唯一的 `ctx.sessionTitle` 提供方 |

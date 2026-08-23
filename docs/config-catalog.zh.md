@@ -648,11 +648,11 @@ export interface Config {
 export interface Config {
   /** Inclusive byte limit for the complete `novel.yaml`; defaults to 64 KiB. */
   manifestMaxBytes?: number
-  /** Inclusive byte limit for one complete chapter file; defaults to 4 MiB. */
+  /** Inclusive byte limit for one complete Asset file; defaults to 4 MiB. */
   assetMaxBytes?: number
-  /** Maximum chapter assets accepted from one scan; defaults to 10,000. */
+  /** Maximum Assets accepted from one scan; defaults to 10,000. */
   maxAssets?: number
-  /** Maximum directory nesting below the manuscript root; defaults to 64. */
+  /** Maximum directory nesting below any registered content root; defaults to 64. */
   scanMaxDepth?: number
   /** Maximum SQLite lock wait; defaults to five seconds. */
   busyTimeoutMs?: number
@@ -663,7 +663,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/experimental/novel-repository-local/src/index.ts:57`](../packages/experimental/novel-repository-local/src/index.ts)
+来源：[`packages/experimental/novel-repository-local/src/index.ts:58`](../packages/experimental/novel-repository-local/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-novel-repository-remote"></a>
 
@@ -3333,6 +3333,7 @@ export interface Config {
 - `@deepseek-ai/dsh-command-goal` — 需要 `commands` · `goals`（[`packages/goal/command-goal/src/index.ts`](../packages/goal/command-goal/src/index.ts)）
 - `@deepseek-ai/dsh-commands`（[`packages/interaction/commands/src/index.ts`](../packages/interaction/commands/src/index.ts)）
 - `@deepseek-ai/dsh-cordis-client-runner`（[`packages/extensions/cordis-client-runner/src/index.ts`](../packages/extensions/cordis-client-runner/src/index.ts)）
+- `@deepseek-ai/dsh-experimental-novel-asset-outline` — 需要 `novelAssetTypes`（[`packages/experimental/novel-asset-outline/src/index.ts`](../packages/experimental/novel-asset-outline/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-novel-repository-client`（[`packages/experimental/novel-repository-client/src/index.ts`](../packages/experimental/novel-repository-client/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-novel-studio`（[`packages/experimental/novel-studio/src/index.ts`](../packages/experimental/novel-studio/src/index.ts)）
 - `@deepseek-ai/dsh-experimental-novel-workbench`（[`packages/experimental/novel-workbench/src/index.ts`](../packages/experimental/novel-workbench/src/index.ts)）

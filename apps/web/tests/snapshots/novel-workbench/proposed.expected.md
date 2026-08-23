@@ -31,7 +31,7 @@
     - button "Copy":
       - img
     - article:
-      - strong: Manuscript change proposal
+      - strong: Novel Asset change proposal
       - text: 以动作替代直接解释
       - deletion: 她
       - insertion: 她沉默片刻
@@ -59,7 +59,8 @@
       - group:
         - text: ›
         - strong: Outline
-        - text: 0 chapters
+        - text: 1 items
+        - button "Main Outline"
   - button "Collapse Asset sidebar": ‹
   - navigation "Current novel location":
     - strong: 白港

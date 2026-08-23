@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 ## Purpose
 
-This experimental Consumer gives a Novel Agent exact-read and proposal-only mutation tools without exposing generic filesystem writes for formal manuscript assets.
+This experimental Consumer gives a Novel Agent exact-read and proposal-only mutation tools without exposing generic filesystem writes for formal Novel Assets.
 
 ## Behavior
 
@@ -36,4 +36,4 @@ The tool catalog is stable for every Session using the Novel Workbench Preset, s
 - **Catalog discovery only** — `novel_list` lists current Asset identities, while full-text search, relations, create, present, and delegation tools are deferred.
 - **One shipped operation adapter** — the tool is type-driven, but only one chapter `replace-text` input is installed; multi-range and multi-asset ChangeSets are deferred.
 - **No apply authority** — only the browser Remote can accept or reject a proposal; the model cannot commit it.
-- **No semantic search** — the model can discover canonical chapter references with `novel_list`, but related-content retrieval still requires a future search Consumer.
+- **No semantic search** — the model can discover canonical typed Asset references with `novel_list`, but related-content retrieval still requires a future search Consumer.

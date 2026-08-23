@@ -20,7 +20,7 @@ Current author content remains authoritative in the project files. `.novel/histo
 
 The existing `novel` Agent Preset remains a session-scoped writing capability and a source of persona and skill behavior. It does not own the workbench domain. The MVP adds a separate package-owned `novel-workbench` Preset that consumes Novel tools and omits raw mutation tools for formal asset roots; research and development Presets may retain generic filesystem and shell tools without gaining authority to commit Novel ChangeSets.
 
-PR1, PR2, the PR3 MVP, and the PR4 asset type kernel described below are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
+PR1, PR2, the PR3 MVP, the PR4 asset type kernel, and the PR5 outline slice described below are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
 
 This proposal extends the existing Profile, filesystem, Session-history, Remote, and client-presentation decisions. It supersedes none of them.
 
@@ -61,6 +61,16 @@ Each Host definition declares its Frontmatter type, accepted content root and ex
 The browser Remote exposes one bounded, lossless JSON envelope for Asset content, save requests, selectors, and ChangeSet operations. Host and Client registries own exact type semantics, so the generated Remote method set does not widen when a type is added. The root workbench selects a renderer by the document's declared type and keeps save, Context Commit Barrier, Agent mention insertion, and review authorization in the shared canvas. The initial `manuscript.chapter` Host definition and Client renderer preserve the PR3 text editor, UTF-16 selection, and `replace-text` behavior. A later asset package can add a Host definition and Client renderer without editing the local Repository, generic Novel tools, Remote gateway, or root workbench layout.
 
 PR4 does not add another authored asset type. `planning.outline` is the first intended proof that the registration API supports a structured content value, node selection, typed operations, and a non-text Diff without widening the shared services.
+
+## PR5 structured outline slice
+
+PR5 adds `planning.outline` as the second authored Asset through an independent Host-and-Client type package. The package registers with the PR4 registries; the local Repository, Remote methods, context resolver, model tools, shared canvas, and root workbench gain no outline-specific branches. The explicit Novel Studio bundle loads the Host contribution before the local provider and the Client contribution after the workbench renderer service exists. Default `web` and `headless` compositions remain unchanged.
+
+An outline is one strict UTF-8 YAML file below the optional `planning` content root. Its root contains the same version-one `novel` identity mapping used by Markdown Frontmatter plus a `nodes` sequence. Every node has one stable, asset-local unique `id`, a non-empty `title`, optional `summary`, `goal`, `conflict`, and `turn` strings, and an ordered `children` sequence of nodes. Version one rejects aliases, duplicate keys, duplicate node ids, unsupported fields, control characters, excessive depth or node count, and malformed or oversized authored values. The file remains authoritative. Saving replaces only the validated `novel.title` and `nodes` values in the parsed YAML document, so unrelated top-level authored metadata and comments remain outside the typed outline content; comments inside a replaced `nodes` subtree are not a version-one round-trip guarantee.
+
+The first outline selector is `{ kind: 'outline-node', nodeId, nodeHash }`. Browser input supplies only the node id; the Host freezes a canonical SHA-256 hash of that node from the retained Revision. The first operation is `update-outline-node`: the model supplies `nodeId` plus a non-empty `changes` mapping over `title`, `summary`, `goal`, `conflict`, and `turn`; the Host binds the durable operation to the exact node hash. Optional fields use explicit `null` to clear a value. The operation cannot change node identity, reorder the tree, create or delete nodes, or edit children. Apply fails closed unless the node id and hash still match the retained base Revision.
+
+The model projection is deterministic JSON containing the complete typed outline, or the selected node subtree for a node reference. The Client renderer presents the tree and a field editor over the same typed value, captures one active node as a semantic selection, and renders a field-level before/after Diff for the typed operation. Human edits still use the shared guarded full-Asset save and Agent edits still use the shared proposal-only ChangeSet path. PR5 does not add Asset creation UI, node insertion/deletion/reordering, outline-to-manuscript links, or multi-node operations.
 
 ## PR4 workbench presentation slice
 
@@ -262,7 +272,8 @@ Session-aware Remote Consumers resolve `ctx.sandboxPolicy` with the addressed Ag
 
 ## Deferred work
 
-- Additional asset types, including outlines, characters, ideas, scenes, timelines, relations, and view definitions; PR4 supplies their registration path but no additional type.
+- Additional asset types beyond the shipped chapter and outline, including characters, ideas, scenes, timelines, relations, and view definitions.
+- Outline creation UI, node insertion/deletion/reordering, outline-to-manuscript links, custom node fields, and multi-node ChangeSets.
 - A persistent disposable search index, full-text search, semantic search, inferred mentions, and reverse relations. `novel_list` is only bounded catalog discovery and does not satisfy these search capabilities.
 - File watching, remote filesystem parity, multiple concurrent Host writers, collaboration, and CRDT positions.
 - Persistent block ids, fuzzy relocation, three-way merge, multi-asset ChangeSets, branches, and cross-project references.
@@ -298,7 +309,8 @@ The generic [Domain KV storage proposal](2026-07-24-domain-kv-storage-and-worksp
 
 - A proposed implementation has a complete `ctx.novelRepository` capability seam with independently testable Service Definition, local Service Provider, and Consumers; every registration disposes cleanly under HMR and plugin unload.
 - Real profile composition tests prove `web` and `headless` load no Novel Repository, Remote, workbench UI, or Novel tools, while `novel-studio` loads the intended exact roster without replacing the existing session-scoped Preset contract.
-- A project scan identifies one `manuscript.chapter`, preserves identity across rename, rejects duplicate ids and escaped paths, reports malformed Frontmatter without rewriting it, and rebuilds every derived catalog value from files.
+- A project scan identifies `manuscript.chapter` Markdown and `planning.outline` YAML through their exact declarations, preserves identity across rename, rejects duplicate ids and escaped paths, reports malformed declarations without rewriting them, and rebuilds every derived catalog value from files.
+- Outline tests cover stable unique node ids, depth and count bounds, exact node-hash selection, deterministic full and selected-node model projections, guarded human field saves, typed Agent proposals, field Diff rendering, stale-node refusal, and preservation of unrelated top-level YAML metadata.
 - Revision tests prove exact UTF-8 snapshot retention, parent continuity, content-hash equality, explicit schema migration or refusal, and no automatic reset of `.novel/history.sqlite`.
 - Selection tests cover Chinese text, emoji, CRLF input, surrogate-pair boundaries, dirty-draft flush, old-Revision display, quote-hash mismatch, and fail-closed stale application without fuzzy relocation.
 - Context tests prove canonical refs resolve only retained immutable Revisions, cross-project and oversized context fail before a model call, exact safely serialized content appears in `user/message`, and replay, resume, fork, and compaction never reread mutable latest files.

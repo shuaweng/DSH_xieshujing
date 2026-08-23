@@ -103,6 +103,8 @@ Seams are why one provider swap changes the whole product. Filesystem and subpro
 
 [Experimental Agent Teams](subsystems/agent-team.md) is a private opt-in coordination seam on `ctx.agentTeams`, with a durable roster, task board, and mailbox layered over continuable subagents.
 
+The experimental [Novel workbench](subsystems/novel-workbench.md) applies the same rule twice: `ctx.novelAssetTypes` owns Host parsing, model projection, selection, and mutation semantics for one exact Asset type, while `ctx.novelAssetRenderers` owns its Client editor and Diff. Adding `planning.outline` therefore contributes two effect-scoped definitions beside the shared Repository, Remote API, workbench Canvas, and stable Novel tools rather than adding type branches to those layers.
+
 ## Where new behavior goes
 
 New behavior attaches to a documented extension point. Changing the loop itself updates this map.
@@ -121,6 +123,7 @@ New behavior attaches to a documented extension point. Changing the loop itself 
 | Intercept a request, tool, or turn | use its `agent/*` or `tools/*` event; `agent/turn-stopping` stops a turn |
 | Add model-facing context | call `agent.inject()`; it lands in the next admitted request |
 | Add UI or editor integration | drive `ctx.agents` and render from `session/event` |
+| Add a Novel Asset type | register exact Host behavior on `ctx.novelAssetTypes` and Client behavior on `ctx.novelAssetRenderers` |
 | Add a Web Client Chat node | register a `ConversationNodeDefinition` + keyed renderer |
 | Add durable session state | extend `SessionEventMap`; render and replay from the log |
 | Generate session titles | register the sole `ctx.sessionTitle` provider |

@@ -354,7 +354,7 @@ describe('Explorer', () => {
     await waitFor(() => { expect(view.getByText('第一章')).toBeTruthy() })
     await waitFor(() => { expect(store.getSnapshot().document?.id).toBe(first.id) })
     expect(view.getByText(zh.chapters).parentElement?.textContent).toContain('2 章')
-    expect(view.getByText(zh.outline).parentElement?.textContent).toContain('0 章')
+    expect(view.getByText(zh.outline).parentElement?.textContent).toContain('0 项')
     fireEvent.click(view.getByText('第二章'))
     await waitFor(() => { expect(store.getSnapshot().document?.id).toBe(second.id) })
     await waitFor(() => { expect(view.getByText('第二章').closest('button')?.getAttribute('data-active')).toBe('true') })

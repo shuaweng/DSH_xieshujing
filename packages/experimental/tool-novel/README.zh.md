@@ -4,7 +4,7 @@
 
 ## 用途
 
-这个实验性 Consumer 为 Novel Agent 提供精确读取和仅提案修改工具，而不向正式小说 Asset 开放通用文件写入。
+这个实验性 Consumer 为 Novel Agent 提供精确读取和仅提案修改工具，而不向正式 Novel Asset 开放通用文件写入。
 
 ## 行为
 
@@ -36,4 +36,4 @@
 - **仅目录发现** — `novel_list` 可以列出当前 Asset 身份；全文搜索、relations、create、present 和 delegation 工具尚未实现。
 - **只内置一种 operation adapter** — 工具由类型驱动，但当前只安装章节 `replace-text` 输入；多范围和多资产 ChangeSet 尚未实现。
 - **没有应用权威** — 只有浏览器 Remote 可以接受或拒绝提案；模型不能提交修改。
-- **没有语义搜索** — 模型可以通过 `novel_list` 发现规范章节引用，但相关内容检索仍需要未来的搜索 Consumer。
+- **没有语义搜索** — 模型可以通过 `novel_list` 发现规范类型化 Asset 引用，但相关内容检索仍需要未来的搜索 Consumer。

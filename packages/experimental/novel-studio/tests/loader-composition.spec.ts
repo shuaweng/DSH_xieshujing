@@ -17,6 +17,7 @@ import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelRepositoryRemote from '../../novel-repository-remote/src/index.ts'
 import NovelContextResolver from '../../novel-context/src/index.ts'
 import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
+import * as NovelAssetOutline from '../../novel-asset-outline/src/index.ts'
 
 const remotePackageName = '@deepseek-ai/dsh-experimental-novel-repository-remote'
 
@@ -36,6 +37,7 @@ describe('Novel Studio real composition', () => {
     const projectRoot = join(root, 'project')
     const fallbackRoot = join(root, 'deployment-fallback')
     await mkdir(join(projectRoot, 'manuscript'), { recursive: true })
+    await mkdir(join(projectRoot, 'planning'), { recursive: true })
     await mkdir(fallbackRoot)
     await writeFile(join(projectRoot, 'novel.yaml'), [
       'kind: novel-project',
@@ -44,6 +46,7 @@ describe('Novel Studio real composition', () => {
       'title: Loader Project',
       'contentRoots:',
       '  manuscript: manuscript',
+      '  planning: planning',
       '',
     ].join('\n'))
     await writeFile(join(projectRoot, 'manuscript', 'chapter.md'), [
@@ -55,6 +58,19 @@ describe('Novel Studio real composition', () => {
       '  title: Loader Chapter',
       '---',
       '白港下雨。',
+    ].join('\n'))
+    await writeFile(join(projectRoot, 'planning', 'main-outline.yaml'), [
+      'novel:',
+      '  schema: 1',
+      '  id: outline-loader',
+      '  type: planning.outline',
+      '  title: Main Outline',
+      'nodes:',
+      '  - id: node-loader',
+      '    title: Opening',
+      '    summary: The harbor goes dark.',
+      '    children: []',
+      '',
     ].join('\n'))
     const configPath = join(root, 'cordis.yml')
     await writeFile(configPath, [
@@ -69,6 +85,8 @@ describe('Novel Studio real composition', () => {
       `    cwd: ${JSON.stringify(fallbackRoot)}`,
       '- id: asset-types',
       "  name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types'",
+      '- id: asset-outline',
+      "  name: '@deepseek-ai/dsh-experimental-novel-asset-outline'",
       '- id: repository',
       "  name: '@deepseek-ai/dsh-experimental-novel-repository-local'",
       '- id: novel-context',
@@ -87,6 +105,7 @@ describe('Novel Studio real composition', () => {
       ['@deepseek-ai/dsh-sandbox-policy', SandboxPolicyService],
       ['@deepseek-ai/dsh-fs-sandbox', SandboxedFileSystem],
       ['@deepseek-ai/dsh-experimental-novel-repository/asset-types', NovelAssetTypeRegistry],
+      ['@deepseek-ai/dsh-experimental-novel-asset-outline', NovelAssetOutline],
       ['@deepseek-ai/dsh-experimental-novel-repository-local', LocalNovelRepository],
       ['@deepseek-ai/dsh-experimental-novel-context', NovelContextResolver],
       [remotePackageName, NovelRepositoryRemote],
@@ -122,9 +141,15 @@ describe('Novel Studio real composition', () => {
       title: 'Loader Project',
       rootDisplayPath: projectRoot,
       manifestDisplayPath: join(canonicalRoot, 'novel.yaml'),
-      contentRootDisplayPaths: { manuscript: join(canonicalRoot, 'manuscript') },
+      contentRootDisplayPaths: {
+        manuscript: join(canonicalRoot, 'manuscript'),
+        planning: join(canonicalRoot, 'planning'),
+      },
     })
-    const [asset] = await ctx.novelRepositoryRemote.assets(agent, abort.signal)
+    const assets = await ctx.novelRepositoryRemote.assets(agent, abort.signal)
+    const asset = assets.find(candidate => candidate.id === 'chapter-loader')
+    expect(assets.map(candidate => candidate.type)).toEqual(['manuscript.chapter', 'planning.outline'])
+    if (asset === undefined) throw new Error('loader composition lost its manuscript fixture')
     const chapter = await ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-loader'), null, abort.signal)
     const saved = await ctx.novelRepositoryRemote.saveAsset(agent, {
       assetId: AssetId('chapter-loader'),
@@ -141,8 +166,8 @@ describe('Novel Studio real composition', () => {
     }, abort.signal)
     expect(selection.mention).toContain('dsh-novel:')
     await expect(ctx.novelContextResolver.resolveReferences(agent, [{
-      projectId: asset!.projectId,
-      assetId: asset!.id,
+      projectId: asset.projectId,
+      assetId: asset.id,
       revisionId: saved.revisionId,
       selector: selection.selector as unknown as TextRangeSelector,
     }], abort.signal)).resolves.toMatchObject({ references: [{ text: '白港' }] })

@@ -18,14 +18,18 @@ declare module '@deepseek-ai/cordis' {
 export interface NovelAssetEditorProps {
   readonly document: NovelAssetDocument
   readonly content: NovelWireValue
+  readonly title: string
   readonly ariaLabel: string
   readonly onContentChange: (content: NovelWireValue) => void
+  readonly onTitleChange: (title: string) => void
   readonly onSelectionChange: (selection?: NovelWireValue) => void
 }
 
-/** Browser behavior contributed by one exact Frontmatter Asset type. */
+/** Browser behavior contributed by one exact authored Asset type. */
 export interface NovelAssetRendererDefinition {
   readonly type: string
+  /** Localized editor-kind label used by the shared Canvas accessibility surface. */
+  readonly editorLabel?: () => string
   /** Optional human reading presentation supplied by prose-like Asset types. */
   readonly reader?: {
     /** Count authored characters for the active typed value (whitespace excluded). */
@@ -81,6 +85,9 @@ function validateRenderer(definition: NovelAssetRendererDefinition): void {
     if (typeof definition[method] !== 'function') {
       throw new Error(`novel Asset renderer ${JSON.stringify(definition.type)} is missing ${method}()`)
     }
+  }
+  if (definition.editorLabel !== undefined && typeof definition.editorLabel !== 'function') {
+    throw new Error(`novel Asset renderer ${JSON.stringify(definition.type)} has an invalid editorLabel`)
   }
 }
 

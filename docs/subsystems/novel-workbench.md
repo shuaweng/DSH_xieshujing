@@ -2,7 +2,7 @@
 
 English | [中文](novel-workbench.zh.md)
 
-The experimental Novel workbench MVP gives a human author and an Agent the same stable semantic identity for reading and changing one manuscript chapter. It combines file-backed Assets, immutable SQLite Revisions, exact selections, durable Session context, proposal-only model tools, reviewable ChangeSets, and a dedicated browser workbench in an explicitly isolated Profile overlay. The governing authority and crash-recovery decisions live in the [Novel workbench Agent Note](../../.agents/notes/proposed/architecture/2026-08-22-novel-workbench-domain-and-commit-protocol.md).
+The experimental Novel workbench gives a human author and an Agent the same stable semantic identity for reading and changing typed manuscript and outline Assets. It combines file-backed Assets, immutable SQLite Revisions, exact type-defined selections, durable Session context, proposal-only model tools, reviewable ChangeSets, and a dedicated browser workbench in an explicitly isolated Profile overlay. The governing authority and crash-recovery decisions live in the [Novel workbench Agent Note](../../.agents/notes/proposed/architecture/2026-08-22-novel-workbench-domain-and-commit-protocol.md).
 
 ## Project declaration
 
@@ -15,13 +15,14 @@ id: project_01
 title: White Harbor
 contentRoots:
   manuscript: manuscript
+  planning: planning
 ```
 
-Schema version 1 requires `kind: novel-project`, integer `schema: 1`, non-empty `id` and `title` values, and a `contentRoots` mapping containing `manuscript`. The local provider rejects malformed or ambiguous YAML, invalid UTF-8, unsupported schemas, missing roots, dangling links, and canonical paths that escape the Project root.
+Schema version 1 requires `kind: novel-project`, integer `schema: 1`, non-empty `id` and `title` values, and a `contentRoots` mapping containing `manuscript`. `planning` is optional, but when declared it must resolve to an existing project-contained directory. The local provider rejects malformed or ambiguous YAML, invalid UTF-8, unsupported schemas, missing declared roots, dangling links, and canonical paths that escape the Project root.
 
 ## Asset and Revision authority
 
-[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) defines the provider-neutral `ctx.novelRepository` seam. [`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) scans bounded Markdown files below the declared `manuscript` root. A chapter becomes an Asset only when strict YAML Frontmatter declares `novel.schema: 1`, a stable `novel.id`, `novel.type: manuscript.chapter`, and a title.
+[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) defines the provider-neutral `ctx.novelRepository` seam and effect-scoped `ctx.novelAssetTypes` registry. [`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) scans only roots and extensions claimed by installed type definitions. A chapter becomes an Asset through strict Markdown Frontmatter; [`@deepseek-ai/dsh-experimental-novel-asset-outline`](../../packages/experimental/novel-asset-outline) contributes strict YAML `planning.outline` parsing and presentation without adding outline branches to the shared repository.
 
 ```markdown
 ---
@@ -35,31 +36,44 @@ novel:
 Authored manuscript body.
 ```
 
-Project files are authoritative for current authored content. `.novel/history.sqlite` retains exact immutable Revision bytes, Asset heads, ChangeSets, and apply journals; it does not replace the files as current truth. A rename preserves Asset identity, while changed external bytes create an `external-edit` Revision during reconciliation. User saves replace only the parsed body, preserve the exact Frontmatter prefix, and require both the displayed base Revision and filesystem version to remain current.
+```yaml
+novel:
+  schema: 1
+  id: outline_main
+  type: planning.outline
+  title: Main Outline
+nodes:
+  - id: act-one
+    title: Act One
+    summary: The protagonist reaches White Harbor.
+    children: []
+```
+
+Project files are authoritative for current authored content. `.novel/history.sqlite` retains exact immutable Revision bytes, Asset heads, ChangeSets, and apply journals; it does not replace the files as current truth. A rename preserves Asset identity, while changed external bytes create an `external-edit` Revision during reconciliation. Every human save is materialized and reparsed by the exact type definition and requires both the displayed base Revision and filesystem version to remain current.
 
 ## Selection and Session context
 
-Version one freezes a non-empty range as UTF-16 body offsets plus an exact quote hash and bounded prefix/suffix diagnostics. The selection binds to one retained Revision and never silently falls forward to mutable current content. The browser context barrier first saves a dirty draft, captures the resulting exact selection, then inserts a canonical `dsh-novel:` mention into the ordinary DSH Composer.
+Version one freezes either a non-empty manuscript range with UTF-16 offsets and quote hash, or one outline node with stable node id and node hash. Every selection binds to one retained Revision and never silently falls forward to mutable current content. The browser context barrier first saves a dirty typed draft, captures the resulting exact selection, then inserts a canonical `dsh-novel:` mention into the ordinary DSH Composer.
 
 [`@deepseek-ai/dsh-experimental-novel-context`](../../packages/experimental/novel-context) resolves those mentions at `agent/pre-step`. It preserves the readable human message and appends one immutable `user/message` whose source kind is `novel-context`. The message contains deterministic, explicitly untrusted JSON for the exact retained Revision, so Session replay can reconstruct what the model saw. Reference count and aggregate UTF-8 bytes are bounded, and the first Novel context binds that Session to one Project.
 
 ## Proposal, review, and recovery
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) exposes `novel_list`, `novel_get`, and `novel_propose_changes` in the package-owned Preset. Catalog discovery returns canonical exact-Revision references for the current Session project, exact reads resolve retained Revisions and report body UTF-16 lengths, and a proposal freezes and quote-hashes one `replace-text` range inside the Repository before durably creating a ChangeSet without changing the authored file. The model has no apply tool and cannot claim publication.
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) exposes `novel_list`, `novel_get`, and `novel_propose_changes` in the package-owned Preset. Catalog discovery returns canonical exact-Revision references for every installed type. Exact reads use that type's deterministic model projection and proposal instructions. A proposal uses the matching definition to validate either one manuscript `replace-text` or one outline `update-outline-node` before durably creating a ChangeSet without changing the authored file. The model has no apply tool and cannot claim publication.
 
 The browser reads that ChangeSet into an inline Diff card. Accept or Reject is an explicit Session-owned Remote action. Apply records exact before/after bytes, hashes, authorization, and the intended result Revision as `applying` before filesystem publication. On reopen, an after-hash finalizes, a before-hash retries the guarded write, and any third hash becomes `conflicted` without overwriting the authored file.
 
 ## Profile isolation
 
-[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) is a private overlay composed after `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. It disables only the ordinary `ui-layout` root occupant and installs [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) instead. The Novel root retains native sidebar, conversation, details, settings, model-selection, tool-rendering, and overlay surfaces, then adds manuscript explorer and canvas slots.
+[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) is a private overlay composed after `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. It disables only the ordinary `ui-layout` root occupant and installs [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) instead. The Novel root retains native sidebar, conversation, details, settings, model-selection, tool-rendering, and overlay surfaces, then adds typed Asset explorer and canvas slots.
 
-The root places the Agent conversation on the left and the manuscript explorer plus canvas on the right. The default `web` and `headless` Profile templates include none of these experimental packages. The overlay owns its safe `novel-workbench` Preset, whose stable tool set excludes shell and generic filesystem mutation. This gives the MVP deep DSH integration without changing ordinary DSH operation.
+The root places the Agent conversation on the left and the Asset explorer plus canvas on the right. Exact Client renderer contributions provide the manuscript reader/editor or structured outline tree and field inspector. The default `web` and `headless` Profile templates include none of these experimental packages. The overlay owns its safe `novel-workbench` Preset, whose stable tool set excludes shell and generic filesystem mutation.
 
 Browser saves and ChangeSet applies resolve the addressed Session's sandbox policy and pass it through Repository reconciliation and publication. A Novel Project may therefore live outside the Host process working directory while remaining confined to the Session workspace boundary.
 
 ## Current limits
 
-The MVP supports one `manuscript.chapter` editor, one active UTF-16 selection, and one `replace-text` operation in a single-Asset ChangeSet. Persistent block ids, outlines, characters, ideas, search, relations, filesystem watching, automatic rebase, multi-Asset transactions, richer editors, and multi-Agent orchestration remain deferred. Reconciliation happens on repository boundaries, and the supported writer model is one Host process.
+The current slice supports `manuscript.chapter` and `planning.outline`, one active type-defined selection, and one type-defined operation in a single-Asset ChangeSet. Outline node creation/deletion/reordering, persistent manuscript block ids, characters, ideas, search, relations, filesystem watching, automatic rebase, multi-Asset transactions, richer views, and multi-Agent orchestration remain deferred. Reconciliation happens on repository boundaries, and the supported writer model is one Host process.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -85,7 +99,7 @@ register(definition: NovelAssetTypeDefinition): () => void
 
 /**
  * Resolve one required type definition.
- * @param type - exact Frontmatter type.
+ * @param type - exact authored `novel.type` declaration.
  * @returns the registered definition.
  * @throws {NovelRepositoryError} when the Project declares an unavailable type.
  */
@@ -152,7 +166,7 @@ abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelPro
  * @param project - validated Project declaration returned by this provider.
  * @param signal - optional cancellation for filesystem and history work.
  * @param sandboxPolicy - optional per-call write policy used if reconciliation must recover an apply journal.
- * @returns current chapter rows in deterministic project-path order.
+ * @returns current typed Asset rows in deterministic project-path order.
  */
 abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSummary[]>
 
@@ -163,7 +177,7 @@ abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandbo
  * @param revisionId - exact retained Revision; omission reconciles and returns the current file head.
  * @param signal - optional cancellation for filesystem and history work.
  * @param sandboxPolicy - optional per-call write policy used if current-head reconciliation must recover an apply journal.
- * @returns exact serialized bytes and parsed chapter values.
+ * @returns exact serialized bytes and parsed typed Asset values.
  * @throws {NovelRepositoryError} when the asset or Revision is absent or invalid.
  */
 abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
@@ -184,9 +198,9 @@ abstract saveAssetContent( project: NovelProjectSnapshot, request: SaveAssetCont
  * @param project - validated Project declaration returned by this provider.
  * @param request - retained Revision and type-defined selection input to validate.
  * @param signal - optional cancellation for the history read.
- * @returns immutable selection identity, quote hash, and bounded diagnostics.
+ * @returns immutable type-defined selection identity and bounded diagnostics.
  */
-abstract captureSelection( project: NovelProjectSnapshot, request: CaptureSelectionRequest, signal?: AbortSignal, ): Promise<SelectionRef>
+abstract captureSelection<Input extends NovelSelectionInput>( project: NovelProjectSnapshot, request: CaptureSelectionRequest<Input>, signal?: AbortSignal, ): Promise<SelectionRef<Input>>
 
 /**
  * Retain one validated proposal without publishing it to authored files.

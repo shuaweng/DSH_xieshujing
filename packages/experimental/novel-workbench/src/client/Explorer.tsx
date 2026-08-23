@@ -95,7 +95,7 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
       <nav className={css.assetList}>
         <AssetGroup title={t('chapters')} assets={manuscriptAssets} active={state.active} unit={t('chapterUnit')}
           titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
-        <AssetGroup title={t('outline')} assets={outlineAssets} active={state.active} unit={t('chapterUnit')}
+        <AssetGroup title={t('outline')} assets={outlineAssets} active={state.active} unit={t('assetUnit')}
           titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
         {otherAssets.length > 0 && (
           <AssetGroup title={t('otherAssets')} assets={otherAssets} active={state.active} unit={t('assetUnit')}

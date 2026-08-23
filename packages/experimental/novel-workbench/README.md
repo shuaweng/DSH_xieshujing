@@ -14,6 +14,7 @@ This experimental Client Consumer provides the Agent-native Novel Studio root wo
 - The explorer discovers the active Session's Novel Project, presents stable Book → Manuscript / Outline branches (including empty branches), opens exact Revision-bound typed Asset documents, and can collapse independently from the DSH Session sidebar.
 - `ctx.novelAssetRenderers` owns effect-scoped exact-type editor, selection-description, optional reader-presentation, and Diff contributions. The shared canvas owns guarded save, Context Commit Barrier, Agent reference insertion, and review authority; it refuses an Asset whose renderer is absent instead of presenting a misleading generic editor.
 - The shipped manuscript renderer edits a chapter title and body in one guarded Revision save, captures UTF-16 ranges, counts non-whitespace authored characters, and opts into a full-height centered paper surface with six coordinated navigation/sidebar/workspace/paper/text/status-bar skins. A full-width workbench status bar owns character count plus skin, typeface, and font-size controls; the workbench viewport owns scrolling while technical type and path metadata stay out of the writing surface.
+- `@deepseek-ai/dsh-experimental-novel-asset-outline` contributes a separate `planning.outline` renderer. It edits one ordered node tree through a hierarchy plus field inspector, captures stable node selections, and renders field-level proposal diffs without adding outline conditions to the shared Canvas.
 - “Reference selection to Agent” first saves a dirty typed draft, stops safely if that save fails, then freezes the selection. Composer displays only `@[the first ten characters…]`; its hidden occurrence retains the complete canonical `dsh-novel:` mention and serializes that exact value for the Agent on submit.
 - `novel_propose_changes` tool results render a durable inline Diff card. Accept and Reject call Session-owned Remote methods; Accept refreshes the explorer and canvas from authoritative repository state.
 - The workbench resolves the conversation service lazily after its slot owner mounts, avoiding a client-plugin dependency cycle while still using DSH's ordinary Composer draft state.
@@ -36,7 +37,7 @@ Opening assets, editing drafts, reviewing ChangeSets, and toggling panels do not
 
 ## Known Limitations and Deferred Work
 
-- **One shipped renderer** — the canvas is registry-driven, but only `manuscript.chapter` is currently installed; outlines, characters, ideas, scenes, timelines, relations, and multiple editor tabs are deferred.
+- **Two shipped renderers** — the canvas installs `manuscript.chapter` and `planning.outline`; characters, ideas, scenes, timelines, relations, and multiple editor tabs are deferred.
 - **No live file events** — the explorer refreshes after in-workbench applies and repository calls reconcile external edits; there is no filesystem watcher or browser invalidation stream.
 - **One active selection** — pinned context, multi-selection, block ids, annotations, and old-Revision badges are deferred.
 - **Desktop-first layout** — mobile layout, route-level multi-workbench switching, and persisted panel geometry are deferred.

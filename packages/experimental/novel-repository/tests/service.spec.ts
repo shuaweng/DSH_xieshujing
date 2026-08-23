@@ -14,6 +14,7 @@ import NovelRepository, {
   type ChangeSet,
   type ChangeSetAuthorization,
   type NovelProjectSnapshot,
+  type NovelSelectionInput,
   type ProposeChangeSetRequest,
   type SaveAssetContentRequest,
   type SelectionRef,
@@ -40,10 +41,10 @@ class StubNovelRepository extends NovelRepository {
     return Promise.reject(new Error('not configured'))
   }
 
-  override captureSelection(
+  override captureSelection<Input extends NovelSelectionInput>(
     _project: NovelProjectSnapshot,
-    _request: CaptureSelectionRequest,
-  ): Promise<SelectionRef> {
+    _request: CaptureSelectionRequest<Input>,
+  ): Promise<SelectionRef<Input>> {
     return Promise.reject(new Error('not configured'))
   }
 

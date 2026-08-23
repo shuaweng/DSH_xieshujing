@@ -19,6 +19,9 @@
     - id: novel-asset-types
       name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 
+    - id: novel-asset-outline
+      name: '@deepseek-ai/dsh-experimental-novel-asset-outline'
+
     - id: novel-repository-local
       name: '@deepseek-ai/dsh-experimental-novel-repository-local'
 

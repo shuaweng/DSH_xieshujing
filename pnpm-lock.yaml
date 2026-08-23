@@ -4154,6 +4154,40 @@ importers:
         specifier: workspace:^
         version: link:../../subagent/subagent-spawn-in-process
 
+  packages/experimental/novel-asset-outline:
+    dependencies:
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-client-locale':
+        specifier: workspace:^
+        version: link:../../client/locale
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: workspace:^
+        version: link:../../client/ui-slots
+      '@deepseek-ai/dsh-experimental-novel-repository':
+        specifier: workspace:^
+        version: link:../novel-repository
+      '@deepseek-ai/dsh-experimental-novel-repository-remote':
+        specifier: workspace:^
+        version: link:../novel-repository-remote
+      '@deepseek-ai/dsh-experimental-novel-workbench':
+        specifier: workspace:^
+        version: link:../novel-workbench
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+      react:
+        specifier: ^18.2.0
+        version: 18.3.1
+
   packages/experimental/novel-context:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -4294,6 +4328,9 @@ importers:
 
   packages/experimental/novel-studio:
     dependencies:
+      '@deepseek-ai/dsh-experimental-novel-asset-outline':
+        specifier: workspace:^
+        version: link:../novel-asset-outline
       '@deepseek-ai/dsh-experimental-novel-context':
         specifier: workspace:^
         version: link:../novel-context

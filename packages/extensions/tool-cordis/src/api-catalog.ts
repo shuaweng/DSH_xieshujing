@@ -1091,7 +1091,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'get(type: string): NovelAssetTypeDefinition',
         description: 'Resolve one required type definition.',
-        parameters: [{ name: 'type', description: 'exact Frontmatter type.' }],
+        parameters: [{ name: 'type', description: 'exact authored `novel.type` declaration.' }],
         returns: 'the registered definition.',
         throws: ['{NovelRepositoryError} when the Project declares an unavailable type.'],
       },
@@ -1138,13 +1138,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSummary[]>',
         description: 'Rebuild the current authored catalog and reconcile exact file bytes into immutable Revisions.',
         parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'signal', description: 'optional cancellation for filesystem and history work.' }, { name: 'sandboxPolicy', description: 'optional per-call write policy used if reconciliation must recover an apply journal.' }],
-        returns: 'current chapter rows in deterministic project-path order.',
+        returns: 'current typed Asset rows in deterministic project-path order.',
       },
       {
         signature: 'abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>',
         description: 'Read either the reconciled current head or one retained immutable Revision.',
         parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'assetId', description: 'stable authored asset identity.' }, { name: 'revisionId', description: 'exact retained Revision; omission reconciles and returns the current file head.' }, { name: 'signal', description: 'optional cancellation for filesystem and history work.' }, { name: 'sandboxPolicy', description: 'optional per-call write policy used if current-head reconciliation must recover an apply journal.' }],
-        returns: 'exact serialized bytes and parsed chapter values.',
+        returns: 'exact serialized bytes and parsed typed Asset values.',
         throws: ['{NovelRepositoryError} when the asset or Revision is absent or invalid.'],
       },
       {
@@ -1155,10 +1155,10 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{NovelRepositoryError} when the base is stale or the resulting asset is invalid.'],
       },
       {
-        signature: 'abstract captureSelection( project: NovelProjectSnapshot, request: CaptureSelectionRequest, signal?: AbortSignal, ): Promise<SelectionRef>',
+        signature: 'abstract captureSelection<Input extends NovelSelectionInput>( project: NovelProjectSnapshot, request: CaptureSelectionRequest<Input>, signal?: AbortSignal, ): Promise<SelectionRef<Input>>',
         description: 'Freeze one exact type-defined selection without rereading mutable latest content.',
         parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'retained Revision and type-defined selection input to validate.' }, { name: 'signal', description: 'optional cancellation for the history read.' }],
-        returns: 'immutable selection identity, quote hash, and bounded diagnostics.',
+        returns: 'immutable type-defined selection identity and bounded diagnostics.',
       },
       {
         signature: 'abstract proposeChangeSet( project: NovelProjectSnapshot, request: ProposeChangeSetRequest, signal?: AbortSignal, ): Promise<ChangeSet>',
@@ -3224,7 +3224,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CaptureSelectionRequest',
-    declaration: 'export interface CaptureSelectionRequest {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: NovelSelectionInput;\n}',
+    declaration: 'export interface CaptureSelectionRequest<Input extends NovelSelectionInput = NovelSelectionInput> {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: Input;\n}',
   },
   {
     name: 'ChangeSet',
@@ -4087,6 +4087,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type NovelSelector = NovelAssetTypeMap[NovelAssetType][\'selector\'];',
   },
   {
+    name: 'NovelSelectorFor',
+    declaration: 'export type NovelSelectorFor<Input extends NovelSelectionInput> = Extract<NovelSelector, {\n    readonly kind: Input[\'kind\'];\n}>;',
+  },
+  {
     name: 'NovelWireValue',
     declaration: 'export type NovelWireValue = null | boolean | number | string | NovelWireValue[] | {\n    [key: string]: NovelWireValue;\n};',
   },
@@ -4396,7 +4400,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SelectionRef',
-    declaration: 'export interface SelectionRef {\n    readonly version: 1;\n    readonly id: SelectionRefId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: NovelSelector;\n    readonly preview?: string;\n}',
+    declaration: 'export interface SelectionRef<Input extends NovelSelectionInput = NovelSelectionInput> {\n    readonly version: 1;\n    readonly id: SelectionRefId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector: NovelSelectorFor<Input>;\n    readonly preview?: string;\n}',
   },
   {
     name: 'SelectionRefId',

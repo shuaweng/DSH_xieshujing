@@ -87,6 +87,7 @@ describe('experimental Novel Studio bundle', () => {
     expect(parsed.flatMap(row => row.insert ?? [])).toEqual([
       { id: 'novel-studio-paths', name: '@deepseek-ai/dsh-experimental-novel-studio' },
       { id: 'novel-asset-types', name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types' },
+      { id: 'novel-asset-outline', name: '@deepseek-ai/dsh-experimental-novel-asset-outline' },
       { id: 'novel-repository-local', name: '@deepseek-ai/dsh-experimental-novel-repository-local' },
       { id: 'novel-context', name: '@deepseek-ai/dsh-experimental-novel-context' },
       { id: 'novel-repository-remote', name: '@deepseek-ai/dsh-experimental-novel-repository-remote' },
@@ -94,6 +95,7 @@ describe('experimental Novel Studio bundle', () => {
       { id: 'novel-workbench', name: '@deepseek-ai/dsh-experimental-novel-workbench' },
     ])
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-context')
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-asset-outline')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository-client')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository-local')
@@ -112,14 +114,17 @@ describe('experimental Novel Studio bundle', () => {
     const novel = profileRows('novel-studio-test', novelBundles)
 
     expect(web.some(row => row.id === 'novel-repository-local')).toBe(false)
+    expect(web.some(row => row.id === 'novel-asset-outline')).toBe(false)
     expect(web.some(row => row.id === 'novel-repository-remote')).toBe(false)
     expect(web.some(row => row.id === 'novel-repository-client')).toBe(false)
     expect(web.some(row => row.id === 'novel-workbench')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-local')).toBe(false)
+    expect(headless.some(row => row.id === 'novel-asset-outline')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-remote')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-client')).toBe(false)
     expect(headless.some(row => row.id === 'novel-workbench')).toBe(false)
     expect(novel.filter(row => row.id === 'novel-repository-local')).toHaveLength(1)
+    expect(novel.filter(row => row.id === 'novel-asset-outline')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-repository-remote')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-repository-client')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-context')).toHaveLength(1)

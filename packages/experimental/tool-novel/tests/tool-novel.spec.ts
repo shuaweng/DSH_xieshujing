@@ -11,6 +11,7 @@ import {
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
+import * as NovelAssetOutline from '../../novel-asset-outline/src/index.ts'
 import NovelContextResolver, {
   encodeNovelReferenceUri,
 } from '../../novel-context/src/index.ts'
@@ -35,10 +36,13 @@ async function harness(): Promise<{
   agent: Agent
   path: string
   revisionId: RevisionId
+  outlinePath: string
+  outlineRevisionId: RevisionId
 }> {
   const dir = await mkdtemp(join(tmpdir(), 'dsh-tool-novel-'))
   cleanups.push(() => rm(dir, { recursive: true, force: true }))
   await mkdir(join(dir, 'manuscript'))
+  await mkdir(join(dir, 'planning'))
   await writeFile(join(dir, 'novel.yaml'), [
     'kind: novel-project',
     'schema: 1',
@@ -46,6 +50,7 @@ async function harness(): Promise<{
     'title: Tool Project',
     'contentRoots:',
     '  manuscript: manuscript',
+    '  planning: planning',
     '',
   ].join('\n'))
   const path = join(dir, 'manuscript', 'chapter.md')
@@ -59,10 +64,25 @@ async function harness(): Promise<{
     '---',
     '白港下雨了。',
   ].join('\n'))
+  const outlinePath = join(dir, 'planning', 'main-outline.yaml')
+  await writeFile(outlinePath, [
+    'novel:',
+    '  schema: 1',
+    '  id: outline-tool',
+    '  type: planning.outline',
+    '  title: Tool Outline',
+    'nodes:',
+    '  - id: chapter-node-1',
+    '    title: 第一章',
+    '    goal: 主角抵达白港。',
+    '    children: []',
+    '',
+  ].join('\n'))
   const ctx = new Context()
   await ctx.plugin(LocalFileSystem, { cwd: dir })
   await ctx.plugin(SandboxPolicy, { mode: 'workspace-write', workspaceRoot: dir })
   await ctx.plugin(NovelAssetTypeRegistry)
+  await ctx.plugin(NovelAssetOutline)
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
@@ -71,8 +91,10 @@ async function harness(): Promise<{
   cleanups.push(async () => { await ctx.fiber.dispose() })
   const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
   if (project === undefined) throw new Error('expected Novel Project')
-  const [asset] = await ctx.novelRepository.listAssets(project)
-  if (asset === undefined) throw new Error('expected chapter Asset')
+  const assets = await ctx.novelRepository.listAssets(project)
+  const asset = assets.find(candidate => candidate.asset.id === 'chapter-tool')
+  const outline = assets.find(candidate => candidate.asset.id === 'outline-tool')
+  if (asset === undefined || outline === undefined) throw new Error('expected chapter and outline Assets')
   const id = SessionId('tool-novel-agent')
   const session = Session.create(id, [], { version: 0, id, createdAt: 0, cwd: dir })
   return {
@@ -80,6 +102,8 @@ async function harness(): Promise<{
     agent: { id, session, ctx } as Agent,
     path,
     revisionId: asset.revisionId,
+    outlinePath,
+    outlineRevisionId: outline.revisionId,
   }
 }
 
@@ -136,12 +160,19 @@ describe('Novel model tools', () => {
     expect(result.value).toMatchObject({
       projectId: 'project-tool',
       title: 'Tool Project',
-      assets: [{
-        assetId: 'chapter-tool', revisionId, title: 'Tool Chapter', path: 'manuscript/chapter.md',
-      }],
+      assets: [
+        {
+          assetId: 'chapter-tool', revisionId, title: 'Tool Chapter', path: 'manuscript/chapter.md',
+        },
+        {
+          assetId: 'outline-tool', title: 'Tool Outline', path: 'planning/main-outline.yaml',
+          type: 'planning.outline',
+        },
+      ],
     })
     const value = result.value as { assets: Array<{ reference: string }> }
-    expect(value.assets[0]?.reference).toMatch(/^dsh-novel:[A-Za-z0-9_-]+$/u)
+    expect(value.assets).toHaveLength(2)
+    for (const asset of value.assets) expect(asset.reference).toMatch(/^dsh-novel:[A-Za-z0-9_-]+$/u)
     await expect(execute(ctx, undefined, 'novel_list', {})).resolves.toMatchObject({ isError: true })
   })
 
@@ -201,7 +232,9 @@ describe('Novel model tools', () => {
       status: 'proposed',
       actor: { kind: 'agent', sessionId: agent.id },
     })
-    expect(retained.operations[0]?.selector.quoteHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
+    const [operation] = retained.operations
+    if (operation?.kind !== 'replace-text') throw new Error('expected retained manuscript operation')
+    expect(operation.selector.quoteHash).toMatch(/^sha256:[0-9a-f]{64}$/u)
 
     await expect(execute(ctx, agent, 'novel_propose_changes', {
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
@@ -212,5 +245,48 @@ describe('Novel model tools', () => {
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
       operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }], summary: '摘要',
     })).resolves.toMatchObject({ isError: true })
+  })
+
+  it('reads and proposes a typed outline-node update through the unchanged generic tools', async () => {
+    const { ctx, agent, outlinePath, outlineRevisionId } = await harness()
+    const uri = encodeNovelReferenceUri({
+      projectId: ProjectId('project-tool'),
+      assetId: AssetId('outline-tool'),
+      revisionId: outlineRevisionId,
+    })
+    const read = await execute(ctx, agent, 'novel_get', { references: [uri] })
+    expect(read.isError).toBe(false)
+    if (read.isError) throw new Error('expected outline novel_get success')
+    const readValue = read.value as { assets: Array<{ text: string; proposalInstructions: string }> }
+    expect(JSON.parse(readValue.assets[0]!.text)).toMatchObject({
+      kind: 'planning.outline',
+      nodes: [{ id: 'chapter-node-1', goal: '主角抵达白港。' }],
+    })
+    expect(readValue.assets[0]!.proposalInstructions).toContain('update-outline-node')
+
+    const before = await readFile(outlinePath, 'utf8')
+    const proposed = await execute(ctx, agent, 'novel_propose_changes', {
+      project_id: 'project-tool',
+      asset_id: 'outline-tool',
+      base_revision_id: outlineRevisionId,
+      operations: [{
+        kind: 'update-outline-node',
+        nodeId: 'chapter-node-1',
+        changes: { goal: '主角在雨夜抵达白港。', turn: '港口突然停电。' },
+      }],
+      summary: '强化第一章目标与转折',
+    })
+    expect(proposed.isError).toBe(false)
+    if (proposed.isError) throw new Error('expected outline proposal success')
+    expect(await readFile(outlinePath, 'utf8')).toBe(before)
+    const value = proposed.value as { changeSetId: string }
+    const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
+    if (project === undefined) throw new Error('expected Novel Project')
+    const retained = await ctx.novelRepository.readChangeSet(project, ChangeSetId(value.changeSetId))
+    expect(retained.assetType).toBe('planning.outline')
+    const [operation] = retained.operations
+    if (operation?.kind !== 'update-outline-node') throw new Error('expected retained outline operation')
+    expect(operation.selector).toMatchObject({ kind: 'outline-node', nodeId: 'chapter-node-1' })
+    expect(operation.selector.nodeHash).toMatch(/^sha256:/u)
   })
 })

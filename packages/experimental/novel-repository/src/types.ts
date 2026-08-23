@@ -52,7 +52,7 @@ export interface ReplaceTextOperation {
 }
 
 /**
- * Merge-extensible authored Asset values keyed by their Frontmatter type.
+ * Merge-extensible authored Asset values keyed by their exact `novel.type` declaration.
  * Type packages augment this map and register matching runtime definitions.
  */
 export interface NovelAssetTypeMap {
@@ -72,6 +72,11 @@ export type NovelAssetContent = NovelAssetTypeMap[NovelAssetType]['content']
 export type NovelSelectionInput = NovelAssetTypeMap[NovelAssetType]['selectionInput']
 /** Frozen selectors contributed by every selectable Asset type. */
 export type NovelSelector = NovelAssetTypeMap[NovelAssetType]['selector']
+/** Frozen selector corresponding to one exact selection-input shape. */
+export type NovelSelectorFor<Input extends NovelSelectionInput> = Extract<
+  NovelSelector,
+  { readonly kind: Input['kind'] }
+>
 /** Durable operations contributed by every mutable Asset type. */
 export type NovelOperation = NovelAssetTypeMap[NovelAssetType]['operation']
 
@@ -158,13 +163,13 @@ export interface AssetRevision {
 }
 
 /** Frozen semantic selection suitable for durable prompt references. */
-export interface SelectionRef {
+export interface SelectionRef<Input extends NovelSelectionInput = NovelSelectionInput> {
   readonly version: 1
   readonly id: SelectionRefId
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly selector: NovelSelector
+  readonly selector: NovelSelectorFor<Input>
   readonly preview?: string
 }
 
@@ -178,10 +183,10 @@ export interface SaveAssetContentRequest {
 }
 
 /** Request to freeze a non-empty browser selection over one retained Revision. */
-export interface CaptureSelectionRequest {
+export interface CaptureSelectionRequest<Input extends NovelSelectionInput = NovelSelectionInput> {
   readonly assetId: AssetId
   readonly revisionId: RevisionId
-  readonly selector: NovelSelectionInput
+  readonly selector: Input
 }
 
 /** Request to retain one proposal without changing authored files. */

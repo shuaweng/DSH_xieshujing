@@ -12,9 +12,11 @@ import NovelRepository, {
   type ChangeSet,
   type ChangeSetAuthorization,
   type NovelProjectSnapshot,
+  type NovelSelectionInput,
   type ProposeChangeSetRequest,
   type SaveAssetContentRequest,
   type SelectionRef,
+  type TextRangeSelector,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs'
 import { describe, expect, it, vi } from 'vitest'
@@ -54,9 +56,12 @@ class StubNovelRepository extends NovelRepository {
     })
   }
 
-  override captureSelection(_project: NovelProjectSnapshot, _request: CaptureSelectionRequest): Promise<SelectionRef> {
+  override captureSelection<Input extends NovelSelectionInput>(
+    _project: NovelProjectSnapshot,
+    _request: CaptureSelectionRequest<Input>,
+  ): Promise<SelectionRef<Input>> {
     if (this.selection === undefined) throw new Error('selection not configured')
-    return Promise.resolve(this.selection)
+    return Promise.resolve(this.selection as unknown as SelectionRef<Input>)
   }
 
   override proposeChangeSet(
@@ -238,18 +243,19 @@ describe('NovelRepositoryRemote Host service', () => {
       contentHash: snapshot.contentHash,
       title: '第一章',
     }]
+    const textSelector: TextRangeSelector = {
+      kind: 'text-range',
+      startUtf16: 0,
+      endUtf16: 1,
+      quoteHash: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    }
     const selection: SelectionRef = {
       version: 1,
       id: SelectionRefId('selection-1'),
       projectId: ProjectId('project-1'),
       assetId: AssetId('chapter-1'),
       revisionId: RevisionId('revision-1'),
-      selector: {
-        kind: 'text-range',
-        startUtf16: 0,
-        endUtf16: 1,
-        quoteHash: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
-      },
+      selector: textSelector,
       preview: '旧',
     }
     repository.selection = selection
@@ -261,7 +267,7 @@ describe('NovelRepositoryRemote Host service', () => {
       baseRevisionId: RevisionId('revision-1'),
       operations: [{
         kind: 'replace-text',
-        selector: selection.selector,
+        selector: textSelector,
         replacement: '新',
       }],
       actor: { kind: 'agent', sessionId: 'agent-1' as ChangeSetAuthorization['sessionId'] },
@@ -321,8 +327,8 @@ describe('NovelRepositoryRemote Host service', () => {
     repository.changeSetValue = {
       ...storedChangeSet,
       operations: [
-        { kind: 'replace-text', selector: selection.selector, replacement: '一' },
-        { kind: 'replace-text', selector: selection.selector, replacement: '二' },
+        { kind: 'replace-text', selector: textSelector, replacement: '一' },
+        { kind: 'replace-text', selector: textSelector, replacement: '二' },
       ],
     }
     await expect(ctx.novelRepositoryRemote.changeSet(agent, ChangeSetId('changeset-1'), signal))

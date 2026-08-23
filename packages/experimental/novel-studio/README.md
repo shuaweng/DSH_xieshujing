@@ -8,7 +8,7 @@ This experimental package is the explicit Novel Studio Profile bundle. It compos
 
 ## Behavior
 
-- Add this bundle after the existing base and Web App bundles. It inserts the Host Asset-type registry before `novel-repository-local`, followed by context, Remote, the separate Client adapter, and `novel-workbench`.
+- Add this bundle after the existing base and Web App bundles. It inserts the Host Asset-type registry, the independent `planning.outline` Host/Client contribution, and `novel-repository-local`, followed by context, Remote, the separate Client adapter, and `novel-workbench`.
 - The bundle disables only the ordinary `ui-layout` entry and installs the Novel workbench as the sole root occupant. Native DSH sidebar, conversation, details, settings, model selection, tool rendering, and Session services remain installed in the slots declared by that root.
 - A package-owned `novel-workbench` Agent Preset combines a Novel persona with `novel_list`, `novel_get`, and `novel_propose_changes`; generic shell and filesystem mutation tools are absent.
 - `NovelStudioPaths` publishes the package-owned Preset root so `agent-presets` can select it without a repository-relative path.
@@ -23,6 +23,7 @@ pnpm dsh plugin --profile novel-studio add link:./packages/bundle/web-app
 pnpm dsh plugin --profile novel-studio add link:./packages/experimental/novel-studio
 pnpm dsh plugin --profile novel-studio add \
   link:./packages/experimental/novel-repository \
+  link:./packages/experimental/novel-asset-outline \
   link:./packages/experimental/novel-context \
   link:./packages/experimental/novel-repository-client \
   link:./packages/experimental/novel-repository-local \
@@ -51,6 +52,6 @@ The Preset composition is stable across page and selection changes. Request-loca
 ## Known Limitations and Deferred Work
 
 - **No shipped Profile entry** — callers must explicitly install this bundle after base and Web App; there is no built-in `novel-studio` CLI template or route switcher.
-- **MVP asset scope** — the Host and Client registries are extensible, but only `manuscript.chapter`, one active text selection, and one-operation ChangeSets are installed.
+- **MVP asset scope** — the Host and Client registries install `manuscript.chapter` and `planning.outline`, one active type-defined selection, and one-operation ChangeSets. Characters, ideas, relations, and structural outline edits remain deferred.
 - **No search or live file events** — asset search, relations, file watching, and browser invalidation streams are deferred.
 - **No orchestration** — Role Profiles, Task Blackboard, `novel_delegate`, and multi-Agent workflows are deferred.

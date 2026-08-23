@@ -276,6 +276,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   NovelProjectSnapshot: 'novel-workbench.md',
   NovelReferenceInput: 'novel-workbench.md',
   NovelSelectionDescriptor: 'novel-workbench.md',
+  NovelSelectionInput: 'novel-workbench.md',
   PreparedNovelMessage: 'novel-workbench.md',
   ProposeChangeSetRequest: 'novel-workbench.md',
   ProjectId: 'novel-workbench.md',

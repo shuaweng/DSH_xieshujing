@@ -280,6 +280,7 @@
     { "path": "./packages/jobs/tool-jobs" },
     { "path": "./packages/experimental/agent-team" },
     { "path": "./packages/experimental/novel-repository" },
+    { "path": "./packages/experimental/novel-asset-outline/tsconfig.host.json" },
     { "path": "./packages/experimental/novel-repository-local" },
     { "path": "./packages/experimental/novel-repository-remote" },
     { "path": "./packages/experimental/novel-context" },

@@ -1,6 +1,7 @@
-/** Strict authored-file parsing and the built-in manuscript Asset definition. */
+/** Strict authored-file type declaration parsing and the built-in manuscript Asset definition. */
 
 import { createHash } from 'node:crypto'
+import { extname } from 'node:path'
 import { isScalar, parseDocument, stringify } from 'yaml'
 import {
   AssetId,
@@ -116,14 +117,53 @@ function parseFrontmatterFile(bytes: Uint8Array, path: string): ParsedFrontmatte
  * Read the semantic type before dispatching to its registered parser.
  * @param bytes - complete authored file bytes.
  * @param path - project-relative path used in diagnostics.
- * @returns the exact declared Frontmatter type string.
+ * @returns the exact declared Markdown Frontmatter or YAML root type string.
  */
 export function declaredAssetType(bytes: Uint8Array, path: string): string {
-  const type = parseFrontmatterFile(bytes, path).novel['type']
+  const extension = extname(path).toLocaleLowerCase()
+  const declaration = extension === '.yaml' || extension === '.yml'
+    ? parseYamlDeclaration(bytes, path)
+    : parseFrontmatterFile(bytes, path).novel
+  const type = declaration['type']
   if (typeof type !== 'string' || type.length === 0 || type.trim() !== type) {
     invalidAsset(path, 'novel.type must be a non-empty string without surrounding whitespace')
   }
   return type
+}
+
+/** Parse only the shared identity mapping required to dispatch one YAML Asset. */
+function parseYamlDeclaration(bytes: Uint8Array, path: string): Readonly<Record<string, unknown>> {
+  if (bytes.includes(0)) invalidAsset(path, 'the file contains a NUL byte')
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch (error: unknown) {
+    invalidAsset(path, 'the file is not valid UTF-8', error)
+  }
+  const document = parseDocument(text, { prettyErrors: true, uniqueKeys: true })
+  const [firstError] = document.errors
+  if (firstError !== undefined) invalidAsset(path, firstError.message, firstError)
+  const [firstWarning] = document.warnings
+  if (firstWarning !== undefined) invalidAsset(path, firstWarning.message, firstWarning)
+  let value: unknown
+  try {
+    value = document.toJS({ maxAliasCount: 0 })
+  } catch (error: unknown) {
+    invalidAsset(path, 'YAML aliases are not supported', error)
+  }
+  if (!isRecord(value)) invalidAsset(path, 'the YAML root must be a mapping')
+  if (containsControlCharacterDeep(value)) invalidAsset(path, 'YAML assets must not contain control characters')
+  const novel = value['novel']
+  if (!isRecord(novel)) invalidAsset(path, 'novel must be a mapping')
+  const schema = novel['schema']
+  if (typeof schema === 'number' && Number.isSafeInteger(schema) && schema !== 1) {
+    throw new NovelRepositoryError(
+      `novel repository: asset ${JSON.stringify(path)} uses unsupported schema ${schema}`,
+      'NOVEL_PROJECT_SCHEMA_UNSUPPORTED',
+    )
+  }
+  if (schema !== 1) invalidAsset(path, 'novel.schema must be the integer 1')
+  return novel
 }
 
 /**

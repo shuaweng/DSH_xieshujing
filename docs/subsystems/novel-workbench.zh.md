@@ -2,7 +2,7 @@
 
 [English](novel-workbench.md) | 中文
 
-实验性小说工作台 MVP 让作者与 Agent 通过同一个稳定语义身份读取和修改一章正文。它在显式隔离的 Profile overlay 中组合文件化 Asset、不可变 SQLite Revision、精确选区、持久 Session 上下文、只提案的模型工具、可审阅 ChangeSet 与专用浏览器工作台。权威划分和崩溃恢复决策由[小说工作台 Agent Note（Agent 决策记录）](../../.agents/notes/proposed/architecture/2026-08-22-novel-workbench-domain-and-commit-protocol.zh.md)负责。
+实验性小说工作台让作者与 Agent 通过同一个稳定语义身份读取和修改类型化正文与大纲 Asset。它在显式隔离的 Profile overlay 中组合文件化 Asset、不可变 SQLite Revision、精确类型化选区、持久 Session 上下文、只提案的模型工具、可审阅 ChangeSet 与专用浏览器工作台。权威划分和崩溃恢复决策由[小说工作台 Agent Note（Agent 决策记录）](../../.agents/notes/proposed/architecture/2026-08-22-novel-workbench-domain-and-commit-protocol.zh.md)负责。
 
 ## 项目声明
 
@@ -15,13 +15,14 @@ id: project_01
 title: White Harbor
 contentRoots:
   manuscript: manuscript
+  planning: planning
 ```
 
-Schema 版本 1 要求 `kind: novel-project`、整数 `schema: 1`、非空 `id` 和 `title`，以及包含 `manuscript` 的 `contentRoots` mapping。本地提供方拒绝格式错误或有歧义的 YAML、无效 UTF-8、不支持的 schema、缺失根目录、悬空链接，以及逃出 Project 根目录的规范路径。
+Schema 版本 1 要求 `kind: novel-project`、整数 `schema: 1`、非空 `id` 和 `title`，以及包含 `manuscript` 的 `contentRoots` mapping。`planning` 是可选项，但声明后必须解析到项目内部的既有目录。本地提供方拒绝格式错误或有歧义的 YAML、无效 UTF-8、不支持的 schema、缺失的已声明根目录、悬空链接，以及逃出 Project 根目录的规范路径。
 
 ## Asset 与 Revision 权威
 
-[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) 定义与提供方无关的 `ctx.novelRepository` seam。[`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) 在声明的 `manuscript` 根目录下扫描有边界的 Markdown 文件。只有严格 YAML Frontmatter 声明 `novel.schema: 1`、稳定 `novel.id`、`novel.type: manuscript.chapter` 与标题时，章节才成为 Asset。
+[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) 定义与提供方无关的 `ctx.novelRepository` seam 和 effect 作用域内的 `ctx.novelAssetTypes` 注册表。[`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) 只扫描已安装类型定义认领的根目录和扩展名。章节通过严格 Markdown Frontmatter 成为 Asset；[`@deepseek-ai/dsh-experimental-novel-asset-outline`](../../packages/experimental/novel-asset-outline) 独立贡献严格 YAML `planning.outline` 解析与展示，不向共享 Repository 增加大纲分支。
 
 ```markdown
 ---
@@ -35,31 +36,44 @@ novel:
 Authored manuscript body.
 ```
 
-项目文件是当前作者内容的权威。`.novel/history.sqlite` 保存精确的不可变 Revision 字节、Asset head、ChangeSet 与 apply journal；它不会取代文件成为当前真相源。文件改名保留 Asset 身份，外部字节变化在 reconcile 时创建 `external-edit` Revision。用户保存只替换已解析正文，保留完全相同的 Frontmatter 前缀，并要求画面上的 base Revision 与文件系统版本仍然为当前值。
+```yaml
+novel:
+  schema: 1
+  id: outline_main
+  type: planning.outline
+  title: Main Outline
+nodes:
+  - id: act-one
+    title: Act One
+    summary: The protagonist reaches White Harbor.
+    children: []
+```
+
+项目文件是当前作者内容的权威。`.novel/history.sqlite` 保存精确的不可变 Revision 字节、Asset head、ChangeSet 与 apply journal；它不会取代文件成为当前真相源。文件改名保留 Asset 身份，外部字节变化在 reconcile 时创建 `external-edit` Revision。每次人类保存都由精确类型定义物化并重新解析，而且要求画面上的 base Revision 与文件系统版本仍然为当前值。
 
 ## 选区与 Session 上下文
 
-第一版把非空范围冻结为正文 UTF-16 offset、精确 quote hash 和有边界的前后文诊断。选区绑定一个已保留 Revision，绝不静默前移到可变的最新内容。浏览器 context barrier 先保存脏草稿，再捕获新 Revision 上的精确选区，最后把规范 `dsh-novel:` mention 插入普通 DSH Composer。
+第一版可以冻结带 UTF-16 offset 与 quote hash 的非空正文范围，也可以冻结带稳定 node id 与 node hash 的单个大纲节点。每个选区都绑定一个已保留 Revision，绝不静默前移到可变的最新内容。浏览器 context barrier 先保存脏的类型化草稿，再捕获新 Revision 上的精确选区，最后把规范 `dsh-novel:` mention 插入普通 DSH Composer。
 
 [`@deepseek-ai/dsh-experimental-novel-context`](../../packages/experimental/novel-context) 在 `agent/pre-step` 解析这些 mention。它保留人类可读消息，并附加一个 source kind 为 `novel-context` 的不可变 `user/message`。该消息以确定性、明确不受信任的 JSON 保存精确 Revision，让 Session replay 能重建模型实际看到的内容。引用数量和 UTF-8 总字节数都有上限，而且第一次 Novel context 会把该 Session 绑定到一个 Project。
 
 ## 提案、审阅与恢复
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_get` 与 `novel_propose_changes`。目录发现返回当前 Session 项目的规范精确 Revision 引用，精确读取解析已保留 Revision 并报告正文 UTF-16 长度；提案会在 Repository 内冻结一个 `replace-text` 范围并计算 quote hash，再持久创建 ChangeSet，但不改作者文件。模型没有 apply 工具，也不能宣称已经发布修改。
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_get` 与 `novel_propose_changes`。目录发现为所有已安装类型返回规范精确 Revision 引用；精确读取使用该类型的确定性模型投影与提案说明。提案由匹配定义校验一个正文 `replace-text` 或大纲 `update-outline-node`，再持久创建 ChangeSet，但不改作者文件。模型没有 apply 工具，也不能宣称已经发布修改。
 
 浏览器把 ChangeSet 读成行内 Diff 卡片。接受或拒绝都是显式、归 Session 所有的 Remote 操作。Apply 在接触文件前，把精确前后字节、hash、授权与预期结果 Revision 以 `applying` 状态写入 journal。项目重开时，after hash 会完成提交，before hash 会重试受保护写入，任何第三种 hash 都会变成 `conflicted`，且不覆盖作者文件。
 
 ## Profile 隔离
 
-[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 overlay，组合在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。它只禁用普通 `ui-layout` 根占位者，改为安装 [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench)。Novel 根仍保留原生侧栏、对话、详情、设置、模型选择、工具渲染和 overlay surface，并增加正文 explorer 与 canvas 插槽。
+[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 overlay，组合在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。它只禁用普通 `ui-layout` 根占位者，改为安装 [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench)。Novel 根仍保留原生侧栏、对话、详情、设置、模型选择、工具渲染和 overlay surface，并增加类型化 Asset explorer 与 canvas 插槽。
 
-根布局把 Agent 对话放在左侧，把正文浏览器与画布放在右侧。默认 `web` 与 `headless` Profile 模板不包含这些实验性包。overlay 还拥有安全的 `novel-workbench` Preset，其稳定工具集不包含 shell 或通用文件系统修改能力。因此 MVP 能与 DSH 深度集成，而不改变普通 DSH 的运行方式。
+根布局把 Agent 对话放在左侧，把 Asset 浏览器与画布放在右侧。精确 Client Renderer contribution 分别提供正文阅读/编辑器或结构化大纲树与字段检查器。默认 `web` 与 `headless` Profile 模板不包含这些实验性包。overlay 还拥有安全的 `novel-workbench` Preset，其稳定工具集不包含 shell 或通用文件系统修改能力。
 
 浏览器保存与 ChangeSet 应用会解析被寻址 Session 的 sandbox policy，并把它传入 Repository 协调与发布。Novel Project 因此可以位于 Host 进程工作目录之外，同时仍被限制在 Session 工作区边界内。
 
 ## 当前限制
 
-MVP 支持一个 `manuscript.chapter` 编辑器、一个活动 UTF-16 选区，以及单 Asset ChangeSet 中的一个 `replace-text` 操作。持久 block id、大纲、人物、灵感、搜索、关系、文件监听、自动 rebase、多 Asset 事务、更丰富的编辑器与多 Agent 编排仍暂缓。Repository 只在调用边界 reconcile，支持的写入模型是单 Host 进程。
+当前切片支持 `manuscript.chapter` 与 `planning.outline`、一个活动类型化选区，以及单 Asset ChangeSet 中的一项类型化操作。大纲节点创建/删除/重排、持久正文 block id、人物、灵感、搜索、关系、文件监听、自动 rebase、多 Asset 事务、更丰富的视图与多 Agent 编排仍暂缓。Repository 只在调用边界 reconcile，支持的写入模型是单 Host 进程。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -85,7 +99,7 @@ register(definition: NovelAssetTypeDefinition): () => void
 
 /**
  * Resolve one required type definition.
- * @param type - exact Frontmatter type.
+ * @param type - exact authored `novel.type` declaration.
  * @returns the registered definition.
  * @throws {NovelRepositoryError} when the Project declares an unavailable type.
  */
@@ -152,7 +166,7 @@ abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelPro
  * @param project - validated Project declaration returned by this provider.
  * @param signal - optional cancellation for filesystem and history work.
  * @param sandboxPolicy - optional per-call write policy used if reconciliation must recover an apply journal.
- * @returns current chapter rows in deterministic project-path order.
+ * @returns current typed Asset rows in deterministic project-path order.
  */
 abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSummary[]>
 
@@ -163,7 +177,7 @@ abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandbo
  * @param revisionId - exact retained Revision; omission reconciles and returns the current file head.
  * @param signal - optional cancellation for filesystem and history work.
  * @param sandboxPolicy - optional per-call write policy used if current-head reconciliation must recover an apply journal.
- * @returns exact serialized bytes and parsed chapter values.
+ * @returns exact serialized bytes and parsed typed Asset values.
  * @throws {NovelRepositoryError} when the asset or Revision is absent or invalid.
  */
 abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
@@ -184,9 +198,9 @@ abstract saveAssetContent( project: NovelProjectSnapshot, request: SaveAssetCont
  * @param project - validated Project declaration returned by this provider.
  * @param request - retained Revision and type-defined selection input to validate.
  * @param signal - optional cancellation for the history read.
- * @returns immutable selection identity, quote hash, and bounded diagnostics.
+ * @returns immutable type-defined selection identity and bounded diagnostics.
  */
-abstract captureSelection( project: NovelProjectSnapshot, request: CaptureSelectionRequest, signal?: AbortSignal, ): Promise<SelectionRef>
+abstract captureSelection<Input extends NovelSelectionInput>( project: NovelProjectSnapshot, request: CaptureSelectionRequest<Input>, signal?: AbortSignal, ): Promise<SelectionRef<Input>>
 
 /**
  * Retain one validated proposal without publishing it to authored files.
