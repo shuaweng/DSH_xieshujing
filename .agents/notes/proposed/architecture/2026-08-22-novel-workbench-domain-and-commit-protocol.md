@@ -227,6 +227,8 @@ The Profile composes `@deepseek-ai/dsh-base`, `@deepseek-ai/dsh-web-app`, and a 
 
 The source-checkout development path installs the Web App and Novel bundle into that explicit Profile, with the Novel layer last. A standalone Cordis `--patch` is not a valid installation path: patches can insert configuration rows but do not add the packages those rows name to the Profile's module-resolution closure. Local `link:` development also links the private Novel runtime packages directly because pnpm does not install workspace dependencies behind a directory link.
 
+The CLI appends its shipped Preset root after every root contributed by the composed Profile. It does not replace bundle-owned roots; otherwise a Profile can select a bundle-owned default Preset that the Session creator cannot resolve.
+
 The first technical slice may register a Novel view inside the existing conversation surface and a Context Tray in its input dock. This is a test harness, not the final product layout. Before the vertical slice is called a Novel workbench, `novel-studio` replaces `ui-layout` with the Profile's sole root occupant, keeps the existing Conversation component in a declared right-side `conversation` slot, and adds project-scoped `novel.explorer` and `novel.canvas` slots. Switching Sessions does not unmount the open manuscript canvas.
 
 Version one does not add a generic Router or Workbench registry. Those abstractions require a second concrete workbench consumer. Workbench choice belongs to the Profile; Agent persona and tool composition belong to a Session Preset.

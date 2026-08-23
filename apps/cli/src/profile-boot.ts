@@ -83,6 +83,21 @@ export function resolveTelemetryPatch(disabledEnv: string | undefined, hasRow: b
 }
 
 /**
+ * Add the CLI-owned shipped Preset root without discarding roots contributed by Profile bundles.
+ * An invalid non-array `roots` value remains untouched so the owning plugin's Config validation rejects it.
+ * @param config - the composed `agent-presets` row config before the launcher-owned root.
+ * @returns a copied config carrying the shipped root after every composed root.
+ */
+export function appendShippedPresetRoot(config: Record<string, unknown>): Record<string, unknown> {
+  const roots = config.roots
+  if (roots !== undefined && !Array.isArray(roots)) return { ...config }
+  return {
+    ...config,
+    roots: [...(roots ?? []), { path: SHIPPED_PRESET_ROOT, trust: 'system' }],
+  }
+}
+
+/**
  * Load a resolved profile for `name`: heal the shared module fallback, then
  * (re)write the empty root config. The root is always rewritten: the whole
  * composition is patch layers, and the vendored Loader's tree write-back (a
@@ -159,10 +174,9 @@ function composeProfile(
   if (rows.has('agent-presets')) {
     composedOverlays.push({
       id: 'agent-presets',
-      config: {
-        ...(rows.get('agent-presets')?.config ?? {}) as Record<string, unknown>,
-        roots: [{ path: SHIPPED_PRESET_ROOT, trust: 'system' }],
-      },
+      config: appendShippedPresetRoot(
+        (rows.get('agent-presets')?.config ?? {}) as Record<string, unknown>,
+      ),
     })
   }
   const telemetryPatch = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID))
