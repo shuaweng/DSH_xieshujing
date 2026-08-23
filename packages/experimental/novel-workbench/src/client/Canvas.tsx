@@ -88,7 +88,7 @@ export function Canvas({ useSessions, useStore, actions, renderers, save, captur
   const characterCount = reader?.countCharacters(state.draft)
   return (
     <div className={css.editorShell} data-reader-shell={reader === undefined ? undefined : ''}>
-      <header className={css.editorHeader}>
+      <header className={css.editorHeader} data-novel-chrome="header">
         <nav className={css.breadcrumb} aria-label={t('location')}>
           <strong>{state.project?.title ?? t('studio')}</strong>
           <span aria-hidden="true">/</span>
@@ -190,7 +190,12 @@ function ReaderControls({ activeSkin, activeFont, fontSize, characterCount, setS
   }, [panel])
 
   return (
-    <footer className={css.readerStatusBar} ref={root} aria-label={t('readerSettings')}>
+    <footer
+      className={css.readerStatusBar}
+      ref={root}
+      aria-label={t('readerSettings')}
+      data-novel-chrome="status"
+    >
       <div className={css.readerStats}>
         <span>{t('chapterCharacters')}：<strong>{characterCount.toLocaleString()}</strong></span>
       </div>

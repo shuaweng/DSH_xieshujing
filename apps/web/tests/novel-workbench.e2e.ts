@@ -59,6 +59,12 @@ async function captureNovelWorkbench(page: Page, workspaceCwd: string): Promise<
   return snapshot.replace(/dsh-novel:[A-Za-z0-9_-]+/gu, 'dsh-novel:{{reference}}')
 }
 
+/** Resolve the visible theme surfaces to browser-computed colors in stable DOM order. */
+async function chromeBackgrounds(page: Page): Promise<readonly string[]> {
+  return await page.locator('[data-novel-chrome]').evaluateAll(elements =>
+    elements.map(element => getComputedStyle(element).backgroundColor))
+}
+
 /** Closed, keyless Session log carrying the real proposal's durable presentation metadata. */
 function proposalFixture(changeSet: ProposalFixture): string {
   const operation = changeSet.operations[0]
@@ -227,6 +233,7 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       throw new Error(`Selection reference was not committed; page errors: ${JSON.stringify(tripwire.pageErrors)}; body: ${JSON.stringify(await page.locator('body').innerText())}`, { cause })
     }
 
+    const paperChrome = await chromeBackgrounds(page)
     await page.getByRole('button', { name: 'Change reader skin' }).click()
     await page.getByRole('dialog', { name: 'Reader skins' }).waitFor()
     await page.getByRole('button', { name: 'Warm parchment' }).click()
@@ -236,6 +243,11 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     await page.getByRole('button', { name: 'Increase font size' }).click()
     await expect.poll(() => page.locator('[data-reader-skin]').getAttribute('data-reader-skin')).toBe('warm')
     await expect.poll(() => page.locator('[data-reader-font]').getAttribute('data-reader-font')).toBe('kai')
+    await expect.poll(async () => {
+      const warmChrome = await chromeBackgrounds(page)
+      return warmChrome.length === paperChrome.length
+        && warmChrome.every((background, index) => background !== paperChrome[index])
+    }).toBe(true)
     await page.getByRole('separator', { name: 'Resize conversation and workbench' }).press('ArrowRight')
     await expect.poll(() => page.getByRole('separator', { name: 'Resize conversation and workbench' }).getAttribute('aria-valuenow')).toBe('426')
 

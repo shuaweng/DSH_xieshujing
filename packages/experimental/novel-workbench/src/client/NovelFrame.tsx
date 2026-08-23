@@ -42,13 +42,19 @@ export function NovelFrame({ renderSlot, t, useStore, actions }: NovelFrameProps
         resetLabel={t('resetPanelWidth')}
         onChange={actions.setAgentWidth}
       />
-      <aside className={css.explorer} aria-label={t('assetSidebar')} data-collapsed={explorerCollapsed || undefined}>
+      <aside
+        className={css.explorer}
+        aria-label={t('assetSidebar')}
+        data-collapsed={explorerCollapsed || undefined}
+        data-novel-chrome="explorer"
+      >
         {renderSlot('novel.explorer', {})}
       </aside>
       <button
         type="button"
         className={css.explorerToggle}
         style={{ left: explorerBoundary }}
+        data-novel-chrome="explorer-toggle"
         aria-label={explorerCollapsed ? t('expandExplorer') : t('collapseExplorer')}
         title={explorerCollapsed ? t('expandExplorer') : t('collapseExplorer')}
         onClick={actions.toggleExplorer}
