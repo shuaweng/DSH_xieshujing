@@ -19,7 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 // Type-only: pulls the settings shell's SlotMap merge (the 'settings.section' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, ObservableSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import { AgentPresetLabel } from './AgentPresetLabel.tsx'
 import type { AgentPresetLabelInjected } from './AgentPresetLabel.tsx'
 import { AgentPresetRow } from './AgentPresetRow.tsx'
@@ -29,7 +29,7 @@ import type { AgentPresetSeatInjected } from './AgentPresetSeat.tsx'
 import { AgentPresetSection } from './AgentPresetSection.tsx'
 import type { AgentPresetSectionInjected } from './AgentPresetSection.tsx'
 import { AgentPresetSeatController } from './seat-store.ts'
-import type { SeatSessionSummary } from './seat-store.ts'
+import type { AgentPresetSeatState, SeatSessionSummary } from './seat-store.ts'
 import { AgentPresetSectionController } from './section-store.ts'
 import { en, zh } from './locales.ts'
 import { AGENT_PRESET_SETTINGS_NS, AgentPresetSettingsController } from './settings-store.ts'
@@ -44,6 +44,21 @@ export {
 } from './section-store.ts'
 export type { AgentPresetOption, AgentPresetSettingsState } from './settings-store.ts'
 export { AGENT_PRESET_SETTINGS_NS, writeDefaultPreset } from './settings-store.ts'
+
+/**
+ * Read-only browser truth for the preset represented by the new-session
+ * chooser. Existing sessions remain authoritative in `ctx.sessions`; this
+ * face only covers the blank-session stage that has not reached that list
+ * yet.
+ */
+export type AgentPresetSelection = ObservableSnapshot<Pick<AgentPresetSeatState, 'current'>>
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    /** Current blank-session preset choice, shared with the hero selector. */
+    agentPresetSelection: AgentPresetSelection
+  }
+}
 
 /** Required services (cordis fiber inject). */
 export const inject = ['slots', 'locale', 'connection', 'remote', 'settingsScope']
@@ -115,6 +130,14 @@ export function apply(ctx: ClientContext): void {
       scope.sessions.noteAgentPreset(sessionId as never, agentPreset)
     })
 
+    // The hero choice can exist before the blank Session has a list row. A
+    // small read-only face lets other preset-gated Composer controls observe
+    // that exact staged value instead of guessing from the previous Session.
+    const disposeSelection = scope.reflect.provide(
+      'agentPresetSelection',
+      seat.store,
+    )
+
     const seatInjected = (): AgentPresetSeatInjected => ({
       hooks: { agentPresetSeat: seat.store },
       load: () => seat.load(),
@@ -183,6 +206,7 @@ export function apply(ctx: ClientContext): void {
         creatorDraft = undefined
         chip()
         label()
+        void disposeSelection()
       }
     }, 'ui-agent-preset: new-session chip and header label')
   })

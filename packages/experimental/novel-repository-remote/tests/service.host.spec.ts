@@ -11,6 +11,7 @@ import NovelRepository, {
   type CaptureSelectionRequest,
   type ChangeSet,
   type ChangeSetAuthorization,
+  type CreateAssetRequest,
   type NovelProjectSnapshot,
   type NovelSelectionInput,
   type ProposeChangeSetRequest,
@@ -29,6 +30,7 @@ class StubNovelRepository extends NovelRepository {
   selection: SelectionRef | undefined
   changeSetValue: ChangeSet | undefined
   authorizations: ChangeSetAuthorization[] = []
+  creations: CreateAssetRequest[] = []
 
   override discoverProject(_root: FsTarget): Promise<NovelProjectSnapshot | undefined> {
     return Promise.resolve(this.project)
@@ -36,6 +38,24 @@ class StubNovelRepository extends NovelRepository {
 
   override listAssets(): Promise<readonly AssetSummary[]> {
     return Promise.resolve(this.assets)
+  }
+
+  override createAsset(
+    _project: NovelProjectSnapshot,
+    request: CreateAssetRequest,
+  ): Promise<AssetSnapshot> {
+    if (this.snapshot === undefined) throw new Error('snapshot not configured')
+    this.creations.push(request)
+    return Promise.resolve({
+      ...this.snapshot,
+      asset: {
+        ...this.snapshot.asset,
+        type: request.type,
+        ...(request.parentId === undefined ? {} : { parentId: request.parentId }),
+      },
+      content: request.content,
+      frontmatter: { novel: { title: request.title } },
+    })
   }
 
   override readAsset(): Promise<AssetSnapshot> {
@@ -290,6 +310,14 @@ describe('NovelRepositoryRemote Host service', () => {
     }])
     await expect(ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-1'), null, signal))
       .resolves.toMatchObject({ title: '第一章', content: { kind: 'manuscript', body: '旧正文' } })
+    await expect(ctx.novelRepositoryRemote.createAsset(agent, {
+      type: 'manuscript.chapter',
+      title: '第二章',
+      content: { kind: 'manuscript', body: '新章节' },
+    }, signal)).resolves.toMatchObject({ title: '第二章', content: { kind: 'manuscript', body: '新章节' } })
+    expect(repository.creations).toEqual([expect.objectContaining({
+      type: 'manuscript.chapter', title: '第二章', actor: { kind: 'user', sessionId: 'agent-1' },
+    })])
     await expect(ctx.novelRepositoryRemote.saveAsset(agent, {
       assetId: AssetId('chapter-1'),
       baseRevisionId: RevisionId('revision-1'),

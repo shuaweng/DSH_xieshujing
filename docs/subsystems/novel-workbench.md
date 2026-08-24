@@ -59,15 +59,15 @@ Version one freezes either a non-empty manuscript range with UTF-16 offsets and 
 
 ## Proposal, review, and recovery
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) exposes `novel_list`, `novel_get`, and `novel_propose_changes` in the package-owned Preset. Catalog discovery returns canonical exact-Revision references for every installed type. Exact reads use that type's deterministic model projection and proposal instructions. A proposal uses the matching definition to validate either one manuscript `replace-text` or one outline `update-outline-node` before durably creating a ChangeSet without changing the authored file. The model has no apply tool and cannot claim publication.
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) exposes `novel_list`, `novel_create`, `novel_get`, `novel_propose_changes`, and presentation-only `novel_present` in the package-owned Preset. Catalog discovery returns canonical exact-Revision references and registered creation contracts. Exact reads use each type's deterministic model projection and proposal instructions. A proposal uses the matching definition to validate an exact type-owned text operation before durably creating a ChangeSet without changing the authored file. `novel_present` only opens or closes the whole workbench through typed tool-result metadata. The model has no apply tool and cannot claim publication.
 
 The browser reads that ChangeSet into an inline Diff card. Accept or Reject is an explicit Session-owned Remote action. Apply records exact before/after bytes, hashes, authorization, and the intended result Revision as `applying` before filesystem publication. On reopen, an after-hash finalizes, a before-hash retries the guarded write, and any third hash becomes `conflicted` without overwriting the authored file.
 
 ## Profile isolation
 
-[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) is a private overlay composed after `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. It disables only the ordinary `ui-layout` root occupant and installs [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) instead. The Novel root retains native sidebar, conversation, details, settings, model-selection, tool-rendering, and overlay surfaces, then adds typed Asset explorer and canvas slots.
+[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) is a private overlay composed after `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. The shipped `ui-layout` remains the single root and layout-service owner and exposes a selector-routed `shell.workbench` chain. [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) contributes a pure `novel` surface to that chain, preserves native sidebar, conversation, details, settings, model-selection, tool-rendering, and overlay surfaces, and declares typed Asset explorer and canvas slots only beneath its elected surface.
 
-The root places the Agent conversation on the left and the Asset explorer plus canvas on the right. Exact Client renderer contributions provide the manuscript reader/editor or structured outline tree and field inspector. The default `web` and `headless` Profile templates include none of these experimental packages. The overlay owns its safe `novel-workbench` Preset, whose stable tool set excludes shell and generic filesystem mutation.
+Only a Session whose exact Agent preset is `novel-workbench` receives the Composer toggle beside access/plan controls and may elect the Novel surface. AppFrame then places Agent conversation on the left and Asset explorer plus canvas on the right; the author can close the whole workbench from the same toggle, and switching to another preset immediately restores the ordinary tracks. Typed `novel_present` results can request the same transition without parsing Agent prose. The default `web` and `headless` Profile templates include none of these experimental packages. The overlay's safe preset excludes shell and generic filesystem mutation.
 
 Browser saves and ChangeSet applies resolve the addressed Session's sandbox policy and pass it through Repository reconciliation and publication. A Novel Project may therefore live outside the Host process working directory while remaining confined to the Session workspace boundary.
 
@@ -171,6 +171,16 @@ abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelPro
 abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSummary[]>
 
 /**
+ * Create one new typed authored Asset at a provider-owned safe path.
+ * @param project - validated Project declaration returned by this provider.
+ * @param request - semantic type, title, optional parent, typed content, and actor.
+ * @param signal - optional cancellation before filesystem publication.
+ * @param sandboxPolicy - optional per-call policy governing file creation.
+ * @returns the committed initial Revision of the new Asset.
+ */
+abstract createAsset( project: NovelProjectSnapshot, request: CreateAssetRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
+
+/**
  * Read either the reconciled current head or one retained immutable Revision.
  * @param project - validated Project declaration returned by this provider.
  * @param assetId - stable authored asset identity.
@@ -269,6 +279,15 @@ Project browser projection consuming the provider-neutral repository service.
  * @returns browser-safe current Asset descriptors.
  */
 @Remote('assets') async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]>
+
+/**
+ * Create one new typed Asset below its registered project content root.
+ * @param agent - addressed Agent whose Session selects the project root and write policy.
+ * @param request - semantic type, title, optional parent, and typed content.
+ * @param signal - caller cancellation before publication.
+ * @returns the browser-safe initial Revision.
+ */
+@Remote('createAsset') async createAsset( agent: Agent, request: CreateNovelAssetRequest, signal: AbortSignal, ): Promise<NovelAssetDocument>
 
 /**
  * Read one current or retained typed Asset document.

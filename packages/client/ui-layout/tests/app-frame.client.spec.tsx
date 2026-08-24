@@ -17,6 +17,7 @@ import { AppFrame } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.
 import type { AppFrameProps } from '@deepseek-ai/dsh-client-ui-layout/src/client/AppFrame.tsx'
 import { SIDEBAR_COLLAPSED } from '@deepseek-ai/dsh-client-ui-layout/src/client/columns.ts'
 import { createLayoutStore } from '@deepseek-ai/dsh-client-ui-layout/src/client/stores.ts'
+import type { WorkbenchViewState } from '@deepseek-ai/dsh-client-ui-layout/src/client/service.ts'
 import type {
   SessionId, SessionListState, WorkspaceListState,
 } from '@deepseek-ai/dsh-client-runtime/client'
@@ -24,7 +25,12 @@ import type {
 // Session selection controls for the SessionProvider and useSessions stubs.
 const selectedSession = { current: 's-test' as SessionId | undefined }
 const selectedSessionBlank = { current: false }
+const selectedAgentPreset = { current: 'standard' }
 const baselinesReady = { current: true }
+const workbenchState = {
+  current: { id: null, agentPreset: null, agentWidth: 410 } as WorkbenchViewState,
+}
+const closeWorkbench = vi.fn()
 
 // Render-prop contract stub fed through the standard seat prop (the renderer
 // injects the real one in production): session mode runs children(id), empty
@@ -56,6 +62,7 @@ function mountFrame() {
   window.innerWidth = frameWidth // first-render viewport source before the observer fires
   const instance = createLayoutStore().create()
   const slotCalls: { key: string; props: unknown }[] = []
+  const chainCalls: { key: string; props: unknown }[] = []
   const renderSlot = ((key: string, owner: object) => {
     slotCalls.push({ key, props: owner })
     if (key === 'sidebar') return <div data-testid="sidebar-content" />
@@ -64,13 +71,20 @@ function mountFrame() {
     if (key === 'conversation.empty') return <div data-testid="empty-content" />
     return <div data-testid="other-content" />
   }) as AppFrameProps['renderSlot']
+  const renderSlotChain = ((key: string, owner: object) => {
+    chainCalls.push({ key, props: owner })
+    return <div data-testid="workbench-content" />
+  }) as AppFrameProps['renderSlotChain']
   const useSessions = ((sel: (s: SessionListState) => unknown) => {
     const current = selectedSession.current
     const sessionState = {
       ids: current === undefined ? [] : [current],
       byId: current === undefined
         ? {}
-        : { [current]: { id: current, displayTitle: 'Test', running: false, blank: selectedSessionBlank.current, updatedAt: 1 } },
+        : { [current]: {
+          id: current, displayTitle: 'Test', agentPreset: selectedAgentPreset.current,
+          running: false, blank: selectedSessionBlank.current, updatedAt: 1,
+        } },
       current,
       phase: 'ready',
     } as SessionListState
@@ -85,14 +99,17 @@ function mountFrame() {
       useStore={hookOf(instance)}
       actions={instance.actions}
       renderSlot={renderSlot}
+      renderSlotChain={renderSlotChain}
       useSessions={useSessions}
       useWorkspaces={((sel: (s: WorkspaceListState) => unknown) => sel(workspaceState)) as never}
       SessionProvider={SessionProviderStub}
+      useWorkbench={((select: (state: WorkbenchViewState) => unknown) => select(workbenchState.current)) as never}
+      closeWorkbench={closeWorkbench}
     />
   )
   const utils = render(element())
   const frame = utils.container.firstElementChild as HTMLElement
-  return { instance, frame, slotCalls, rerenderFrame: () => { utils.rerender(element()) }, ...utils }
+  return { instance, frame, slotCalls, chainCalls, rerenderFrame: () => { utils.rerender(element()) }, ...utils }
 }
 
 function tracks(frame: HTMLElement): number[] {
@@ -114,6 +131,9 @@ beforeEach(() => {
   frameWidth = 1920
   selectedSession.current = 's-test' as SessionId
   selectedSessionBlank.current = false
+  selectedAgentPreset.current = 'standard'
+  workbenchState.current = { id: null, agentPreset: null, agentWidth: 410 }
+  closeWorkbench.mockReset()
   baselinesReady.current = true
   vi.useFakeTimers()
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
@@ -152,6 +172,30 @@ describe('AppFrame', () => {
     expect(keys).not.toContain('conversation.empty')
     expect(slotCalls.find(c => c.key === 'conversation')!.props).toEqual({})
     expect(slotCalls.find(c => c.key === 'details')!.props).toEqual({})
+  })
+
+  it('renders the selected domain workbench beside the Agent column', () => {
+    workbenchState.current = { id: 'novel', agentPreset: 'standard', agentWidth: 430 }
+    const { frame, chainCalls, getByTestId } = mountFrame()
+
+    expect(frame.style.gridTemplateColumns).toBe('280px var(--dsh-workbench-agent-width) minmax(320px, 1fr)')
+    expect(frame.style.getPropertyValue('--dsh-workbench-agent-width')).toBe('430px')
+    expect(frame.getAttribute('data-workbench')).toBe('novel')
+    expect(getByTestId('center-content')).toBeTruthy()
+    expect(getByTestId('details-content')).toBeTruthy()
+    expect(getByTestId('workbench-content')).toBeTruthy()
+    expect(chainCalls).toEqual([{
+      key: 'shell.workbench',
+      props: { id: 'novel', agentWidth: 430 },
+    }])
+    expect(frame.querySelectorAll('[class*="handle"]')).toHaveLength(1)
+  })
+
+  it('closes an active workbench when the selected Agent preset is no longer eligible', () => {
+    workbenchState.current = { id: 'novel', agentPreset: 'novel-workbench', agentWidth: 410 }
+    selectedAgentPreset.current = 'standard'
+    mountFrame()
+    expect(closeWorkbench).toHaveBeenCalledOnce()
   })
 
   it('keeps the conversation slot mounted while no session is current', () => {

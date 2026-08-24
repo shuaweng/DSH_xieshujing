@@ -3,22 +3,29 @@
 
 import { useSyncExternalStore } from 'react'
 import { Context } from '@deepseek-ai/cordis'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
-import { SlotRegistry, type SessionId, type SessionListState, type ToolResultNode } from '@deepseek-ai/dsh-client-runtime/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
+import {
+  createSnapshotStore, SlotRegistry, type SessionId, type SessionListState, type ToolResultNode,
+} from '@deepseek-ai/dsh-client-runtime/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import { LayoutController } from '@deepseek-ai/dsh-client-ui-layout/src/client/service.ts'
 import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {
   NovelChangeSetDescriptor,
   NovelAssetDocument,
   NovelSelectionDescriptor,
+  CreateNovelAssetRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import { NovelFrame } from '../src/client/NovelFrame.tsx'
+import { WorkbenchToggle } from '../src/client/WorkbenchToggle.tsx'
+import { NovelPresentationCard } from '../src/client/NovelPresentationCard.tsx'
 import { Explorer } from '../src/client/Explorer.tsx'
 import { Canvas, shortReferenceLabel } from '../src/client/Canvas.tsx'
 import { ChangeSetCard, type NovelChangeReview } from '../src/client/ChangeSetCard.tsx'
-import { createNovelFrameStore, createNovelWorkbenchStore } from '../src/client/store.ts'
+import { createNovelWorkbenchStore } from '../src/client/store.ts'
+import { NovelWorkbenchViewController } from '../src/client/view-controller.ts'
 import { zh } from '../src/client/locales.ts'
 import { apply as applyWorkbench, inject as workbenchInject } from '../src/client/index.ts'
 import {
@@ -28,7 +35,16 @@ import {
 import { apply as applyHost } from '../src/index.ts'
 import * as invariant from '../src/invariant.ts'
 
-afterEach(cleanup)
+beforeEach(() => {
+  vi.stubGlobal('ResizeObserver', class {
+    observe(): void {}
+    disconnect(): void {}
+  })
+})
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 const SID = 'session-novel' as SessionId
 const t = ((key: keyof typeof zh) => zh[key]) as never
@@ -42,7 +58,7 @@ function hookOf<T>(instance: { subscribe: (listener: () => void) => () => void; 
 function useSessions<T>(select: (state: SessionListState) => T): T {
   return select({
     ids: [SID],
-    byId: { [SID]: { id: SID, displayTitle: 'Novel', running: false, blank: false, updatedAt: 1 } },
+    byId: { [SID]: { id: SID, displayTitle: 'Novel', agentPreset: 'novel-workbench', running: false, blank: false, updatedAt: 1 } },
     current: SID,
     phase: 'ready',
     subagentsByParent: {},
@@ -52,6 +68,9 @@ function useSessions<T>(select: (state: SessionListState) => T): T {
 }
 
 const renderers = { get: () => manuscriptChapterRenderer } as never
+
+async function openStub(): Promise<NovelAssetDocument> { return chapter() }
+async function createStub(): Promise<NovelAssetDocument> { return chapter() }
 
 function chapter(overrides: Partial<NovelAssetDocument> = {}): NovelAssetDocument {
   return {
@@ -63,6 +82,21 @@ function chapter(overrides: Partial<NovelAssetDocument> = {}): NovelAssetDocumen
     contentHash: `sha256:${'a'.repeat(64)}`,
     title: '第一章',
     content: { kind: 'manuscript', body: '旧句继续。' },
+    ...overrides,
+  }
+}
+
+function chapterOutline(overrides: Partial<NovelAssetDocument> = {}): NovelAssetDocument {
+  return {
+    id: 'asset-chapter-outline-1' as NovelAssetDocument['id'],
+    projectId: 'project-1' as NovelAssetDocument['projectId'],
+    type: 'planning.chapter-outline',
+    parentId: 'asset-chapter-1' as NovelAssetDocument['id'],
+    projectRelativePath: 'planning/chapter-outline-1.md',
+    revisionId: 'revision-outline-1' as NovelAssetDocument['revisionId'],
+    contentHash: `sha256:${'d'.repeat(64)}`,
+    title: '第一章 · 章纲',
+    content: { kind: 'chapter-outline', body: '' },
     ...overrides,
   }
 }
@@ -114,38 +148,143 @@ function settled(meta: unknown = { kind: 'novel-change-set', changeSetId: 'chang
 }
 
 describe('NovelFrame', () => {
-  it('keeps assets, canvas, Agent conversation, and overlays in one root occupant', () => {
-    const frameStore = createNovelFrameStore().create()
+  it('renders the elected Novel explorer and canvas inside the shipped shell', () => {
+    const workbench = new NovelWorkbenchViewController()
     const calls: string[] = []
+    const setAgentWidth = vi.fn()
     const renderSlot = ((name: string) => {
       calls.push(name)
       return <span data-testid={name}>surface</span>
     }) as never
-    const view = render(<NovelFrame
-      renderSlot={renderSlot} t={t} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      SessionProvider={vi.fn() as never}
-      useStore={hookOf(frameStore) as never} actions={frameStore.actions}
-    />)
+    const view = render(<div data-workbench="novel">
+      <NovelFrame
+        renderSlot={renderSlot} t={t} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+        matched={{ id: 'novel' }} id="novel" agentWidth={410}
+        workbench={workbench} setAgentWidth={setAgentWidth}
+      />
+    </div>)
 
     expect(view.container.querySelector('[data-novel-workbench]')).not.toBeNull()
     expect(view.getByLabelText(zh.assetSidebar)).toBeTruthy()
-    expect(view.getByLabelText(zh.agent)).toBeTruthy()
     const resizer = view.getByRole('separator', { name: zh.resizePanels })
     expect(resizer.getAttribute('aria-valuenow')).toBe('410')
-    expect(calls).toEqual(['sidebar', 'conversation', 'details', 'novel.explorer', 'novel.canvas', 'shell.overlay'])
-    expect(view.container.querySelector('[data-details-open]')).toBeNull()
+    expect(calls).toEqual(['novel.explorer', 'novel.canvas'])
 
     fireEvent.click(view.getByRole('button', { name: zh.collapseExplorer }))
-    expect(frameStore.getSnapshot().explorerCollapsed).toBe(true)
+    expect(workbench.getSnapshot().explorerCollapsed).toBe(true)
     fireEvent.click(view.getByRole('button', { name: zh.expandExplorer }))
-    expect(frameStore.getSnapshot().explorerCollapsed).toBe(false)
+    expect(workbench.getSnapshot().explorerCollapsed).toBe(false)
 
-    act(() => { frameStore.actions.toggleSidebar(); frameStore.actions.openDetails() })
-    expect(view.container.querySelector('[data-details-open]')).not.toBeNull()
     fireEvent.keyDown(resizer, { key: 'ArrowRight' })
-    expect(frameStore.getSnapshot().agentWidth).toBe(426)
+    expect(setAgentWidth).toHaveBeenLastCalledWith(426)
     fireEvent.doubleClick(resizer)
-    expect(frameStore.getSnapshot().agentWidth).toBe(410)
+    expect(setAgentWidth).toHaveBeenLastCalledWith(410)
+
+    let scheduled: FrameRequestCallback | undefined
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      scheduled = callback
+      return 1
+    })
+    vi.stubGlobal('cancelAnimationFrame', () => { scheduled = undefined })
+    Object.assign(resizer, {
+      setPointerCapture: vi.fn(),
+      releasePointerCapture: vi.fn(),
+    })
+    setAgentWidth.mockClear()
+    const host = view.container.querySelector<HTMLElement>('[data-workbench]')!
+    fireEvent.pointerDown(resizer, { pointerId: 7, clientX: 400 })
+    fireEvent.pointerMove(resizer, { pointerId: 7, clientX: 450 })
+    expect(setAgentWidth).not.toHaveBeenCalled()
+    act(() => { scheduled?.(0) })
+    expect(host.style.getPropertyValue('--dsh-workbench-agent-width')).toBe('460px')
+    expect(host.hasAttribute('data-workbench-resizing')).toBe(true)
+    fireEvent.pointerUp(resizer, { pointerId: 7, clientX: 450 })
+    expect(setAgentWidth).toHaveBeenCalledOnce()
+    expect(setAgentWidth).toHaveBeenLastCalledWith(460)
+    expect(host.hasAttribute('data-workbench-resizing')).toBe(false)
+  })
+})
+
+describe('preset-scoped workbench activation', () => {
+  it('shows the Composer toggle only for novel-workbench and applies typed Agent presentation metadata', () => {
+    const layout = new LayoutController()
+    const presetSelection = createSnapshotStore({ current: 'novel-workbench' })
+    const sessionKit = {
+      useSession: vi.fn() as never,
+      useProjection: vi.fn() as never,
+      useInput: vi.fn() as never,
+      inputActions: {} as never,
+    }
+    const eligible = render(<WorkbenchToggle
+      {...sessionKit}
+      sessionId={SID} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      session={{ blank: false } as never} input={{} as never}
+      useWorkbench={hookOf(layout.workbench)}
+      useAgentPresetSelection={hookOf(presetSelection)}
+      toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
+    />)
+    const compactToggle = eligible.getByRole('button', { name: zh.openWorkbench })
+    expect(compactToggle.textContent).toBe('')
+    fireEvent.click(compactToggle)
+    expect(layout.workbench.getSnapshot().id).toBe('novel')
+    expect(eligible.getByRole('button', { name: zh.closeWorkbench }).getAttribute('aria-pressed')).toBe('true')
+
+    const staleSeatSessions = <T,>(select: (state: SessionListState) => T): T => select({
+      ids: [SID],
+      byId: { [SID]: { id: SID, displayTitle: 'Novel', agentPreset: 'novel-workbench', running: false, blank: false, updatedAt: 1 } },
+      current: SID, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    })
+    eligible.rerender(<WorkbenchToggle
+      {...sessionKit}
+      sessionId={'stale-composer-seat' as SessionId} useSessions={staleSeatSessions} useWorkspaces={vi.fn() as never}
+      session={{ blank: false } as never} input={{} as never}
+      useWorkbench={hookOf(layout.workbench)}
+      useAgentPresetSelection={hookOf(presetSelection)}
+      toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
+    />)
+    expect(eligible.queryByRole('button')).toBeNull()
+
+    eligible.rerender(<WorkbenchToggle
+      {...sessionKit}
+      sessionId={'blank-composer-seat' as SessionId} useSessions={staleSeatSessions} useWorkspaces={vi.fn() as never}
+      session={{ blank: true } as never} input={{} as never}
+      useWorkbench={hookOf(layout.workbench)}
+      useAgentPresetSelection={hookOf(presetSelection)}
+      toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
+    />)
+    expect(eligible.getByRole('button', { name: zh.closeWorkbench })).toBeTruthy()
+
+    act(() => { presetSelection.set({ current: 'standard' }) })
+    expect(eligible.queryByRole('button')).toBeNull()
+
+    const standardSessions = <T,>(select: (state: SessionListState) => T): T => select({
+      ids: [SID],
+      byId: { [SID]: { id: SID, displayTitle: 'Standard', agentPreset: 'standard', running: false, blank: false, updatedAt: 1 } },
+      current: SID, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    })
+    eligible.rerender(<WorkbenchToggle
+      {...sessionKit}
+      sessionId={SID} useSessions={standardSessions} useWorkspaces={vi.fn() as never}
+      session={{ blank: false } as never} input={{} as never}
+      useWorkbench={hookOf(layout.workbench)}
+      useAgentPresetSelection={hookOf(presetSelection)}
+      toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
+    />)
+    expect(eligible.queryByRole('button')).toBeNull()
+
+    act(() => { layout.closeWorkbench() })
+    render(<NovelPresentationCard
+      {...sessionKit}
+      block={settled({ kind: 'novel-presentation', intent: 'open-workbench' })}
+      callId="call-1" toolName="novel_present" sessionId={SID}
+      useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      present={(intent) => {
+        if (intent === 'open-workbench') layout.openWorkbench('novel', 'novel-workbench')
+        else layout.closeWorkbench()
+      }}
+      t={t} openFile={vi.fn()} cwd="/story"
+    />)
+    expect(layout.workbench.getSnapshot().id).toBe('novel')
   })
 })
 
@@ -168,6 +307,7 @@ describe('Canvas', () => {
     const appendReference = vi.fn(() => { order.push('reference') })
 
     const view = render(<Canvas
+      open={openStub} create={createStub}
       useStore={hookOf(store) as never}
       actions={store.actions}
       useSessions={useSessions as never}
@@ -198,6 +338,7 @@ describe('Canvas', () => {
   it('saves manually and renders the empty canvas without a chapter', async () => {
     const store = createNovelWorkbenchStore().create()
     const empty = render(<Canvas
+      open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} t={t}
       renderers={renderers}
@@ -217,6 +358,7 @@ describe('Canvas', () => {
       revisionId: 'revision-2' as NovelAssetDocument['revisionId'],
     }))
     const view = render(<Canvas
+      open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={save} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
     />)
@@ -244,6 +386,7 @@ describe('Canvas', () => {
     const capture = vi.fn()
     const appendReference = vi.fn()
     const view = render(<Canvas
+      open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={async () => { throw new Error('workspace write denied') }} capture={capture} appendReference={appendReference}
       renderers={renderers} t={t}
@@ -270,6 +413,7 @@ describe('Canvas', () => {
       store.actions.select({ kind: 'text-range', startUtf16: 0, endUtf16: 2 })
     })
     const view = render(<Canvas
+      open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={vi.fn()} capture={capture} appendReference={appendReference} renderers={renderers} t={t}
     />)
@@ -288,6 +432,7 @@ describe('Canvas', () => {
     view.unmount()
 
     const noSession = render(<Canvas
+      open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions}
       useSessions={((select: (state: SessionListState) => unknown) => select({
         ids: [], byId: {}, current: undefined, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
@@ -303,6 +448,7 @@ describe('Canvas', () => {
     const store = createNovelWorkbenchStore().create()
     act(() => { store.actions.open(chapter()) })
     const view = render(<Canvas
+      open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
     />)
@@ -318,6 +464,52 @@ describe('Canvas', () => {
     expect(view.container.querySelector('[data-reader-skin="green"][data-reader-font="kai"]')).not.toBeNull()
     expect(shortReferenceLabel('一二三四五六七八九十十一十二')).toBe('[一二三四五六七八九十…]')
     expect(shortReferenceLabel('😀 一\n二')).toBe('[😀 一 二]')
+  })
+
+  it('creates a chapter-bound freeform plan from the manuscript bar and references it to the Agent', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const document = chapter()
+    act(() => {
+      store.actions.loaded({ title: '白港' } as never, [{ ...document, content: undefined }] as never)
+      store.actions.open(document)
+    })
+    const created = chapterOutline({ content: { kind: 'chapter-outline', body: '## 情绪目标\n\n悬念感。' } })
+    const saved = chapterOutline({ revisionId: 'revision-outline-2' as never })
+    const frozen = selection({ assetId: created.id, revisionId: saved.revisionId, preview: '情绪目标' })
+    const create = vi.fn(async (_sessionId: SessionId, _request: CreateNovelAssetRequest) => created)
+    const save = vi.fn(async () => saved)
+    const capture = vi.fn(async () => frozen)
+    const appendReference = vi.fn()
+    const view = render(<Canvas
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      open={vi.fn(async () => created)} create={create} save={save} capture={capture} appendReference={appendReference}
+      renderers={renderers} t={t}
+    />)
+
+    fireEvent.click(view.getByRole('button', { name: zh.chapterOutline }))
+    const dialog = view.getByRole('dialog', { name: zh.chapterOutline })
+    fireEvent.click(within(dialog).getByText(`＋ ${zh.insertChapterOutlineTemplate}`))
+    const editor = within(dialog).getByLabelText(zh.chapterOutlineBody) as HTMLTextAreaElement
+    expect(editor.value).toContain('## 情绪目标')
+    fireEvent.click(within(dialog).getByText(zh.save))
+    await waitFor(() => { expect(create).toHaveBeenCalledTimes(1) })
+    const [, request] = create.mock.calls[0]!
+    expect(request.type).toBe('planning.chapter-outline')
+    expect(request.parentId).toBe(document.id)
+    expect(request.content).toMatchObject({ kind: 'chapter-outline' })
+    expect((request.content as { body: string }).body).toContain('## 情绪目标')
+    expect(store.getSnapshot().assets).toContainEqual(expect.objectContaining({ id: created.id, parentId: document.id }))
+
+    const selectedStart = editor.value.indexOf('情绪目标')
+    Object.defineProperties(editor, {
+      selectionStart: { configurable: true, value: selectedStart },
+      selectionEnd: { configurable: true, value: selectedStart + 4 },
+    })
+    fireEvent.select(editor)
+    fireEvent.click(within(dialog).getByText(zh.reference))
+    await waitFor(() => { expect(save).toHaveBeenCalled() })
+    await waitFor(() => { expect(capture).toHaveBeenCalledWith(SID, expect.objectContaining({ assetId: created.id })) })
+    expect(appendReference).toHaveBeenCalledWith(SID, frozen, '[情绪目标]')
   })
 })
 
@@ -348,6 +540,7 @@ describe('Explorer', () => {
     let refresh: (() => void) | undefined
     const onRefresh = vi.fn((listener: () => void) => { refresh = listener; return () => { refresh = undefined } })
     const view = render(<Explorer
+      create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={load} open={open} onRefresh={onRefresh} t={t}
     />)
@@ -368,6 +561,7 @@ describe('Explorer', () => {
     async function mountWith(load: () => Promise<never> | Promise<{ assets: never[] }>, open = vi.fn()) {
       const store = createNovelWorkbenchStore().create()
       const view = render(<Explorer
+        create={createStub}
         useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
         renderers={renderers} load={load as never} open={open} onRefresh={() => () => {}} t={t}
       />)
@@ -386,6 +580,7 @@ describe('Explorer', () => {
     const store = createNovelWorkbenchStore().create()
     const descriptor = { ...chapter(), content: undefined } as never
     const openFailure = render(<Explorer
+      create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers}
       load={async () => ({ project: {} as never, assets: [descriptor] })}
@@ -393,7 +588,51 @@ describe('Explorer', () => {
     />)
     await waitFor(() => { expect(openFailure.getByText('第一章')).toBeTruthy() })
     fireEvent.click(openFailure.getByText('第一章'))
-    await waitFor(() => { expect(store.getSnapshot().error).toBe('Error: open failed') })
+    await waitFor(() => { expect(store.getSnapshot().error).toBe('open failed') })
+  })
+
+  it('renders the semantic book-to-volume hierarchy and creates a freeform volume outline', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const manuscript = chapter()
+    const { parentId: _chapterParent, ...book } = chapterOutline({
+      id: 'outline-book' as never,
+      type: 'planning.outline',
+      title: '全书大纲',
+      projectRelativePath: 'planning/book.md',
+      content: { kind: 'outline', level: 'book', body: '自由总纲' },
+    })
+    const volume = chapterOutline({
+      id: 'outline-volume' as never,
+      type: 'planning.outline',
+      parentId: book.id,
+      title: '第一卷卷纲',
+      projectRelativePath: 'planning/volume.md',
+      content: { kind: 'outline', level: 'volume', body: '自由卷纲' },
+    })
+    const created = chapterOutline({
+      id: 'outline-volume-2' as never,
+      type: 'planning.outline',
+      parentId: book.id,
+      title: '新卷纲',
+      projectRelativePath: 'planning/new-volume.md',
+      content: { kind: 'outline', level: 'volume', body: '' },
+    })
+    const descriptors = [manuscript, book, volume].map(({ content: _content, ...descriptor }) => descriptor)
+    const create = vi.fn(async () => created)
+    const open = vi.fn(async (_sid: SessionId, id: string) => [manuscript, book, volume, created].find(asset => asset.id === id)!)
+    const view = render(<Explorer
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
+      renderers={renderers} load={async () => ({ project: { title: '白港' } as never, assets: descriptors })}
+      open={open} create={create} onRefresh={() => () => {}} t={t}
+    />)
+    await waitFor(() => { expect(view.getByText('全书大纲')).toBeTruthy() })
+    expect(view.getByText('第一卷卷纲')).toBeTruthy()
+    fireEvent.click(view.getByText(`＋ ${zh.addVolumeOutline}`))
+    await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
+      type: 'planning.outline', title: zh.newVolumeOutlineTitle, parentId: book.id,
+      content: { kind: 'outline', level: 'volume', body: '' },
+    }) })
+    expect(store.getSnapshot().document?.id).toBe(created.id)
   })
 
   it('cancels late load outcomes and ignores chapter clicks without a Session', async () => {
@@ -405,6 +644,7 @@ describe('Explorer', () => {
         resolveLoad = resolve; rejectLoad = reject
       })
       const view = render(<Explorer
+        create={createStub}
         useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
         renderers={renderers} load={() => promise} open={vi.fn()} onRefresh={() => () => {}} t={t}
       />)
@@ -419,6 +659,7 @@ describe('Explorer', () => {
     act(() => { store.actions.loaded({} as never, [{ ...chapter(), content: undefined }] as never) })
     const open = vi.fn()
     const view = render(<Explorer
+      create={createStub}
       useStore={hookOf(store)} actions={{ ...store.actions, reset: vi.fn() }}
       useSessions={sessionHook(undefined) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={vi.fn()} open={open} onRefresh={() => () => {}} t={t}
@@ -650,15 +891,11 @@ describe('Novel workbench stores and browser assembly', () => {
       assets: [], dirty: false, readerSkin: 'night', readerFont: 'sans', readerFontSize: 28, loading: true, reload: 1,
     })
 
-    const frame = createNovelFrameStore().create()
+    const frame = new NovelWorkbenchViewController()
     act(() => {
-      frame.actions.toggleSidebar()
-      frame.actions.toggleExplorer()
-      frame.actions.openDetails()
-      frame.actions.closeDetails()
-      frame.actions.setAgentWidth(999)
+      frame.toggleExplorer()
     })
-    expect(frame.getSnapshot()).toEqual({ sidebarCollapsed: false, explorerCollapsed: true, detailsOpen: false, agentWidth: 640 })
+    expect(frame.getSnapshot()).toEqual({ explorerCollapsed: true })
   })
 
   it('wires slots, remotes, Composer mentions, reviews, layout, locale, and theme teardown', async () => {
@@ -701,6 +938,10 @@ describe('Novel workbench stores and browser assembly', () => {
       rejectChangeSet: vi.fn(async () => ({ ok: true as const, value: changeSet('rejected') })),
     }
     ctx.provide('remote', { novelRepository: remote } as never)
+    const layout = new LayoutController()
+    ctx.provide('layout', layout as never)
+    const presetSelection = createSnapshotStore({ current: 'novel-workbench' })
+    ctx.provide('agentPresetSelection', presetSelection)
     let theme: ThemeSnapshot = {
       preference: 'light', active: { id: 'light', colorScheme: 'light', tokens: { '--novel-old': '1px' } },
       themes: [], revision: 0,
@@ -709,7 +950,11 @@ describe('Novel workbench stores and browser assembly', () => {
     const declareTool = slots.register({
       name: 'root',
       priority: 10,
-      children: { 'tool.call.toolview': { kind: 'keyed', scope: 'session' } },
+      children: {
+        'tool.call.toolview': { kind: 'keyed', scope: 'session' },
+        'conversation.input.left': { kind: 'list', scope: 'session' },
+        'shell.workbench': { kind: 'chain', scope: 'root' },
+      },
     } as never, () => null)
     const fiber = ctx.plugin({
       // The production client module loader understands dotted Remote facets;
@@ -719,16 +964,27 @@ describe('Novel workbench stores and browser assembly', () => {
     })
     await fiber.await()
 
-    expect(slots.entries('root')).toHaveLength(2)
-    const root = slots.entries('root').find(entry => entry.component === NovelFrame)!
-    const layout = ctx.get('layout') as { toggleSidebar: () => void; openDetails: () => void; closeDetails: () => void }
-    layout.toggleSidebar(); layout.openDetails(); layout.closeDetails()
-    const panels = { toggleSidebar: vi.fn(), openDetails: vi.fn(), closeDetails: vi.fn(), setAgentWidth: vi.fn() }
-    expect((root.inject as (actions: typeof panels) => object)(panels)).toEqual({})
-    layout.toggleSidebar(); layout.openDetails(); layout.closeDetails()
-    expect(panels.toggleSidebar).toHaveBeenCalledOnce()
-    expect(panels.openDetails).toHaveBeenCalledOnce()
-    expect(panels.closeDetails).toHaveBeenCalledOnce()
+    expect(slots.entries('root')).toHaveLength(1)
+    const workbenchEntry = slots.entries('shell.workbench').find(entry => entry.component === NovelFrame)!
+    const workbenchFace = (workbenchEntry.inject as () => {
+      workbench: NovelWorkbenchViewController
+      setAgentWidth: (width: number) => void
+    })()
+    expect(workbenchFace.workbench).toBeInstanceOf(NovelWorkbenchViewController)
+    workbenchFace.setAgentWidth(480)
+    expect(layout.workbench.getSnapshot().agentWidth).toBe(480)
+
+    const toggle = slots.entries('conversation.input.left').find(entry => entry.component === WorkbenchToggle)!
+    const toggleFace = (toggle.inject as () => {
+      hooks: { workbench: typeof layout.workbench; agentPresetSelection: typeof presetSelection }
+      toggleWorkbench: () => void
+    })()
+    expect(toggleFace.hooks.workbench).toBe(layout.workbench)
+    expect(toggleFace.hooks.agentPresetSelection).toBe(presetSelection)
+    toggleFace.toggleWorkbench()
+    expect(layout.workbench.getSnapshot()).toMatchObject({ id: 'novel', agentPreset: 'novel-workbench' })
+    toggleFace.toggleWorkbench()
+    expect(layout.workbench.getSnapshot().id).toBeNull()
 
     const explorer = slots.entries('novel.explorer')[0]!.inject as () => {
       load: (id: SessionId) => Promise<unknown>
@@ -795,6 +1051,15 @@ describe('Novel workbench stores and browser assembly', () => {
     offRefresh()
     review.refreshWorkbench()
     expect(refreshed).toHaveBeenCalledOnce()
+
+    const presentation = slots.entries('tool.call.toolview').find(entry => entry.component === NovelPresentationCard)!
+    const presentationFace = (presentation.inject as () => {
+      present: (intent: 'open-workbench' | 'close-workbench') => void
+    })()
+    presentationFace.present('open-workbench')
+    expect(layout.workbench.getSnapshot().id).toBe('novel')
+    presentationFace.present('close-workbench')
+    expect(layout.workbench.getSnapshot().id).toBeNull()
 
     failAsset = true
     await expect(explorerFace.open(SID, 'asset-chapter-1')).rejects.toThrow('open Novel Asset failed: REMOTE_FAILED: offline')

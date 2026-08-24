@@ -1,49 +1,62 @@
 // @vitest-environment jsdom
 import { fireEvent, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { createPlanningOutlineRenderer, zh } from '../src/client/index.ts'
+import { createChapterOutlineRenderer, createPlanningOutlineRenderer, zh } from '../src/client/index.ts'
 
 const t = ((key: keyof typeof zh) => zh[key]) as never
 
-describe('planning.outline Client renderer', () => {
-  it('edits the same structured value and captures one semantic node selection', () => {
+describe('freeform planning Client renderers', () => {
+  it('edits arbitrary outline Markdown and captures an exact text range', () => {
     const renderer = createPlanningOutlineRenderer(t)
     const onContentChange = vi.fn()
     const onTitleChange = vi.fn()
     const onSelectionChange = vi.fn()
     const view = render(renderer.renderEditor({
       document: {} as never,
-      title: '主线大纲',
-      content: {
-        kind: 'outline',
-        nodes: [{ id: 'chapter-1', title: '第一章', summary: '旧概要', children: [] }],
-      },
-      ariaLabel: '主线大纲',
+      title: '全书大纲',
+      content: { kind: 'outline', level: 'book', body: '# 开端\n\n雨夜抵达白港。' },
+      ariaLabel: '全书大纲',
       onContentChange,
       onTitleChange,
       onSelectionChange,
     }))
-    fireEvent.click(view.getByRole('button', { name: '第一章' }))
-    expect(onSelectionChange).toHaveBeenCalledWith({ kind: 'outline-node', nodeId: 'chapter-1' })
-    fireEvent.change(view.getByLabelText(new RegExp(zh.summary, 'u')), { target: { value: '新概要' } })
-    expect(onContentChange).toHaveBeenCalledWith({
-      kind: 'outline',
-      nodes: [{ id: 'chapter-1', title: '第一章', summary: '新概要', children: [] }],
+    const editor = view.getByLabelText(zh.freeformBody)
+    fireEvent.change(editor, { target: { value: '# 开端\n\n任何结构都可以。' } })
+    expect(onContentChange).toHaveBeenCalledWith({ kind: 'outline', level: 'book', body: '# 开端\n\n任何结构都可以。' })
+    Object.defineProperties(editor, {
+      selectionStart: { configurable: true, value: 6 },
+      selectionEnd: { configurable: true, value: 8 },
     })
-    fireEvent.change(view.getByLabelText(zh.outlineTitle), { target: { value: '第一卷规划' } })
-    expect(onTitleChange).toHaveBeenCalledWith('第一卷规划')
+    fireEvent.select(editor)
+    expect(onSelectionChange).toHaveBeenCalledWith({ kind: 'text-range', startUtf16: 6, endUtf16: 8 })
+    fireEvent.change(view.getByRole('textbox', { name: zh.outlineTitle }), { target: { value: '新总纲' } })
+    expect(onTitleChange).toHaveBeenCalledWith('新总纲')
   })
 
-  it('renders a field-level typed Diff', () => {
-    const renderer = createPlanningOutlineRenderer(t)
-    const view = render(renderer.renderDiff({
-      kind: 'outline', nodes: [{ id: 'chapter-1', title: '第一章', summary: '旧概要', children: [] }],
-    }, [{
-      kind: 'update-outline-node',
-      selector: { kind: 'outline-node', nodeId: 'chapter-1', nodeHash: `sha256:${'a'.repeat(64)}` },
-      changes: { summary: '新概要' },
-    }]))
-    expect(view.getByLabelText(zh.before).textContent).toBe('旧概要')
-    expect(view.getByLabelText(zh.after).textContent).toBe('新概要')
+  it('renders exact freeform Diff and a chapter-outline editor', () => {
+    const outline = createPlanningOutlineRenderer(t)
+    const diff = render(outline.renderDiff(
+      { kind: 'outline', level: 'book', body: '旧情节' },
+      [{
+        kind: 'replace-text',
+        selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1, quoteHash: `sha256:${'a'.repeat(64)}` },
+        replacement: '新',
+      }],
+    ))
+    expect(diff.getByLabelText(zh.before).textContent).toBe('旧')
+    expect(diff.getByLabelText(zh.after).textContent).toBe('新')
+
+    const chapter = createChapterOutlineRenderer(t)
+    const chapterView = render(chapter.renderEditor({
+      document: {} as never,
+      title: '第一章章纲',
+      content: { kind: 'chapter-outline', body: '自由章纲' },
+      ariaLabel: '第一章章纲',
+      onContentChange: vi.fn(),
+      onTitleChange: vi.fn(),
+      onSelectionChange: vi.fn(),
+    }))
+    const chapterEditor = chapterView.container.querySelector('textarea')
+    expect(chapterEditor?.value).toBe('自由章纲')
   })
 })

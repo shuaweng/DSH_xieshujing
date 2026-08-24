@@ -43,15 +43,29 @@ function profileRows(name: string, bundles: readonly string[]): ReturnType<typeo
 }
 
 describe('experimental Novel Studio bundle', () => {
-  it('lets the workbench provide layout before conversation and sidebar activate', () => {
+  it('keeps the Novel persona aligned with freeform planning operations', () => {
+    const parsed = yaml.load(
+      readFileSync(resolve(packageRoot, 'presets/novel-workbench/agent.cordis.yml'), 'utf8'),
+      { schema: entryListSchema },
+    ) as Array<{ id?: string; config?: { text?: string } }>
+    const prompt = parsed.find(row => row.id === 'persona')?.config?.text ?? ''
+
+    expect(prompt).toContain('正文、大纲和章纲目前都使用其精确')
+    expect(prompt).toContain('Revision 上的 UTF-16 文本范围')
+    expect(prompt).not.toContain('稳定 node id')
+  })
+
+  it('waits for the shipped layout and contributes no cross-package runtime import', () => {
     const manifest = JSON.parse(
       readFileSync(resolve(workbenchPackageRoot, 'package.json'), 'utf8'),
-    ) as { dsh?: { client?: { inject?: string[] } } }
+    ) as { dsh?: { client?: { inject?: string[]; external?: string[] } } }
     const inject = manifest.dsh?.client?.inject ?? []
+    const external = manifest.dsh?.client?.external ?? []
 
     expect(inject).not.toContain('@deepseek-ai/dsh-client-ui-conversation')
-    expect(inject).not.toContain('@deepseek-ai/dsh-client-ui-layout')
+    expect(inject).toContain('@deepseek-ai/dsh-client-ui-layout')
     expect(inject).toContain('@deepseek-ai/dsh-client-ui-slots')
+    expect(external).toEqual([])
   })
 
   it('provides the package-owned preset root as a scoped runtime service', async () => {
@@ -79,13 +93,15 @@ describe('experimental Novel Studio bundle', () => {
       config?: { default?: string; roots?: Array<{ trust?: string }> }
       insert?: { id?: string; name?: string }[]
     }>
-    expect(parsed.find(row => row.id === 'ui-layout')).toMatchObject({ disabled: true })
+    expect(parsed.find(row => row.id === 'ui-layout')).toBeUndefined()
+    expect(parsed.find(row => row.id === 'web-runtime')).toMatchObject({
+      inject: ['webStartup', 'novelStudioPaths'],
+    })
     expect(parsed.find(row => row.id === 'agent-presets')).toMatchObject({
       inject: ['novelStudioPaths'],
       config: { default: 'novel-workbench', roots: [{ trust: 'system' }] },
     })
     expect(parsed.flatMap(row => row.insert ?? [])).toEqual([
-      { id: 'novel-studio-paths', name: '@deepseek-ai/dsh-experimental-novel-studio' },
       { id: 'novel-asset-types', name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types' },
       { id: 'novel-asset-outline', name: '@deepseek-ai/dsh-experimental-novel-asset-outline' },
       { id: 'novel-repository-local', name: '@deepseek-ai/dsh-experimental-novel-repository-local' },
@@ -93,6 +109,7 @@ describe('experimental Novel Studio bundle', () => {
       { id: 'novel-repository-remote', name: '@deepseek-ai/dsh-experimental-novel-repository-remote' },
       { id: 'novel-repository-client', name: '@deepseek-ai/dsh-experimental-novel-repository-client' },
       { id: 'novel-workbench', name: '@deepseek-ai/dsh-experimental-novel-workbench' },
+      { id: 'novel-studio-paths', name: '@deepseek-ai/dsh-experimental-novel-studio' },
     ])
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-context')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-asset-outline')
@@ -130,8 +147,8 @@ describe('experimental Novel Studio bundle', () => {
     expect(novel.filter(row => row.id === 'novel-context')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-workbench')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'ui-layout')).toHaveLength(1)
-    expect(novel.find(row => row.id === 'ui-layout')).toMatchObject({ disabled: true })
-    expect(web.find(row => row.id === 'ui-layout')).not.toMatchObject({ disabled: true })
+    expect(novel.find(row => row.id === 'web-runtime')?.inject).toEqual(['webStartup', 'novelStudioPaths'])
+    expect(novel.find(row => row.id === 'ui-layout')?.config).toEqual(web.find(row => row.id === 'ui-layout')?.config)
     const presets = novel.find(row => row.id === 'agent-presets')
     expect(presets?.inject).toContain('novelStudioPaths')
     expect(presets?.config).toMatchObject({ default: 'novel-workbench' })

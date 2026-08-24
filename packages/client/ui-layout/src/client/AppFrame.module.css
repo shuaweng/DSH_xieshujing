@@ -16,6 +16,13 @@
   transition: none;
 }
 
+/* A domain separator previews its track through the private width variable
+   and commits presentation state only when released. Disable track easing for
+   that gesture so the boundary stays exactly under the pointer. */
+.frame[data-workbench-resizing] {
+  transition: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .frame {
     transition: none;
@@ -38,6 +45,37 @@
 
 .detailsCol {
   min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--dsw-alias-border-l2);
+}
+
+.workbenchAgentCol {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) 0;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-base);
+}
+
+.workbenchAgentCol[data-details-open] {
+  grid-template-rows: minmax(240px, 1fr) minmax(180px, 42%);
+}
+
+.workbenchAgentCol .detailsCol {
+  min-height: 0;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  border-left: 0;
+}
+
+.workbenchAgentCol:not([data-details-open]) .detailsCol {
+  border-top: 0;
+}
+
+.workbenchCol {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
   border-left: 1px solid var(--dsw-alias-border-l2);
 }

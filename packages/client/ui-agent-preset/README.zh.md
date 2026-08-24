@@ -14,6 +14,8 @@ agent preset 的各个表层：General 设置中的一行，用于选择新建�
 
 chip 以部署默认值打开，其选择是**暂存**的——该界面先于它要应用到的会话存在。暂存值会在某个会话成为当前会话且仍为空白时抵达该会话；这既覆盖工作区连接新建的会话，也覆盖它复用的那个空白会话，而搭 `sessions.create` 的便车会漏掉后者。暂存值一经使用即被清空，因此下一个新会话重新以默认值打开——与它旁边的工作区选择器完全一致。
 
+同一份选择器 store 会通过只读的浏览器 face `ctx.agentPresetSelection` 发布。按 preset 门控的 Composer 控件只能在其 owner Session 仍为空白、已提交的 Session 列表行尚不存在时使用它；已经开始的 Session 仍以 `ctx.sessions` 为权威。这样既防止上一个 Session 的 preset 泄漏进新会话 Composer，也没有给消费者提供第二个可写 preset 控制器。
+
 已经开始的会话会被直接拒绝而非排队：宿主返回 `agent-preset-locked`，暂存值随之丢弃，而不是去等一个永远不会接受它的会话。
 
 ## 会话标题旁的标签

@@ -129,6 +129,8 @@ export interface Asset {
   readonly id: AssetId
   readonly projectId: ProjectId
   readonly type: NovelAssetType
+  /** Stable semantic parent; paths never define Asset hierarchy. */
+  readonly parentId?: AssetId
   readonly projectRelativePath: string
 }
 
@@ -180,6 +182,17 @@ export interface SaveAssetContentRequest {
   /** Optional authored display title, persisted through the Asset type serializer. */
   readonly title?: string
   readonly content: NovelAssetContent
+}
+
+/** Request to create one new typed Asset below its registered content root. */
+export interface CreateAssetRequest {
+  readonly type: NovelAssetType
+  readonly title: string
+  readonly parentId?: AssetId
+  readonly content: NovelAssetContent
+  readonly actor:
+    | { readonly kind: 'agent'; readonly sessionId: SessionId }
+    | { readonly kind: 'user'; readonly sessionId?: SessionId }
 }
 
 /** Request to freeze a non-empty browser selection over one retained Revision. */

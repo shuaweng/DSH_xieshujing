@@ -55,4 +55,28 @@ describe('LayoutController', () => {
     expect(stale.toggleSidebar).not.toHaveBeenCalled()
     expect(fresh.toggleSidebar).toHaveBeenCalledTimes(1)
   })
+
+  it('publishes browser-local workbench selection, toggles, and clamped Agent width', () => {
+    const service = new LayoutController()
+    const changed = vi.fn()
+    const off = service.workbench.subscribe(changed)
+
+    expect(service.workbench.getSnapshot()).toEqual({ id: null, agentPreset: null, agentWidth: 410 })
+    service.openWorkbench('novel', 'novel-workbench')
+    service.setWorkbenchAgentWidth(999)
+    expect(service.workbench.getSnapshot()).toEqual({
+      id: 'novel', agentPreset: 'novel-workbench', agentWidth: 640,
+    })
+    service.toggleWorkbench('novel', 'novel-workbench')
+    expect(service.workbench.getSnapshot()).toEqual({ id: null, agentPreset: null, agentWidth: 640 })
+    service.setWorkbenchAgentWidth(100)
+    service.toggleWorkbench('novel', 'novel-workbench')
+    expect(service.workbench.getSnapshot()).toEqual({
+      id: 'novel', agentPreset: 'novel-workbench', agentWidth: 300,
+    })
+    expect(changed).toHaveBeenCalledTimes(5)
+    off()
+    service.closeWorkbench()
+    expect(changed).toHaveBeenCalledTimes(5)
+  })
 })

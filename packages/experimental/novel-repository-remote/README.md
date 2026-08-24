@@ -4,17 +4,17 @@ English | [中文](README.zh.md)
 
 ## Purpose
 
-This experimental Host Consumer exposes Novel Project discovery plus bounded typed-Asset catalog, read, guarded-save, selection, and review methods without adding transport behavior to the provider-neutral Repository Service Definition.
+This experimental Host Consumer exposes Novel Project discovery plus bounded typed-Asset catalog, creation, read, guarded-save, selection, and review methods without adding transport behavior to the provider-neutral Repository Service Definition.
 
 ## Behavior
 
 - `NovelRepositoryRemote` registers under Host service key `novelRepositoryRemote`, consumes `ctx.novelRepository`, `ctx.fs`, and `ctx.sandboxPolicy`, and exports the wire namespace `novelRepository`.
 - `novelRepository/discover` resolves the addressed Agent Session's working directory, delegates validation to the active Novel Repository provider, and returns `undefined` only when the provider finds no `novel.yaml`.
 - `NovelProjectDescriptor` contains the stable project id, schema, title, and display paths. It never exposes filesystem target keys or mutable provider objects to the browser.
-- `assets`, `asset`, and `saveAsset` project only browser-safe ids, metadata, and lossless JSON Asset content. `captureSelection` carries a type-defined JSON selector and returns a readable Markdown mention containing the canonical `dsh-novel:` reference.
+- `assets`, `createAsset`, `asset`, and `saveAsset` project only browser-safe ids, semantic parent ids, metadata, and lossless JSON Asset content. Browser creation supplies type/title/parent/content while the Repository owns identity and path. `captureSelection` carries a type-defined JSON selector and returns a readable Markdown mention containing the canonical `dsh-novel:` reference.
 - Asset types, content, selectors, and operations cross Remote as a bounded JSON envelope. Host and Client registries own their exact semantics, so adding a type does not require widening the generated Remote method list; incompatible or non-JSON values fail explicitly.
 - `changeSet`, `applyChangeSet`, and `rejectChangeSet` expose browser review. Apply and reject pass the addressed Agent Session id as explicit authorization and return the durable terminal or conflict state.
-- Catalog, current-head reads, saves, and applies resolve the addressed Agent Session's sandbox policy and forward it through repository reconciliation. This keeps an external Session workspace writable without widening the deployment fallback root.
+- Catalog, creation, current-head reads, saves, and applies resolve the addressed Agent Session's sandbox policy and forward it through repository reconciliation. This keeps an external Session workspace writable without widening the deployment fallback root.
 - `responseMaxBytes`, defaulting to 8 MiB, bounds every complete non-discovery JSON response; over-budget responses fail rather than truncate or silently omit data.
 - The existing Gateway identity policy resolves the addressed Agent; this package adds no authorization mechanism. `descriptorMaxBytes` limits the complete descriptor JSON encoded as UTF-8, defaults to 256 KiB, and cannot exceed the runtime's maximum string length.
 - The generated `./remote` contribution is browser-safe and is mounted by the separate `@deepseek-ai/dsh-experimental-novel-repository-client` package; this Host package never enters the Client compiler aggregate.

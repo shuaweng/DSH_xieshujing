@@ -64,18 +64,20 @@ async function harness(): Promise<{
     '---',
     '白港下雨了。',
   ].join('\n'))
-  const outlinePath = join(dir, 'planning', 'main-outline.yaml')
+  const outlinePath = join(dir, 'planning', 'main-outline.md')
   await writeFile(outlinePath, [
+    '---',
     'novel:',
     '  schema: 1',
     '  id: outline-tool',
     '  type: planning.outline',
     '  title: Tool Outline',
-    'nodes:',
-    '  - id: chapter-node-1',
-    '    title: 第一章',
-    '    goal: 主角抵达白港。',
-    '    children: []',
+    '  level: book',
+    '---',
+    '',
+    '# 全书大纲',
+    '',
+    '主角抵达白港。',
     '',
   ].join('\n'))
   const ctx = new Context()
@@ -121,9 +123,19 @@ describe('Novel model tools', () => {
   it('registers discovery, exact-read, and proposal tools with explicit proposal guidance', async () => {
     const { ctx, agent } = await harness()
     expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('novel_')).sort())
-      .toEqual(['novel_get', 'novel_list', 'novel_propose_changes'])
+      .toEqual(['novel_create', 'novel_get', 'novel_list', 'novel_present', 'novel_propose_changes'])
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.ctx })
     expect(renderPrompt(assembly)).toContain('never means the file changed')
+
+    const present = ctx.tools.get('novel_present')!
+    expect(present.presentCall?.({ intent: 'open-workbench' })).toEqual({
+      card: 'generic', title: '打开小说工作台', kind: 'read',
+    })
+    expect(present.output.presentationMeta?.({}, { intent: 'open-workbench' })).toEqual({
+      kind: 'novel-presentation', intent: 'open-workbench',
+    })
+    await expect(execute(ctx, agent, 'novel_present', { intent: 'open-workbench' }))
+      .resolves.toMatchObject({ isError: false, value: { intent: 'open-workbench' } })
 
     const read = ctx.tools.get('novel_get')!
     expect(read.output.render({}, { assets: [] })).toEqual([{ type: 'text', text: '[]' }])
@@ -132,6 +144,15 @@ describe('Novel model tools', () => {
     })
     const list = ctx.tools.get('novel_list')!
     expect(list.presentCall?.({})).toEqual({ card: 'generic', title: '浏览小说资产', kind: 'read' })
+    const create = ctx.tools.get('novel_create')!
+    expect(create.presentCall?.({
+      type: 'planning.outline',
+      title: '第一卷卷纲',
+      parent_asset_id: 'outline-tool',
+      content: { kind: 'outline', level: 'volume', body: '' },
+    })).toEqual({
+      card: 'generic', title: '创建小说资产', kind: 'edit', rawInput: '第一卷卷纲',
+    })
     const propose = ctx.tools.get('novel_propose_changes')!
     const value = {
       changeSetId: 'changeset-1', projectId: 'project-tool', assetId: 'chapter-tool',
@@ -165,7 +186,7 @@ describe('Novel model tools', () => {
           assetId: 'chapter-tool', revisionId, title: 'Tool Chapter', path: 'manuscript/chapter.md',
         },
         {
-          assetId: 'outline-tool', title: 'Tool Outline', path: 'planning/main-outline.yaml',
+          assetId: 'outline-tool', title: 'Tool Outline', path: 'planning/main-outline.md',
           type: 'planning.outline',
         },
       ],
@@ -247,7 +268,32 @@ describe('Novel model tools', () => {
     })).resolves.toMatchObject({ isError: true })
   })
 
-  it('reads and proposes a typed outline-node update through the unchanged generic tools', async () => {
+  it('creates a volume outline through the typed creation tool', async () => {
+    const { ctx, agent } = await harness()
+    const created = await execute(ctx, agent, 'novel_create', {
+      type: 'planning.outline',
+      title: '第一卷卷纲',
+      parent_asset_id: 'outline-tool',
+      content: { kind: 'outline', level: 'volume', body: '# 第一卷\n\n围绕雨夜来客自由展开。' },
+    })
+    expect(created.isError).toBe(false)
+    if (created.isError) throw new Error('expected novel_create success')
+    expect(created.value).toMatchObject({
+      projectId: 'project-tool',
+      type: 'planning.outline',
+      parentAssetId: 'outline-tool',
+      title: '第一卷卷纲',
+    })
+    expect(created.meta).toMatchObject({ kind: 'novel-asset-created', assetType: 'planning.outline' })
+
+    const list = await execute(ctx, agent, 'novel_list', {})
+    expect(list.isError).toBe(false)
+    if (list.isError) throw new Error('expected novel_list success')
+    const assets = (list.value as { assets: Array<{ title: string; parentAssetId?: string }> }).assets
+    expect(assets).toContainEqual(expect.objectContaining({ title: '第一卷卷纲', parentAssetId: 'outline-tool' }))
+  })
+
+  it('reads and proposes an exact freeform outline replacement through the generic tools', async () => {
     const { ctx, agent, outlinePath, outlineRevisionId } = await harness()
     const uri = encodeNovelReferenceUri({
       projectId: ProjectId('project-tool'),
@@ -258,11 +304,8 @@ describe('Novel model tools', () => {
     expect(read.isError).toBe(false)
     if (read.isError) throw new Error('expected outline novel_get success')
     const readValue = read.value as { assets: Array<{ text: string; proposalInstructions: string }> }
-    expect(JSON.parse(readValue.assets[0]!.text)).toMatchObject({
-      kind: 'planning.outline',
-      nodes: [{ id: 'chapter-node-1', goal: '主角抵达白港。' }],
-    })
-    expect(readValue.assets[0]!.proposalInstructions).toContain('update-outline-node')
+    expect(readValue.assets[0]!.text).toBe('# 全书大纲\n\n主角抵达白港。\n')
+    expect(readValue.assets[0]!.proposalInstructions).toContain('replace-text')
 
     const before = await readFile(outlinePath, 'utf8')
     const proposed = await execute(ctx, agent, 'novel_propose_changes', {
@@ -270,11 +313,12 @@ describe('Novel model tools', () => {
       asset_id: 'outline-tool',
       base_revision_id: outlineRevisionId,
       operations: [{
-        kind: 'update-outline-node',
-        nodeId: 'chapter-node-1',
-        changes: { goal: '主角在雨夜抵达白港。', turn: '港口突然停电。' },
+        kind: 'replace-text',
+        startUtf16: '# 全书大纲\n\n主角'.length,
+        endUtf16: '# 全书大纲\n\n主角抵达'.length,
+        replacement: '在雨夜抵达',
       }],
-      summary: '强化第一章目标与转折',
+      summary: '补充雨夜氛围',
     })
     expect(proposed.isError).toBe(false)
     if (proposed.isError) throw new Error('expected outline proposal success')
@@ -285,8 +329,8 @@ describe('Novel model tools', () => {
     const retained = await ctx.novelRepository.readChangeSet(project, ChangeSetId(value.changeSetId))
     expect(retained.assetType).toBe('planning.outline')
     const [operation] = retained.operations
-    if (operation?.kind !== 'update-outline-node') throw new Error('expected retained outline operation')
-    expect(operation.selector).toMatchObject({ kind: 'outline-node', nodeId: 'chapter-node-1' })
-    expect(operation.selector.nodeHash).toMatch(/^sha256:/u)
+    if (operation?.kind !== 'replace-text') throw new Error('expected retained outline operation')
+    expect(operation.selector).toMatchObject({ kind: 'text-range' })
+    expect(operation.selector.quoteHash).toMatch(/^sha256:/u)
   })
 })

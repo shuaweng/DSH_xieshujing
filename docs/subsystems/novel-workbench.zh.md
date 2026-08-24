@@ -59,15 +59,15 @@ nodes:
 
 ## 提案、审阅与恢复
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_get` 与 `novel_propose_changes`。目录发现为所有已安装类型返回规范精确 Revision 引用；精确读取使用该类型的确定性模型投影与提案说明。提案由匹配定义校验一个正文 `replace-text` 或大纲 `update-outline-node`，再持久创建 ChangeSet，但不改作者文件。模型没有 apply 工具，也不能宣称已经发布修改。
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_create`、`novel_get`、`novel_propose_changes` 和纯展示工具 `novel_present`。目录发现会返回规范精确 Revision 引用与已注册创建契约；精确读取使用各类型的确定性模型投影与提案说明。提案由匹配定义校验精确、归类型所有的文本操作，再持久创建 ChangeSet，但不改作者文件。`novel_present` 只通过类型化工具结果 metadata 打开或关闭整个工作台。模型没有 apply 工具，也不能宣称已经发布修改。
 
 浏览器把 ChangeSet 读成行内 Diff 卡片。接受或拒绝都是显式、归 Session 所有的 Remote 操作。Apply 在接触文件前，把精确前后字节、hash、授权与预期结果 Revision 以 `applying` 状态写入 journal。项目重开时，after hash 会完成提交，before hash 会重试受保护写入，任何第三种 hash 都会变成 `conflicted`，且不覆盖作者文件。
 
 ## Profile 隔离
 
-[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 overlay，组合在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。它只禁用普通 `ui-layout` 根占位者，改为安装 [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench)。Novel 根仍保留原生侧栏、对话、详情、设置、模型选择、工具渲染和 overlay surface，并增加类型化 Asset explorer 与 canvas 插槽。
+[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 overlay，组合在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。原生 `ui-layout` 始终是唯一根与布局服务拥有者，并暴露按 selector 路由的 `shell.workbench` chain。[`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) 只向该 chain 贡献纯 `novel` surface，保留原生侧栏、对话、详情、设置、模型选择、工具渲染与 overlay surface，并仅在它被选中时声明类型化 Asset explorer 与 canvas 插槽。
 
-根布局把 Agent 对话放在左侧，把 Asset 浏览器与画布放在右侧。精确 Client Renderer contribution 分别提供正文阅读/编辑器或结构化大纲树与字段检查器。默认 `web` 与 `headless` Profile 模板不包含这些实验性包。overlay 还拥有安全的 `novel-workbench` Preset，其稳定工具集不包含 shell 或通用文件系统修改能力。
+只有 Agent preset 精确为 `novel-workbench` 的 Session 才会在 access/plan 控件旁得到 Composer 开关，并可选中小说 surface。打开后，AppFrame 把 Agent 对话放在左侧，把 Asset 浏览器与画布放在右侧；作者可从同一开关收起整个工作台，切到其他 preset 也会立即恢复普通 tracks。类型化 `novel_present` 结果可请求同一切换，不解析 Agent 回复文字。默认 `web` 与 `headless` Profile 模板不包含这些实验性包；overlay 的安全 preset 不包含 shell 或通用文件系统修改能力。
 
 浏览器保存与 ChangeSet 应用会解析被寻址 Session 的 sandbox policy，并把它传入 Repository 协调与发布。Novel Project 因此可以位于 Host 进程工作目录之外，同时仍被限制在 Session 工作区边界内。
 
@@ -171,6 +171,16 @@ abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelPro
 abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSummary[]>
 
 /**
+ * Create one new typed authored Asset at a provider-owned safe path.
+ * @param project - validated Project declaration returned by this provider.
+ * @param request - semantic type, title, optional parent, typed content, and actor.
+ * @param signal - optional cancellation before filesystem publication.
+ * @param sandboxPolicy - optional per-call policy governing file creation.
+ * @returns the committed initial Revision of the new Asset.
+ */
+abstract createAsset( project: NovelProjectSnapshot, request: CreateAssetRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
+
+/**
  * Read either the reconciled current head or one retained immutable Revision.
  * @param project - validated Project declaration returned by this provider.
  * @param assetId - stable authored asset identity.
@@ -269,6 +279,15 @@ Project browser projection consuming the provider-neutral repository service.
  * @returns browser-safe current Asset descriptors.
  */
 @Remote('assets') async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]>
+
+/**
+ * Create one new typed Asset below its registered project content root.
+ * @param agent - addressed Agent whose Session selects the project root and write policy.
+ * @param request - semantic type, title, optional parent, and typed content.
+ * @param signal - caller cancellation before publication.
+ * @returns the browser-safe initial Revision.
+ */
+@Remote('createAsset') async createAsset( agent: Agent, request: CreateNovelAssetRequest, signal: AbortSignal, ): Promise<NovelAssetDocument>
 
 /**
  * Read one current or retained typed Asset document.

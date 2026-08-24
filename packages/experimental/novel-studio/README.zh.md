@@ -9,8 +9,8 @@
 ## 行为
 
 - 应在现有 base 与 Web App 组合包之后加入本 bundle。它会先插入 Host Asset 类型注册表、独立 `planning.outline` Host/Client contribution 与 `novel-repository-local`，随后加入 context、Remote、独立 Client adapter 和 `novel-workbench`。
-- bundle 只禁用普通 `ui-layout` entry，并把 Novel workbench 安装为唯一根占位者。原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染和 Session service 仍安装在该根声明的插槽中。
-- 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含 `novel_list`、`novel_get` 和 `novel_propose_changes`；不包含通用 shell 或文件系统修改工具。
+- 普通 `ui-layout` 始终是唯一根与布局服务拥有者。Novel Workbench 通过按 selector 路由的 `shell.workbench` chain 贡献按 preset 限定的 `novel` surface，因此原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染与 Session service 仍保持权威。
+- 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含 `novel_list`、`novel_create`、`novel_get`、`novel_propose_changes` 与 `novel_present`；不包含通用 shell 或文件系统修改工具。
 - `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
 - 默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。本包仍不添加已发布的全局 Profile template；调用方把它安装到显式 Profile 中。
 
@@ -39,7 +39,7 @@ pnpm dsh --profile novel-studio --port 3080
 
 #### 模型看到的内容
 
-模型看到 Novel persona、稳定的 `novel_list`、`novel_get` 与 `novel_propose_changes` Schema，以及仅在用户发送规范工作台引用时加入的精确资料。浏览器布局状态永远不会进入模型上下文；目录发现只在模型调用 `novel_list` 时发生。
+模型看到 Novel persona、稳定的小说工具 Schema，以及仅在用户发送规范工作台引用时加入的精确资料。浏览器布局状态永远不会进入模型上下文；目录发现只在模型调用 `novel_list` 时发生。
 
 #### Token 影响
 

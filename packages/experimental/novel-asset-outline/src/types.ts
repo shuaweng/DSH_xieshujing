@@ -1,58 +1,34 @@
-/** Provider-neutral structured values owned by the `planning.outline` Asset package. */
+/** Provider-neutral freeform planning values. */
 
-import type { ContentHash } from '@deepseek-ai/dsh-experimental-novel-repository/types'
+/** The only structural distinction imposed on an outline body. */
+export type PlanningOutlineLevel = 'book' | 'volume'
 
-/** One stable node in an ordered outline tree. */
-export interface OutlineNode {
-  readonly id: string
-  readonly title: string
-  readonly summary?: string
-  readonly goal?: string
-  readonly conflict?: string
-  readonly turn?: string
-  readonly children: readonly OutlineNode[]
-}
-
-/** Complete typed content of one YAML outline Asset. */
+/** Freeform Markdown for one book-level or volume-level outline. */
 export interface PlanningOutlineContent {
   readonly kind: 'outline'
-  readonly nodes: readonly OutlineNode[]
+  readonly level: PlanningOutlineLevel
+  readonly body: string
 }
 
-/** Browser input selecting one stable node from one retained outline Revision. */
-export interface OutlineNodeSelectionInput {
-  readonly kind: 'outline-node'
-  readonly nodeId: string
-}
-
-/** Frozen exact-node selector used by context and durable operations. */
-export interface OutlineNodeSelector extends OutlineNodeSelectionInput {
-  readonly nodeHash: ContentHash
-}
-
-/** Fields the first outline operation can change without changing tree identity or order. */
-export interface OutlineNodeChanges {
-  readonly title?: string
-  readonly summary?: string | null
-  readonly goal?: string | null
-  readonly conflict?: string | null
-  readonly turn?: string | null
-}
-
-/** Revision-bound field update for one outline node. */
-export interface UpdateOutlineNodeOperation {
-  readonly kind: 'update-outline-node'
-  readonly selector: OutlineNodeSelector
-  readonly changes: OutlineNodeChanges
+/** Freeform Markdown planning notes bound to one manuscript chapter. */
+export interface ChapterOutlineContent {
+  readonly kind: 'chapter-outline'
+  readonly body: string
 }
 
 declare module '@deepseek-ai/dsh-experimental-novel-repository/types' {
   interface NovelAssetTypeMap {
     'planning.outline': {
       readonly content: PlanningOutlineContent
-      readonly selectionInput: OutlineNodeSelectionInput
-      readonly selector: OutlineNodeSelector
-      readonly operation: UpdateOutlineNodeOperation
+      readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
+      readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
+      readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
+    }
+    'planning.chapter-outline': {
+      readonly content: ChapterOutlineContent
+      readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
+      readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
+      readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
     }
   }
 }

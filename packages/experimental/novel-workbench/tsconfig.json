@@ -6,6 +6,7 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../client/runtime" },
     { "path": "../../client/ui-slots" },
+    { "path": "../../client/ui-agent-preset" },
     { "path": "../../client/ui-layout" },
     { "path": "../../client/ui-theme" },
     { "path": "../../client/ui-conversation" },

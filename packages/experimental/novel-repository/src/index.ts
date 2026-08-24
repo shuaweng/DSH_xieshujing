@@ -13,6 +13,7 @@ import type {
   AssetSnapshot,
   AssetSummary,
   CaptureSelectionRequest,
+  CreateAssetRequest,
   ChangeSet,
   ChangeSetAuthorization,
   ChangeSetId,
@@ -38,6 +39,7 @@ export type {
   AssetSnapshot,
   AssetSummary,
   CaptureSelectionRequest,
+  CreateAssetRequest,
   ChangeSet,
   ChangeSetAuthorization,
   ContentHash,
@@ -93,6 +95,21 @@ export abstract class NovelRepository extends Service {
     signal?: AbortSignal,
     sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<readonly AssetSummary[]>
+
+  /**
+   * Create one new typed authored Asset at a provider-owned safe path.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - semantic type, title, optional parent, typed content, and actor.
+   * @param signal - optional cancellation before filesystem publication.
+   * @param sandboxPolicy - optional per-call policy governing file creation.
+   * @returns the committed initial Revision of the new Asset.
+   */
+  abstract createAsset(
+    project: NovelProjectSnapshot,
+    request: CreateAssetRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<AssetSnapshot>
 
   /**
    * Read either the reconciled current head or one retained immutable Revision.

@@ -38,7 +38,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`, `ctx.systemPrompt`, `a live continuable in-process child Agent` | `tool/call`, `tool/result`, `a user-role message in the direct parent session` | - | Registered per continuable in-process child rather than globally, so this schema is visible only inside such a child and survives its global `toolFilter`. The same contribution installs the child-scoped `tool:report` prompt section, which this catalog does not render. The parent-facing `send_message` tool is installed independently. |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
-| `@deepseek-ai/dsh-experimental-tool-novel` | `novel_get`, `novel_list`, `novel_propose_changes` | `ctx.tools`, `ctx.systemPrompt`, `ctx.novelContextResolver`, `ctx.novelRepository`, `ctx.novelAssetTypes`, `ctx.fs`, `ctx.sandboxPolicy`, `an owning Agent Session at execution time` | `tool/call`, `durable proposal-only ChangeSet from novel_propose_changes`, `tool/result` | - | The Novel Studio Preset ships three stable tools without generic filesystem mutation. `novel_list` discovers canonical current chapter references, `novel_get` resolves exact retained Revisions, and `novel_propose_changes` only creates a reviewable ChangeSet and never publishes authored files. |
+| `@deepseek-ai/dsh-experimental-tool-novel` | `novel_create`, `novel_get`, `novel_list`, `novel_present`, `novel_propose_changes` | `ctx.tools`, `ctx.systemPrompt`, `ctx.novelContextResolver`, `ctx.novelRepository`, `ctx.novelAssetTypes`, `ctx.fs`, `ctx.sandboxPolicy`, `an owning Agent Session at execution time` | `tool/call`, `durable proposal-only ChangeSet from novel_propose_changes`, `tool/result` | - | The Novel Studio Preset ships five stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
@@ -2029,9 +2029,49 @@ All ten tools are scoped to implicit Team Leads and durable teammates. The shipp
 
 ## `@deepseek-ai/dsh-experimental-tool-novel`
 
+### `novel_create`
+
+Create one new typed Novel Asset at a repository-owned safe path. Use novel_list for the exact content shape and parent rules.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "parent_asset_id": {
+      "type": "string"
+    },
+    "content": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "title",
+    "content"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
+
 ### `novel_get`
 
-Read exact retained Novel Asset references. Pass canonical dsh-novel: URIs from the current context.
+Read exact retained Novel Asset references. Pass canonical dsh-novel: URIs from novel_list or the current context.
 
 ```json
 {
@@ -2055,7 +2095,7 @@ Source: [`packages/experimental/tool-novel/src/index.ts`](../packages/experiment
 
 ### `novel_list`
 
-List the current Session Novel Project and its typed Assets with canonical exact-Revision references.
+List the current Session Novel Project, typed Assets, exact references, and registered creation formats.
 
 ```json
 {
@@ -2066,9 +2106,34 @@ List the current Session Novel Project and its typed Assets with canonical exact
 
 Source: [`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
 
+### `novel_present`
+
+Open or close the Novel workbench for the current Novel Agent Session. This changes presentation only and never mutates an Asset.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "intent": {
+      "type": "string",
+      "description": "The exact workbench presentation action.",
+      "enum": [
+        "open-workbench",
+        "close-workbench"
+      ]
+    }
+  },
+  "required": [
+    "intent"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
+
 ### `novel_propose_changes`
 
-Create one reviewable typed ChangeSet against an exact retained Novel Asset Revision. Pass operations in the format returned by novel_get. The Host type adapter validates and adds integrity metadata. This never applies the change.
+Create one reviewable typed ChangeSet against an exact retained Novel Asset Revision. This never applies the change.
 
 ```json
 {
@@ -2114,7 +2179,7 @@ Create one reviewable typed ChangeSet against an exact retained Novel Asset Revi
 
 Source: [`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
 
-The Novel Studio Preset ships three stable tools without generic filesystem mutation. `novel_list` discovers canonical current chapter references, `novel_get` resolves exact retained Revisions, and `novel_propose_changes` only creates a reviewable ChangeSet and never publishes authored files.
+The Novel Studio Preset ships five stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

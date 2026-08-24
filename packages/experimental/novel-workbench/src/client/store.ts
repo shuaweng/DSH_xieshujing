@@ -34,6 +34,7 @@ export interface NovelWorkbenchState {
 type Actions = {
   reset: (draft: NovelWorkbenchState) => void
   loaded: (draft: NovelWorkbenchState, project: NovelProjectDescriptor, assets: readonly NovelAssetDescriptor[]) => void
+  assetCreated: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   open: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   saved: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   edit: (draft: NovelWorkbenchState, content: NovelWireValue) => void
@@ -44,31 +45,6 @@ type Actions = {
   setReaderFontSize: (draft: NovelWorkbenchState, size: number) => void
   fail: (draft: NovelWorkbenchState, message: string) => void
   refresh: (draft: NovelWorkbenchState) => void
-}
-
-/** Transient root panel visibility controlled through the ordinary layout service. */
-export interface NovelFrameState {
-  sidebarCollapsed: boolean
-  explorerCollapsed: boolean
-  detailsOpen: boolean
-  agentWidth: number
-}
-
-type NovelFrameActions = {
-  toggleSidebar: (draft: NovelFrameState) => void
-  toggleExplorer: (draft: NovelFrameState) => void
-  openDetails: (draft: NovelFrameState) => void
-  closeDetails: (draft: NovelFrameState) => void
-  setAgentWidth: (draft: NovelFrameState, width: number) => void
-}
-
-/** Browser-bound panel actions exposed through the ordinary DSH layout service. */
-export interface NovelFramePanelActions {
-  toggleSidebar: () => void
-  toggleExplorer: () => void
-  openDetails: () => void
-  closeDetails: () => void
-  setAgentWidth: (width: number) => void
 }
 
 /**
@@ -103,6 +79,10 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
         draft.assets = [...assets]
         draft.loading = false
         delete draft.error
+      },
+      assetCreated: (draft, document) => {
+        const descriptor = descriptorOf(document)
+        draft.assets = [...draft.assets.filter(asset => asset.id !== descriptor.id), descriptor]
       },
       open: (draft, document) => {
         draft.document = document
@@ -139,23 +119,6 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       setReaderFontSize: (draft, size) => { draft.readerFontSize = Math.min(28, Math.max(14, Math.round(size))) },
       fail: (draft, message) => { draft.loading = false; draft.error = message },
       refresh: (draft) => { draft.reload += 1 },
-    },
-  })
-}
-
-/**
- * Create transient panel state for the Novel root occupant.
- * @returns the isolated root-panel store handle.
- */
-export function createNovelFrameStore(): EngineStoreHandle<NovelFrameState, NovelFrameActions> {
-  return defineStore({
-    init: (): NovelFrameState => ({ sidebarCollapsed: true, explorerCollapsed: false, detailsOpen: false, agentWidth: 410 }),
-    actions: {
-      toggleSidebar: (draft) => { draft.sidebarCollapsed = !draft.sidebarCollapsed },
-      toggleExplorer: (draft) => { draft.explorerCollapsed = !draft.explorerCollapsed },
-      openDetails: (draft) => { draft.detailsOpen = true },
-      closeDetails: (draft) => { draft.detailsOpen = false },
-      setAgentWidth: (draft, width) => { draft.agentWidth = Math.min(640, Math.max(300, Math.round(width))) },
     },
   })
 }

@@ -5,6 +5,7 @@ import { NovelRepositoryError } from './error.ts'
 import type {
   AssetSnapshot,
   AssetId,
+  CreateAssetRequest,
   NovelAssetContent,
   NovelAssetType,
   NovelOperation,
@@ -22,6 +23,7 @@ declare module '@deepseek-ai/cordis' {
 export interface ParsedNovelAsset {
   readonly id: AssetId
   readonly type: NovelAssetType
+  readonly parentId?: AssetId
   readonly title: string
   readonly frontmatter: Readonly<Record<string, unknown>>
   readonly content: NovelAssetContent
@@ -55,9 +57,23 @@ export interface NovelAssetTypeDefinition {
   readonly extensions: readonly string[]
   readonly model: {
     readonly description: string
+    /** Present only when this type supports Repository-owned creation. */
+    readonly creationInstructions?: string
     readonly proposalInstructions: string
   }
+  /** Optional semantic-parent contract enforced after every scan and before creation. */
+  readonly parent?: {
+    readonly allowedTypes: readonly NovelAssetType[]
+    readonly required?: boolean
+    readonly singleton?: boolean
+    /** Maximum number of parent edges reachable from this Asset. */
+    readonly maxDepth?: number
+  }
   parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset
+  create?(
+    request: Pick<CreateAssetRequest, 'title' | 'parentId' | 'content'> & { readonly id: AssetId },
+    projectRelativePath: string,
+  ): NovelAssetMaterialization
   serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent, title?: string): NovelAssetMaterialization
   captureSelection(
     snapshot: AssetSnapshot,
@@ -141,8 +157,25 @@ function validateDefinition(definition: NovelAssetTypeDefinition): void {
   if (definition.extensions.length === 0) {
     throw new Error(`novel asset type ${JSON.stringify(definition.type)} must accept at least one extension`)
   }
-  if (definition.model.description.trim().length === 0 || definition.model.proposalInstructions.trim().length === 0) {
+  if (definition.model.description.trim().length === 0
+    || definition.model.proposalInstructions.trim().length === 0) {
     throw new Error(`novel asset type ${JSON.stringify(definition.type)} must provide model-facing instructions`)
+  }
+  if ((definition.create === undefined) !== (definition.model.creationInstructions === undefined)) {
+    throw new Error(`novel asset type ${JSON.stringify(definition.type)} must contribute create() and creationInstructions together`)
+  }
+  if (definition.model.creationInstructions !== undefined
+    && definition.model.creationInstructions.trim().length === 0) {
+    throw new Error(`novel asset type ${JSON.stringify(definition.type)} has empty creationInstructions`)
+  }
+  if (definition.parent !== undefined) {
+    if (definition.parent.allowedTypes.length === 0) {
+      throw new Error(`novel asset type ${JSON.stringify(definition.type)} must allow at least one parent type`)
+    }
+    if (definition.parent.maxDepth !== undefined
+      && (!Number.isSafeInteger(definition.parent.maxDepth) || definition.parent.maxDepth < 1)) {
+      throw new Error(`novel asset type ${JSON.stringify(definition.type)} has an invalid parent maxDepth`)
+    }
   }
   const seen = new Set<string>()
   for (const extension of definition.extensions) {

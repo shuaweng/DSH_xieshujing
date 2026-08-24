@@ -14,6 +14,7 @@ import {
   type AssetId,
   type AssetSnapshot,
   type ChangeSet,
+  type NovelAssetType,
   type NovelAssetContent,
   type NovelSelectionInput,
   type NovelProjectSnapshot,
@@ -25,6 +26,7 @@ import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from 'zod'
 import type {
   CaptureNovelSelectionRequest,
+  CreateNovelAssetRequest,
   NovelAssetDescriptor,
   NovelChangeSetDescriptor,
   NovelAssetDocument,
@@ -36,6 +38,7 @@ import type {
 
 export type {
   CaptureNovelSelectionRequest,
+  CreateNovelAssetRequest,
   NovelAssetDescriptor,
   NovelChangeSetDescriptor,
   NovelAssetDocument,
@@ -117,6 +120,7 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       id: summary.asset.id,
       projectId: summary.asset.projectId,
       type: summary.asset.type,
+      ...(summary.asset.parentId === undefined ? {} : { parentId: summary.asset.parentId }),
       projectRelativePath: summary.asset.projectRelativePath,
       revisionId: summary.revisionId,
       contentHash: summary.contentHash,
@@ -124,6 +128,37 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     }))
     assertResponseBytes(assets, this.responseMaxBytes, 'asset catalog')
     return assets
+  }
+
+  /**
+   * Create one new typed Asset below its registered project content root.
+   * @param agent - addressed Agent whose Session selects the project root and write policy.
+   * @param request - semantic type, title, optional parent, and typed content.
+   * @param signal - caller cancellation before publication.
+   * @returns the browser-safe initial Revision.
+   */
+  @Remote('createAsset')
+  async createAsset(
+    agent: Agent,
+    request: CreateNovelAssetRequest,
+    signal: AbortSignal,
+  ): Promise<NovelAssetDocument> {
+    const project = await this.requireProject(agent, signal)
+    const snapshot = await this.ctx.novelRepository.createAsset(
+      project,
+      {
+        type: request.type as NovelAssetType,
+        title: request.title,
+        ...(request.parentId === undefined ? {} : { parentId: request.parentId }),
+        content: request.content as unknown as NovelAssetContent,
+        actor: { kind: 'user', sessionId: agent.id },
+      },
+      signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
+    const result = assetDocument(snapshot)
+    assertResponseBytes(result, this.responseMaxBytes, 'Asset document')
+    return result
   }
 
   /**
@@ -334,6 +369,7 @@ function assetDocument(snapshot: AssetSnapshot): NovelAssetDocument {
     id: snapshot.asset.id,
     projectId: snapshot.asset.projectId,
     type: snapshot.asset.type,
+    ...(snapshot.asset.parentId === undefined ? {} : { parentId: snapshot.asset.parentId }),
     projectRelativePath: snapshot.asset.projectRelativePath,
     revisionId: snapshot.revisionId,
     contentHash: snapshot.contentHash,

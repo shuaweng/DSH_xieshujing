@@ -20,7 +20,7 @@ Status: proposed
 
 现有 `novel` Agent Preset 继续作为 Session 级写作能力，并提供 persona 和 skill 行为，但不拥有工作台领域。MVP 增加独立的包内 `novel-workbench` Preset，它使用 Novel 工具，并从正式资产根目录的能力中移除原始修改工具；研究和开发 Preset 可以保留通用文件系统与 shell 工具，但不会因此取得提交 Novel ChangeSet 的权限。
 
-PR1、PR2、下文所述 PR3 MVP、PR4 Asset 类型内核和 PR5 大纲切片已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照和编排能力。
+PR1、PR2、PR3 MVP、PR4 Asset 类型内核、PR5 Registry 验证以及自由规划切片已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照和编排能力。
 
 本提案扩展现有 Profile、文件系统、Session 历史、Remote 和客户端展示决策，不取代其中任何一项。
 
@@ -60,17 +60,19 @@ PR4 用两个随 effect 生命周期管理的 Registry，替换分散在本地 R
 
 浏览器 Remote 为 Asset 内容、保存请求、selector 和 ChangeSet operation 暴露同一个有边界、无损的 JSON 信封。Host 与 Client 注册表拥有精确类型语义，因此新增类型不会扩展生成的 Remote 方法集合。根工作台按文档声明类型选择 Renderer，并把保存、Context Commit Barrier、Agent 引用插入与审阅授权保留在共享画布中。首个 `manuscript.chapter` Host 定义和 Client Renderer 保持 PR3 的文本编辑器、UTF-16 选区与 `replace-text` 行为。后续资产包可以增加 Host 定义与 Client Renderer，无需修改本地 Repository、通用 Novel 工具、Remote Gateway 或工作台根布局。
 
-PR4 不增加另一种作者资产。`planning.outline` 将作为首个验证：注册 API 能支持结构化内容值、节点选区、类型化操作和非文本 Diff，而无需扩大共享 Service。
+PR4 不增加另一种作者资产。最初的 `planning.outline` 实现验证了注册 API 可以在不扩大共享 Service 的前提下增加第二套解析器、选区、operation、模型投影、编辑器和 Diff。后续产品验证替换了固定 payload，但保留了同一 Registry 边界。
 
-## PR5 结构化大纲切片
+## PR5 大纲 Registry 验证与当前自由规划切片
 
-PR5 通过一个独立的 Host 与 Client 双端类型包，将 `planning.outline` 加为第二种作者资产。该包向 PR4 Registry 注册；本地 Repository、Remote 方法、上下文解析器、模型工具、共享画布和根工作台都不增加大纲专用分支。显式 Novel Studio bundle 会在本地 Provider 之前加载 Host 贡献，并在工作台 Renderer Service 可用之后激活 Client 贡献。默认 `web` 与 `headless` 组合保持不变。
+自由策划决策[取代了固定大纲 payload 与字段编辑器](../feature/2026-08-23-freeform-outline-and-chapter-plan-assets.zh.md)。此前的严格 YAML 树只保留 Registry 验证意义，不再是受支持的当前磁盘格式。
 
-一份大纲是可选 `planning` 内容根下的一份严格 UTF-8 YAML 文件。根节点包含与 Markdown Frontmatter 相同的 version-one `novel` 身份 mapping，以及一个 `nodes` sequence。每个节点都有一个在资产内唯一且稳定的 `id`、非空 `title`、可选的 `summary`、`goal`、`conflict`、`turn` 字符串，以及保持顺序的子节点 `children` sequence。Version one 拒绝 alias、重复 key、重复节点 id、不支持的字段、控制字符、过深或过多节点，以及格式错误或过大的作者值。文件仍是权威来源。保存时只在解析后的 YAML document 中替换已验证的 `novel.title` 与 `nodes` 值，因此无关的顶层作者元数据和注释留在类型化大纲内容之外；被替换 `nodes` 子树内部的注释不属于 version-one round-trip 保证。
+独立的 Host 与 Client 双端规划类型包现在向 PR4 Registry 注册两种自由 Markdown 类型：`planning.outline` 与 `planning.chapter-outline`。本地 Repository、Remote 方法、上下文解析器、模型工具和共享画布保持类型无关。Explorer 贡献书纲与卷纲的产品导航，正文 Renderer 则在右侧抽屉打开对应章纲。显式 Novel Studio bundle 会在本地 Provider 之前加载 Host 贡献，并在工作台 Renderer Service 可用之后激活 Client 贡献。默认 `web` 与 `headless` 组合保持不变。
 
-第一版大纲 selector 为 `{ kind: 'outline-node', nodeId, nodeHash }`。浏览器输入只提交节点 id；Host 从保留 Revision 中冻结该节点规范表示的 SHA-256 hash。第一种 operation 是 `update-outline-node`：模型提交 `nodeId`，以及覆盖 `title`、`summary`、`goal`、`conflict`、`turn` 的非空 `changes` mapping；Host 将持久 operation 绑定到精确 node hash。可选字段用显式 `null` 清除。该 operation 不能改变节点身份、重排树、新建或删除节点，也不能编辑 children。除非节点 id 与 hash 仍匹配保留的 base Revision，否则 Apply 会 fail closed。
+`planning.outline` Asset 拥有自由 Markdown 正文，结构上只约束一个 `novel.level`。书纲使用 `level: book` 且没有父级；卷纲使用 `level: volume` 且拥有一个书纲父级。Repository 校验这一语义关系并拒绝更深层级与环，但正文中的标题、散文、列表、表格、节拍记法和自定义约定都由作者决定。`planning.chapter-outline` 是另一种自由 Markdown Asset，必须拥有一个 `manuscript.chapter` 父级，并且每章至多一个。可选章纲方法只会插入为可编辑的起步文本，绝不是必填字段。
 
-模型投影是包含完整类型化大纲的确定性 JSON；节点引用则只投影所选节点子树。Client Renderer 展示树和同一类型值上的字段编辑器，把一个活动节点捕获为语义选区，并为类型化 operation 渲染字段级前后 Diff。人类编辑仍走共享的 guarded 整资产保存，Agent 编辑仍走共享的 proposal-only ChangeSet 路径。PR5 不增加资产创建 UI、节点增删重排、大纲到正文的链接或多节点 operation。
+两种规划类型都复用 Revision 绑定的 UTF-16 文本范围选区与精确 `replace-text` ChangeSet operation。Host 针对保留正文冻结 quote hash；base Revision 或选中字节不再匹配时，Apply 闭合失败。人类整篇保存仍受当前 Revision 与文件系统版本保护。
+
+类型定义同时拥有创建序列化。`novel_create` 接收语义类型、标题、可选父级 id 与类型化自由正文；Repository 生成身份和安全路径，校验层级与 singleton 规则，只用 `createIfAbsent` 发布，并记录结果 Revision。`novel_get` 读取精确保留正文；对既有规划 Asset 的 `novel_propose_changes` 仍然只创建提案。
 
 ## PR4 工作台展示切片
 
@@ -96,7 +98,7 @@ Composer 是显式冻结选区唯一可见的披露位置。Novel Client 插入�
 | 数据 | 权威 | 派生或缓存形式 | 恢复规则 |
 | --- | --- | --- | --- |
 | 项目身份、格式版本、内容根目录 | `novel.yaml` | Workspace 识别结果 | 重新读取文件；配置损坏时快速失败 |
-| 当前类型化 Asset 内容与作者元数据 | 资产 Markdown/YAML 文件和 Frontmatter | 已解析 `AssetSnapshot` | 重新读取精确字节；绝不从索引重建当前作者内容 |
+| 当前类型化 Asset 内容与作者元数据 | Asset 文件和 Frontmatter | 已解析 `AssetSnapshot` | 重新读取精确字节；绝不从索引重建当前作者内容 |
 | 资产路径查找与类型目录 | 项目扫描 | 内存目录；未来 `.novel/index.sqlite` | 删除并重建；重复 id 阻止修改 |
 | 不可变 Revision 历史 | `.novel/history.sqlite` | 读取缓存 | 显式迁移或拒绝读写打开；绝不自动重置 |
 | ChangeSet 与应用授权 | `.novel/history.sqlite` | 工具结果元数据和浏览器缓存 | 按 `ChangeSetId` 重新获取；幂等回放状态转换 |
@@ -272,8 +274,8 @@ ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客
 
 ## 推迟工作
 
-- 除已交付章节与大纲以外的其他资产类型，包括人物、灵感、场景、时间线、关系和视图定义。
-- 大纲创建 UI、节点增删重排、大纲到正文的链接、自定义节点字段，以及多节点 ChangeSet。
+- 除已交付章节、自由书纲/卷纲和章纲之外的更多资产类型，包括人物、灵感、场景、时间线、关系和视图定义。
+- 除显式章节父级之外的大纲到正文派生、可选结构化规划类型，以及多 Asset ChangeSet。
 - 持久可丢弃搜索索引、全文搜索、语义搜索、推断提及和反向关系。`novel_list` 只是有边界的目录发现，不满足这些搜索能力。
 - 文件监听、远程文件系统一致性、多个并发 Host 写入者、协作和 CRDT 位置。
 - 永久块 id、模糊重定位、三方合并、多资产 ChangeSet、分支和跨项目引用。
@@ -309,8 +311,8 @@ ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客
 
 - 提议的实现包含完整 `ctx.novelRepository` 能力 seam，具有可独立测试的 Service Definition、本地 Service Provider 与 Consumer；每项注册在 HMR 和插件卸载时都能正确 dispose。
 - 真实 Profile 组合测试证明 `web` 与 `headless` 不加载 Novel Repository、Remote、工作台 UI 或 Novel 工具，而 `novel-studio` 加载预期精确 roster，且不替换现有 Session 级 Preset 约定。
-- 项目扫描能通过精确声明识别 `manuscript.chapter` Markdown 与 `planning.outline` YAML，在重命名后保留身份，拒绝重复 id 和逃逸路径，报告格式错误的声明且不重写，并从文件重建全部派生目录值。
-- 大纲测试覆盖稳定且唯一的节点 id、深度与数量边界、精确 node-hash 选区、确定性的完整与选中节点模型投影、guarded 人类字段保存、类型化 Agent 提案、字段 Diff 渲染、陈旧节点拒绝，以及无关顶层 YAML 元数据保留。
+- 项目扫描能通过精确声明识别 `manuscript.chapter`、`planning.outline` 与 `planning.chapter-outline` Markdown，在重命名后保留身份，拒绝重复 id、非法父级关系、环、cardinality 违规与逃逸路径，报告格式错误的声明且不重写，并从文件重建全部派生目录值。
+- 规划测试覆盖自由 Markdown round-trip、精确两层书纲/卷纲关系、每个正文父级至多一个章纲、Revision 绑定 UTF-16 选区、确定性模型投影、guarded 人类保存、类型化 Agent 创建与提案、文本 Diff 渲染，以及不依赖方法字段的陈旧选区拒绝。
 - Revision 测试证明精确 UTF-8 快照保留、父级连续性、内容哈希相等性、显式 schema 迁移或拒绝，以及不会自动重置 `.novel/history.sqlite`。
 - Selection 测试覆盖中文、emoji、CRLF 输入、surrogate pair 边界、脏草稿 flush、旧 Revision 展示、quote hash 不匹配，以及不使用模糊重定位的快速失败陈旧应用。
 - Context 测试证明规范引用只解析到保留的不可变 Revision，跨项目和超限上下文在模型调用前失败，精确安全序列化内容进入 `user/message`，并且回放、resume、fork 和 compaction 绝不重读可变最新文件。

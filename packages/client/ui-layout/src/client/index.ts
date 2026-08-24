@@ -15,13 +15,7 @@ import { createLayoutStore } from './stores.ts'
 import { LayoutController } from './service.ts'
 import { ThemePresenter } from './theme-presenter.ts'
 
-// Contract exports only (export-convergence rule: cross-package consumers
-// keep a symbol exported; test-only/package-internal symbols live off /src).
-// ILayout: the ctx.layout face consumers and test fakes type against.
-// OwnerShare contracts below are the render-side halves registrants compose
-// against; the frame components and the store factory are package-internal.
-export { LayoutController } from './service.ts'
-export type { ILayout } from './service.ts'
+export type { ILayout, PanelActions, WorkbenchViewState } from './service.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -81,6 +75,12 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
      * `id` is added beside the shipped entries instead of replacing them.
      */
     'shell.overlay': { kind: 'list'; scope: 'root' }
+    /**
+     * Selector-routed domain workbench. The default DSH frame remains mounted
+     * until ctx.layout names a matching id; the elected entry owns its own
+     * child slots and renders beside the Agent conversation column.
+     */
+    'shell.workbench': { kind: 'chain'; scope: 'root'; owner: ShellWorkbenchOwnerProps }
   }
 }
 
@@ -104,6 +104,20 @@ export interface ConvOwnerProps {}
 /** Details owner share: empty — sessionId arrives as a framework-standard prop. */
 export interface DetailsOwnerProps {}
 
+/** Owner data used by pure domain-workbench selectors and elected surfaces. */
+export interface ShellWorkbenchOwnerProps {
+  /** Active workbench id. */
+  id: string
+  /** Current Agent-column width in CSS pixels. */
+  agentWidth: number
+}
+
+/** Root entry's private injected presentation face. */
+export interface LayoutRootInjected {
+  hooks: { workbench: LayoutController['workbench'] }
+  closeWorkbench: () => void
+}
+
 /** Required services (cordis fiber inject — the loader passes all module exports as an object plugin). */
 export const inject = ['slots', 'theme']
 
@@ -124,6 +138,7 @@ export function apply(ctx: ClientContext): void {
         'conversation': { kind: 'single', scope: 'session-maybe' },
         'details': { kind: 'single', scope: 'session' },
         'shell.overlay': { kind: 'list', scope: 'root' },
+        'shell.workbench': { kind: 'chain', scope: 'root' },
       },
       // Exclusive store: the factory itself — the framework instantiates per
       // entry and delivers useStore/actions to AppFrame as standard props.
@@ -132,7 +147,10 @@ export function apply(ctx: ClientContext): void {
       // conversation business actions belong to their registrants.
       inject: (actions: PanelActions) => {
         layout.attachPanels(actions)
-        return {}
+        return {
+          hooks: { workbench: layout.workbench },
+          closeWorkbench: () => { layout.closeWorkbench() },
+        } satisfies LayoutRootInjected
       },
     }, AppFrame)
     return () => {

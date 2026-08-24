@@ -9,8 +9,8 @@ This experimental package is the explicit Novel Studio Profile bundle. It compos
 ## Behavior
 
 - Add this bundle after the existing base and Web App bundles. It inserts the Host Asset-type registry, the independent `planning.outline` Host/Client contribution, and `novel-repository-local`, followed by context, Remote, the separate Client adapter, and `novel-workbench`.
-- The bundle disables only the ordinary `ui-layout` entry and installs the Novel workbench as the sole root occupant. Native DSH sidebar, conversation, details, settings, model selection, tool rendering, and Session services remain installed in the slots declared by that root.
-- A package-owned `novel-workbench` Agent Preset combines a Novel persona with `novel_list`, `novel_get`, and `novel_propose_changes`; generic shell and filesystem mutation tools are absent.
+- The ordinary `ui-layout` remains the sole root and layout-service owner. Novel Workbench contributes a preset-scoped `novel` surface through its selector-routed `shell.workbench` chain, so native DSH sidebar, conversation, details, settings, model selection, tool rendering, and Session services stay authoritative.
+- A package-owned `novel-workbench` Agent Preset combines a Novel persona with `novel_list`, `novel_create`, `novel_get`, `novel_propose_changes`, and `novel_present`; generic shell and filesystem mutation tools are absent.
 - `NovelStudioPaths` publishes the package-owned Preset root so `agent-presets` can select it without a repository-relative path.
 - The default `web` and `headless` compositions remain free of the Novel Repository, context resolver, Novel Remote, workbench, and Novel tools. This package still does not add a shipped global Profile template; callers install it into an explicit Profile.
 
@@ -39,7 +39,7 @@ pnpm dsh --profile novel-studio --port 3080
 
 #### What the model sees
 
-The model sees the Novel persona, the stable `novel_list`, `novel_get`, and `novel_propose_changes` schemas, and exact referenced material only when a user sends a canonical workbench mention. Browser layout state is never added to model context; catalog discovery occurs only when the model calls `novel_list`.
+The model sees the Novel persona, the stable Novel tool schemas, and exact referenced material only when a user sends a canonical workbench mention. Browser layout state is never added to model context; catalog discovery occurs only when the model calls `novel_list`.
 
 #### Token effect
 

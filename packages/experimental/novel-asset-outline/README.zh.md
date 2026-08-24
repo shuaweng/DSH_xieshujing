@@ -4,53 +4,80 @@
 
 ## 用途
 
-这个实验性 Asset 类型包为精确的 `planning.outline` Asset 提供完整 Host 与 Client 行为。它证明 Novel 注册表可以增加一个结构化创作对象，而无需把大纲分支写进 Repository、Remote API、工作台画布或模型工具。
+这个实验性 Asset 类型包为小说工作台贡献自由写作的策划表面。它刻意把语义身份、层级与写作方法分开：Repository 只约束“大纲 → 卷纲”和“章节 → 章纲”的关系，作者与 Agent 可以在每个正文中自行选择任意 Markdown 结构。
 
 ## 行为
 
-- `planning.outline` Asset 是声明的 `planning` 内容根下的严格 UTF-8 YAML。`novel` mapping 保存 schema、稳定 Asset id、精确类型和标题；`nodes` 保存由稳定资产内 node id 组成的有序树。
-- 节点必须包含 `id`、`title` 与 `children`，可选作者字段为 `summary`、`goal`、`conflict` 和 `turn`。重复 id、未知节点字段、YAML warning、alias、控制字符、非法 UTF-8、超过 5,000 个节点或超过 64 层嵌套都会失败关闭。
-- 人类保存可以修改大纲标题与上述五个节点字段。序列化会在 YAML 库能够保留时保留无关顶层数据和注释；节点局部格式与注释不属于兼容性承诺。
-- 冻结选区是 `{ kind: "outline-node", nodeId, nodeHash }`。hash 把选中节点值绑定到一个已保留 Revision。
-- 第一种操作是 `update-outline-node`。它只更新一个既有节点的字段，不能创建、删除、重排、移动父级或改变节点身份。
-- Client contribution 把同一类型化值渲染为层级树与字段检查器，捕获节点选区供 Agent 引用，并展示字段级 ChangeSet Diff。
+- `planning.outline` 是声明的 `planning` 内容根下的 UTF-8 Markdown Asset。Frontmatter 保存 schema、稳定 id、类型、标题与 `level: book | volume`；Markdown 正文完全自由。
+- 大纲没有父级。卷纲必须通过 `novel.parent` 指向大纲。继续嵌套、跨类型父级、父级缺失与循环关系都会失败关闭。
+- `planning.chapter-outline` 是自由 Markdown，其 `novel.parent` 必须指向一个 `manuscript.chapter`。每章最多只能拥有一个章纲。
+- 情绪目标、场面钥匙、钩子分布、15/35/35/15 节奏和起承转合只是工作台提供的可选引导。它们不是持久化字段，也不是校验要求。
+- 人类保存可以修改标题和完整正文。冻结选区复用精确 UTF-16 文本范围 selector，并通过 quote hash 绑定到一个已保留 Revision。
+- 两种类型都通过 ChangeSet 接受一个精确 `replace-text` 操作。类型定义会在物化前校验 offset 与 quote hash，并保留身份、父级和无关 Frontmatter。
+- Client contribution 把两种类型渲染为不受模板限制的写作表面，并展示精确文本 Diff。共享 Explorer 提供两层大纲导航；正文 Canvas 提供章节本地章纲侧栏。
 
-```yaml
+```markdown
+---
 novel:
   schema: 1
   id: outline-main
   type: planning.outline
-  title: Main Outline
-nodes:
-  - id: act-one
-    title: Act One
-    summary: The protagonist reaches White Harbor.
-    children:
-      - id: opening
-        title: Opening
-        goal: Establish the rain-soaked harbor.
-        children: []
+  title: 全书大纲
+  level: book
+---
+
+# 作者喜欢的任何结构
+
+可以写散文、列表、标题、表格，或者作者自己的方法。
+```
+
+```markdown
+---
+novel:
+  schema: 1
+  id: volume-one
+  type: planning.outline
+  title: 第一卷卷纲
+  level: volume
+  parent: outline-main
+---
+
+本卷逐步升级白港谜案，最终以灯塔熄灭收束。
+```
+
+```markdown
+---
+novel:
+  schema: 1
+  id: chapter-one-plan
+  type: planning.chapter-outline
+  title: 第一章章纲
+  parent: chapter-one
+---
+
+本章只写雨夜抵达，以无人应答的敲门声收尾。
 ```
 
 ## 模型体验
 
-### 结构化大纲上下文与操作
+### 自由策划上下文与操作
 
-#### 模型看到的内容
+#### 模型看到什么
 
-`novel_get` 为完整大纲或一个选中节点返回确定性 JSON。稳定 Novel 工具保持不变；类型专属说明会描述精确 `update-outline-node` 形状与限制。
+`novel_list` 暴露两种类型的创建契约与规范精确 Revision 引用。`novel_create` 可以创建大纲、卷纲或绑定章节的章纲；`novel_get` 返回精确自由正文；`novel_propose_changes` 创建可审阅的精确文本替换，而不会直接应用。
 
 #### Token 影响
 
-安装该类型不会增加工具 Schema。只有模型读取大纲或收到精确大纲节点引用时才会增加 token。
+安装这些类型不会增加类型专属工具 Schema。稳定 Novel 工具只在目录/读取结果中增加类型创建和提案说明；只有读取或注入引用时，作者正文才进入 token。
 
 #### KV Cache 影响
 
-切换活动节点或大纲编辑器不会改变工具目录或 system prompt 前缀，只有请求局部的引用内容变化。
+在大纲、卷纲和章纲表面之间切换不会改变工具目录或 system prompt 前缀，只有请求局部的 Asset 引用与正文变化。
 
-## 已知限制与暂缓事项
+## 已知限制与延期工作
 
-- **仅字段更新**：节点创建、删除、排序、移动父级、批量编辑与结构 Diff 均暂缓。
-- **尚未链接正文节点**：章节引用、Scene/Beat 对象、关系索引与跨 Asset 校验均暂缓。
-- **尚无其他规划视图**：卡片、表格、时间线与拖拽未来都应是同一类型化值的投影视图。
-- **面向 YAML 源文件**：往返保存保留语义内容和无关顶层值，但节点局部注释与手工格式可能变化。
+- **基础 Markdown 编辑**：富 Markdown 装饰、Block、评论和作为可复用 Asset 管理的模板尚未实现。
+- **单次精确替换**：多范围提案、自动 rebase 和结构合并尚未实现。
+- **只约束两层大纲**：幕、阶段或自定义层级暂时应写在自由 Markdown 内，等出现有证据的语义需求再升级。
+- **每章一个章纲**：备选方案与分支章纲尚未实现。
+- **没有搜索索引**：目前可通过目录与精确引用发现策划 Asset；全文搜索和关系搜索尚未实现。

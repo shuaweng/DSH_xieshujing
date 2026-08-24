@@ -59,17 +59,19 @@ describe('Novel Studio real composition', () => {
       '---',
       '白港下雨。',
     ].join('\n'))
-    await writeFile(join(projectRoot, 'planning', 'main-outline.yaml'), [
+    await writeFile(join(projectRoot, 'planning', 'main-outline.md'), [
+      '---',
       'novel:',
       '  schema: 1',
       '  id: outline-loader',
       '  type: planning.outline',
       '  title: Main Outline',
-      'nodes:',
-      '  - id: node-loader',
-      '    title: Opening',
-      '    summary: The harbor goes dark.',
-      '    children: []',
+      '  level: book',
+      '---',
+      '',
+      '# Opening',
+      '',
+      'The harbor goes dark.',
       '',
     ].join('\n'))
     const configPath = join(root, 'cordis.yml')

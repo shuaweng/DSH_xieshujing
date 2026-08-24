@@ -8,19 +8,24 @@ import type {} from '@deepseek-ai/dsh-experimental-novel-repository-client/clien
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { AssetId, ChangeSetId } from '@deepseek-ai/dsh-experimental-novel-repository/types'
-import type { ILayout } from '@deepseek-ai/dsh-client-ui-layout/client'
+import type { CreateNovelAssetRequest } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-agent-preset/client'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
-import { NovelFrame } from './NovelFrame.tsx'
 import { Explorer, type ExplorerInjected } from './Explorer.tsx'
 import { Canvas, type CanvasInjected } from './Canvas.tsx'
 import { ChangeSetCard, type ChangeSetInjected, type NovelChangeReview } from './ChangeSetCard.tsx'
+import { CreatedAssetCard, type CreatedAssetInjected } from './CreatedAssetCard.tsx'
+import { NovelPresentationCard, type NovelPresentationInjected } from './NovelPresentationCard.tsx'
+import { WorkbenchToggle, type WorkbenchToggleInjected } from './WorkbenchToggle.tsx'
+import { NovelFrame, type NovelFrameInjected } from './NovelFrame.tsx'
 import {
   manuscriptChapterRenderer,
   NovelAssetRendererRegistry,
 } from './renderers.tsx'
-import {
-  createNovelFrameStore, createNovelWorkbenchStore, type NovelFramePanelActions,
-} from './store.ts'
+import { createNovelWorkbenchStore } from './store.ts'
+import { NovelWorkbenchViewController } from './view-controller.ts'
+import { NOVEL_WORKBENCH_ID, NOVEL_WORKBENCH_PRESET } from './constants.ts'
 import { en, NS, zh, type NovelWorkbenchKey } from './locales.ts'
 
 const NOVEL_SELECTION_REFERENCE_SOURCE = 'novel-selection'
@@ -52,7 +57,8 @@ export {
 } from './renderers.tsx'
 
 export const inject = [
-  'slots', 'sessions', 'remote', 'remote.novelRepository', 'theme', 'locale', 'inputTriggers',
+  'slots', 'sessions', 'remote', 'remote.novelRepository', 'theme', 'locale', 'inputTriggers', 'layout',
+  'agentPresetSelection',
 ]
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -75,23 +81,17 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   }
 }
 
-class NovelLayout implements ILayout {
-  private panels?: NovelFramePanelActions
-
-  attach(panels: NovelFramePanelActions): void { this.panels = panels }
-  toggleSidebar(): void { this.panels?.toggleSidebar() }
-  openDetails(): void { this.panels?.openDetails() }
-  closeDetails(): void { this.panels?.closeDetails() }
+function selectNovelWorkbench({ id }: { id: string }): { id: 'novel' } | null {
+  return id === NOVEL_WORKBENCH_ID ? { id: NOVEL_WORKBENCH_ID } : null
 }
 
-/** Mount one root workbench while retaining the shipped conversation surface. */
+/** Contribute the preset-scoped Novel surface to the shipped DSH shell. */
 export function apply(ctx: Context): void {
   const remote = ctx.remote.novelRepository
   const store = createNovelWorkbenchStore()
-  const frameStore = createNovelFrameStore()
+  const workbench = new NovelWorkbenchViewController()
   const refreshListeners = new Set<() => void>()
   const refreshWorkbench = (): void => { for (const listener of refreshListeners) listener() }
-  const layout = new NovelLayout()
   const renderers = new NovelAssetRendererRegistry(ctx)
   renderers.register(manuscriptChapterRenderer)
   ctx.effect(
@@ -99,25 +99,35 @@ export function apply(ctx: Context): void {
     'novel-workbench: exact SelectionRef serializer',
   )
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'novel-workbench: dictionaries')
-  ctx.effect(() => ctx.reflect.provide('layout', layout), 'novel-workbench: layout service')
-
-  ctx.slots.register({
-    name: 'root',
+  ctx.slots.inject('shell.workbench', () => ctx.slots.register({
+    name: 'shell.workbench',
+    select: selectNovelWorkbench,
     locale: NS,
-    store: frameStore,
-    inject: (actions: NovelFramePanelActions) => {
-      layout.attach(actions)
-      return {}
-    },
+    inject: (): NovelFrameInjected => ({
+      workbench,
+      setAgentWidth: (width) => { ctx.layout.setWorkbenchAgentWidth(width) },
+    }),
     children: {
-      'sidebar': { kind: 'single', scope: 'root' },
       'novel.explorer': { kind: 'single', scope: 'root' },
       'novel.canvas': { kind: 'single', scope: 'root' },
-      'conversation': { kind: 'single', scope: 'session-maybe' },
-      'details': { kind: 'single', scope: 'session' },
-      'shell.overlay': { kind: 'list', scope: 'root' },
     },
-  }, NovelFrame)
+  }, NovelFrame))
+
+  ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+    name: 'conversation.input.left',
+    id: 'novel-workbench-toggle',
+    order: -20,
+    locale: NS,
+    inject: (): WorkbenchToggleInjected => ({
+      hooks: {
+        workbench: ctx.layout.workbench,
+        agentPresetSelection: ctx.agentPresetSelection,
+      },
+      toggleWorkbench: () => {
+        ctx.layout.toggleWorkbench(NOVEL_WORKBENCH_ID, NOVEL_WORKBENCH_PRESET)
+      },
+    }),
+  }, WorkbenchToggle))
 
   ctx.slots.register({
     name: 'novel.explorer',
@@ -136,6 +146,10 @@ export function apply(ctx: Context): void {
         remote.asset(sessionId, assetId as AssetId, null),
         'open Novel Asset',
       ),
+      create: async (sessionId, request: CreateNovelAssetRequest) => await unwrapRemote(
+        remote.createAsset(sessionId, request),
+        'create Novel Asset',
+      ),
       onRefresh: (listener) => {
         refreshListeners.add(listener)
         return () => { refreshListeners.delete(listener) }
@@ -149,6 +163,14 @@ export function apply(ctx: Context): void {
     store,
     inject: (): CanvasInjected => ({
       renderers,
+      open: async (sessionId, assetId) => await unwrapRemote(
+        remote.asset(sessionId, assetId as AssetId, null),
+        'open Novel Asset',
+      ),
+      create: async (sessionId, request) => await unwrapRemote(
+        remote.createAsset(sessionId, request),
+        'create Novel Asset',
+      ),
       save: async (sessionId, request) => await unwrapRemote(remote.saveAsset(sessionId, request), 'save Novel Asset'),
       capture: async (sessionId, request) => await unwrapRemote(
         remote.captureSelection(sessionId, request),
@@ -214,6 +236,23 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: (_sessionId: SessionId): ChangeSetInjected => reviewActions(),
   }, ChangeSetCard))
+  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+    name: 'tool.call.toolview',
+    key: 'novel_create',
+    locale: NS,
+    inject: (): CreatedAssetInjected => ({ refreshWorkbench }),
+  }, CreatedAssetCard))
+  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+    name: 'tool.call.toolview',
+    key: 'novel_present',
+    locale: NS,
+    inject: (): NovelPresentationInjected => ({
+      present: (intent) => {
+        if (intent === 'open-workbench') ctx.layout.openWorkbench(NOVEL_WORKBENCH_ID, NOVEL_WORKBENCH_PRESET)
+        else ctx.layout.closeWorkbench()
+      },
+    }),
+  }, NovelPresentationCard))
 
   ctx.effect(() => {
     const appliedTokens = new Set<string>()

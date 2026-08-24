@@ -4,17 +4,17 @@
 
 ## 用途
 
-这个实验性 Host Consumer 提供 Novel Project 发现，以及有边界的类型化 Asset 目录、读取、版本保护保存、选区和审阅方法，同时避免把传输行为加入提供方无关的 Repository Service Definition。
+这个实验性 Host Consumer 提供 Novel Project 发现，以及有边界的类型化 Asset 目录、创建、读取、版本保护保存、选区和审阅方法，同时避免把传输行为加入提供方无关的 Repository Service Definition。
 
 ## 行为
 
 - `NovelRepositoryRemote` 使用 Host service key `novelRepositoryRemote` 注册，消费 `ctx.novelRepository`、`ctx.fs` 与 `ctx.sandboxPolicy`，并导出 wire namespace `novelRepository`。
 - `novelRepository/discover` 解析被寻址 Agent Session 的工作目录，将校验委托给当前 Novel Repository 提供方，并且只在提供方找不到 `novel.yaml` 时返回 `undefined`。
 - `NovelProjectDescriptor` 包含稳定项目 id、schema、标题与显示路径。它不会向浏览器暴露文件系统 target key 或可变的提供方对象。
-- `assets`、`asset` 和 `saveAsset` 只投影浏览器安全的 id、元数据和无损 JSON Asset 内容。`captureSelection` 携带类型定义的 JSON selector，并返回包含规范 `dsh-novel:` 引用的可读 Markdown mention。
+- `assets`、`createAsset`、`asset` 和 `saveAsset` 只投影浏览器安全的 id、语义父级 id、元数据和无损 JSON Asset 内容。浏览器创建只提交类型、标题、父级与内容，身份和路径由 Repository 拥有。`captureSelection` 携带类型定义的 JSON selector，并返回包含规范 `dsh-novel:` 引用的可读 Markdown mention。
 - Asset 类型、内容、selector 和 operation 通过 Remote 以有边界的 JSON 信封传输。Host 与 Client 注册表拥有其精确语义，因此增加类型不需要扩展生成的 Remote 方法清单；不兼容或非 JSON 的值会显式失败。
 - `changeSet`、`applyChangeSet` 和 `rejectChangeSet` 暴露浏览器审阅。应用和拒绝把被寻址 Agent Session id 作为显式授权，并返回持久终态或冲突状态。
-- 资产目录、当前 head 读取、保存与应用都会解析被寻址 Agent Session 的 sandbox policy，并把它传入 Repository 协调流程。这样外部 Session 工作区可写，同时不会放宽部署 fallback 根目录。
+- 资产目录、创建、当前 head 读取、保存与应用都会解析被寻址 Agent Session 的 sandbox policy，并把它传入 Repository 协调流程。这样外部 Session 工作区可写，同时不会放宽部署 fallback 根目录。
 - `responseMaxBytes` 默认是 8 MiB，对所有非发现 JSON 完整响应设置边界；超出预算时明确失败，不截断也不静默漏掉数据。
 - 现有 Gateway 身份策略负责解析被寻址的 Agent；本包不增加授权机制。`descriptorMaxBytes` 限制以 UTF-8 编码的完整 descriptor JSON，默认值为 256 KiB，且不能超过运行时最大字符串长度。
 - 生成的 `./remote` contribution 对浏览器安全，由独立的 `@deepseek-ai/dsh-experimental-novel-repository-client` 包负责挂载；这个 Host 包不会进入 Client 编译 aggregate。

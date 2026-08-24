@@ -1141,6 +1141,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'current typed Asset rows in deterministic project-path order.',
       },
       {
+        signature: 'abstract createAsset( project: NovelProjectSnapshot, request: CreateAssetRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>',
+        description: 'Create one new typed authored Asset at a provider-owned safe path.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'semantic type, title, optional parent, typed content, and actor.' }, { name: 'signal', description: 'optional cancellation before filesystem publication.' }, { name: 'sandboxPolicy', description: 'optional per-call policy governing file creation.' }],
+        returns: 'the committed initial Revision of the new Asset.',
+      },
+      {
         signature: 'abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>',
         description: 'Read either the reconciled current head or one retained immutable Revision.',
         parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'assetId', description: 'stable authored asset identity.' }, { name: 'revisionId', description: 'exact retained Revision; omission reconciles and returns the current file head.' }, { name: 'signal', description: 'optional cancellation for filesystem and history work.' }, { name: 'sandboxPolicy', description: 'optional per-call write policy used if current-head reconciliation must recover an apply journal.' }],
@@ -1203,6 +1209,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'List the reconciled Asset catalog for the addressed Session project.',
         parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'browser-safe current Asset descriptors.',
+      },
+      {
+        signature: '@Remote(\'createAsset\') async createAsset( agent: Agent, request: CreateNovelAssetRequest, signal: AbortSignal, ): Promise<NovelAssetDocument>',
+        description: 'Create one new typed Asset below its registered project content root.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root and write policy.' }, { name: 'request', description: 'semantic type, title, optional parent, and typed content.' }, { name: 'signal', description: 'caller cancellation before publication.' }],
+        returns: 'the browser-safe initial Revision.',
       },
       {
         signature: '@Remote(\'asset\') async asset( agent: Agent, assetId: AssetId, revisionId: RevisionId | null, signal: AbortSignal, ): Promise<NovelAssetDocument>',
@@ -3116,7 +3128,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Asset',
-    declaration: 'export interface Asset {\n    readonly id: AssetId;\n    readonly projectId: ProjectId;\n    readonly type: NovelAssetType;\n    readonly projectRelativePath: string;\n}',
+    declaration: 'export interface Asset {\n    readonly id: AssetId;\n    readonly projectId: ProjectId;\n    readonly type: NovelAssetType;\n    readonly parentId?: AssetId;\n    readonly projectRelativePath: string;\n}',
   },
   {
     name: 'AssetId',
@@ -3407,12 +3419,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface CreateAgentOptions {\n    readonly sessionId: SessionId;\n    readonly meta?: {\n        readonly cwd?: string;\n        readonly parentSession?: SessionId;\n        readonly seedLength?: number;\n        readonly origin?: \'subagent\';\n        readonly delegationDepth?: number;\n        readonly agentPreset?: string;\n    };\n    readonly seed?: readonly SessionEvent[];\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
   },
   {
+    name: 'CreateAssetRequest',
+    declaration: 'export interface CreateAssetRequest {\n    readonly type: NovelAssetType;\n    readonly title: string;\n    readonly parentId?: AssetId;\n    readonly content: NovelAssetContent;\n    readonly actor: {\n        readonly kind: \'agent\';\n        readonly sessionId: SessionId;\n    } | {\n        readonly kind: \'user\';\n        readonly sessionId?: SessionId;\n    };\n}',
+  },
+  {
     name: 'CreateGoalRequest',
     declaration: 'export interface CreateGoalRequest {\n    readonly objective: string;\n    readonly maxGoalRounds?: number;\n}',
   },
   {
     name: 'CreateGoalResult',
     declaration: 'export interface CreateGoalResult {\n    readonly ref: GoalRef;\n}',
+  },
+  {
+    name: 'CreateNovelAssetRequest',
+    declaration: 'export interface CreateNovelAssetRequest {\n    readonly type: string;\n    readonly title: string;\n    readonly parentId?: AssetId;\n    readonly content: NovelWireValue;\n}',
   },
   {
     name: 'CreateSessionOptions',
@@ -4028,7 +4048,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'NovelAssetDescriptor',
-    declaration: 'export interface NovelAssetDescriptor {\n    readonly id: AssetId;\n    readonly projectId: ProjectId;\n    readonly type: string;\n    readonly projectRelativePath: string;\n    readonly revisionId: RevisionId;\n    readonly contentHash: string;\n    readonly title: string;\n}',
+    declaration: 'export interface NovelAssetDescriptor {\n    readonly id: AssetId;\n    readonly projectId: ProjectId;\n    readonly type: string;\n    readonly parentId?: AssetId;\n    readonly projectRelativePath: string;\n    readonly revisionId: RevisionId;\n    readonly contentHash: string;\n    readonly title: string;\n}',
   },
   {
     name: 'NovelAssetDocument',
@@ -4044,7 +4064,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'NovelAssetTypeDefinition',
-    declaration: 'export interface NovelAssetTypeDefinition {\n    readonly type: NovelAssetType;\n    readonly contentRoot: string;\n    readonly requiredContentRoot?: boolean;\n    readonly extensions: readonly string[];\n    readonly model: {\n        readonly description: string;\n        readonly proposalInstructions: string;\n    };\n    parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset;\n    serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent, title?: string): NovelAssetMaterialization;\n    captureSelection(snapshot: AssetSnapshot, input: NovelSelectionInput, options: NovelSelectionCaptureOptions): CapturedNovelSelection;\n    modelText(snapshot: AssetSnapshot, selector?: NovelSelector): string;\n    prepareOperations(snapshot: AssetSnapshot, input: unknown): readonly NovelOperation[];\n    decodeOperations(value: unknown): readonly NovelOperation[];\n    materializeOperations(snapshot: AssetSnapshot, operations: readonly NovelOperation[]): NovelAssetMaterialization;\n}',
+    declaration: 'export interface NovelAssetTypeDefinition {\n    readonly type: NovelAssetType;\n    readonly contentRoot: string;\n    readonly requiredContentRoot?: boolean;\n    readonly extensions: readonly string[];\n    readonly model: {\n        readonly description: string;\n        readonly creationInstructions?: string;\n        readonly proposalInstructions: string;\n    };\n    readonly parent?: {\n        readonly allowedTypes: readonly NovelAssetType[];\n        readonly required?: boolean;\n        readonly singleton?: boolean;\n        readonly maxDepth?: number;\n    };\n    parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset;\n    create?(request: Pick<CreateAssetRequest, \'title\' | \'parentId\' | \'content\'> & {\n        readonly id: AssetId;\n    }, projectRelativePath: string): NovelAssetMaterialization;\n    serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent, title?: string): NovelAssetMaterialization;\n    captureSelection(snapshot: AssetSnapshot, input: NovelSelectionInput, options: NovelSelectionCaptureOptions): CapturedNovelSelection;\n    modelText(snapshot: AssetSnapshot, selector?: NovelSelector): string;\n    prepareOperations(snapshot: AssetSnapshot, input: unknown): readonly NovelOperation[];\n    decodeOperations(value: unknown): readonly NovelOperation[];\n    materializeOperations(snapshot: AssetSnapshot, operations: readonly NovelOperation[]): NovelAssetMaterialization;\n}',
   },
   {
     name: 'NovelAssetTypeMap',
@@ -4104,7 +4124,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ParsedNovelAsset',
-    declaration: 'export interface ParsedNovelAsset {\n    readonly id: AssetId;\n    readonly type: NovelAssetType;\n    readonly title: string;\n    readonly frontmatter: Readonly<Record<string, unknown>>;\n    readonly content: NovelAssetContent;\n    readonly source: unknown;\n}',
+    declaration: 'export interface ParsedNovelAsset {\n    readonly id: AssetId;\n    readonly type: NovelAssetType;\n    readonly parentId?: AssetId;\n    readonly title: string;\n    readonly frontmatter: Readonly<Record<string, unknown>>;\n    readonly content: NovelAssetContent;\n    readonly source: unknown;\n}',
   },
   {
     name: 'PermissionSelect',

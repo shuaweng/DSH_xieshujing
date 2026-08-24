@@ -20,7 +20,7 @@ Current author content remains authoritative in the project files. `.novel/histo
 
 The existing `novel` Agent Preset remains a session-scoped writing capability and a source of persona and skill behavior. It does not own the workbench domain. The MVP adds a separate package-owned `novel-workbench` Preset that consumes Novel tools and omits raw mutation tools for formal asset roots; research and development Presets may retain generic filesystem and shell tools without gaining authority to commit Novel ChangeSets.
 
-PR1, PR2, the PR3 MVP, the PR4 asset type kernel, and the PR5 outline slice described below are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
+PR1, PR2, the PR3 MVP, the PR4 asset type kernel, the PR5 registry proof, and the freeform planning slice are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
 
 This proposal extends the existing Profile, filesystem, Session-history, Remote, and client-presentation decisions. It supersedes none of them.
 
@@ -60,17 +60,19 @@ Each Host definition declares its Frontmatter type, accepted content root and ex
 
 The browser Remote exposes one bounded, lossless JSON envelope for Asset content, save requests, selectors, and ChangeSet operations. Host and Client registries own exact type semantics, so the generated Remote method set does not widen when a type is added. The root workbench selects a renderer by the document's declared type and keeps save, Context Commit Barrier, Agent mention insertion, and review authorization in the shared canvas. The initial `manuscript.chapter` Host definition and Client renderer preserve the PR3 text editor, UTF-16 selection, and `replace-text` behavior. A later asset package can add a Host definition and Client renderer without editing the local Repository, generic Novel tools, Remote gateway, or root workbench layout.
 
-PR4 does not add another authored asset type. `planning.outline` is the first intended proof that the registration API supports a structured content value, node selection, typed operations, and a non-text Diff without widening the shared services.
+PR4 does not add another authored asset type. The first `planning.outline` implementation proved that the registration API could add a second parser, selector, operation, model projection, editor, and Diff without widening the shared services. Product testing later replaced that fixed payload while retaining the same registry seam.
 
-## PR5 structured outline slice
+## PR5 outline registry proof and current freeform planning slice
 
-PR5 adds `planning.outline` as the second authored Asset through an independent Host-and-Client type package. The package registers with the PR4 registries; the local Repository, Remote methods, context resolver, model tools, shared canvas, and root workbench gain no outline-specific branches. The explicit Novel Studio bundle loads the Host contribution before the local provider and the Client contribution after the workbench renderer service exists. Default `web` and `headless` compositions remain unchanged.
+The freeform planning decision [supersedes the fixed outline payload and field editor](../feature/2026-08-23-freeform-outline-and-chapter-plan-assets.md). The earlier strict YAML tree remains relevant only as evidence that the registry seam worked; it is not a supported current on-disk format.
 
-An outline is one strict UTF-8 YAML file below the optional `planning` content root. Its root contains the same version-one `novel` identity mapping used by Markdown Frontmatter plus a `nodes` sequence. Every node has one stable, asset-local unique `id`, a non-empty `title`, optional `summary`, `goal`, `conflict`, and `turn` strings, and an ordered `children` sequence of nodes. Version one rejects aliases, duplicate keys, duplicate node ids, unsupported fields, control characters, excessive depth or node count, and malformed or oversized authored values. The file remains authoritative. Saving replaces only the validated `novel.title` and `nodes` values in the parsed YAML document, so unrelated top-level authored metadata and comments remain outside the typed outline content; comments inside a replaced `nodes` subtree are not a version-one round-trip guarantee.
+The independent Host-and-Client planning package now registers two freeform Markdown types with the PR4 registries: `planning.outline` and `planning.chapter-outline`. The local Repository, Remote methods, context resolver, model tools, and shared canvas remain type-generic. The Explorer contributes product-specific navigation for book and volume outlines, while the manuscript renderer opens its chapter outline in a right-side drawer. The explicit Novel Studio bundle loads the Host contribution before the local provider and the Client contribution after the workbench renderer service exists. Default `web` and `headless` compositions remain unchanged.
 
-The first outline selector is `{ kind: 'outline-node', nodeId, nodeHash }`. Browser input supplies only the node id; the Host freezes a canonical SHA-256 hash of that node from the retained Revision. The first operation is `update-outline-node`: the model supplies `nodeId` plus a non-empty `changes` mapping over `title`, `summary`, `goal`, `conflict`, and `turn`; the Host binds the durable operation to the exact node hash. Optional fields use explicit `null` to clear a value. The operation cannot change node identity, reorder the tree, create or delete nodes, or edit children. Apply fails closed unless the node id and hash still match the retained base Revision.
+A `planning.outline` Asset has a freeform Markdown body and only one structural discriminator, `novel.level`. A book outline has `level: book` and no parent; a volume outline has `level: volume` and one book-outline parent. The Repository validates that semantic relationship and rejects deeper nesting or cycles, but headings, prose, lists, tables, beat notation, and custom conventions inside the body remain author-defined. `planning.chapter-outline` is another freeform Markdown Asset with exactly one `manuscript.chapter` parent and singleton cardinality per chapter. Optional chapter-planning methods are inserted as editable starter text, never required fields.
 
-The model projection is deterministic JSON containing the complete typed outline, or the selected node subtree for a node reference. The Client renderer presents the tree and a field editor over the same typed value, captures one active node as a semantic selection, and renders a field-level before/after Diff for the typed operation. Human edits still use the shared guarded full-Asset save and Agent edits still use the shared proposal-only ChangeSet path. PR5 does not add Asset creation UI, node insertion/deletion/reordering, outline-to-manuscript links, or multi-node operations.
+Both planning types reuse Revision-bound UTF-16 text-range selections and the exact `replace-text` ChangeSet operation. The Host freezes the quote hash against the retained body; apply fails closed when the base Revision or selected bytes no longer match. Human full-body saves remain guarded by the current Revision and filesystem version.
+
+The type definition also owns creation serialization. `novel_create` accepts the semantic type, title, optional parent id, and typed freeform content; the Repository mints identity and a safe path, validates hierarchy and singleton rules, publishes only with `createIfAbsent`, and records the resulting Revision. `novel_get` reads exact retained bodies, and `novel_propose_changes` remains proposal-only for edits to existing planning Assets.
 
 ## PR4 workbench presentation slice
 
@@ -96,7 +98,7 @@ Reader presentation is an optional Client renderer capability, not a `manuscript
 | Data | Authority | Derived or cached form | Recovery rule |
 | --- | --- | --- | --- |
 | Project identity, format version, content roots | `novel.yaml` | Workspace detection result | Re-read the file; malformed configuration fails loud |
-| Current typed Asset content and authored metadata | Asset Markdown/YAML file and Frontmatter | Parsed `AssetSnapshot` | Re-read exact bytes; never reconstruct current authored content from an index |
+| Current typed Asset content and authored metadata | Asset file and Frontmatter | Parsed `AssetSnapshot` | Re-read exact bytes; never reconstruct current authored content from an index |
 | Asset path lookup and type catalog | Project scan | In-memory catalog; future `.novel/index.sqlite` | Delete and rebuild; duplicate ids block mutation |
 | Immutable Revision history | `.novel/history.sqlite` | Read cache | Migrate explicitly or refuse read-write open; never reset automatically |
 | ChangeSet and apply authorization | `.novel/history.sqlite` | Tool result metadata and browser cache | Refetch by `ChangeSetId`; replay state transitions idempotently |
@@ -272,8 +274,8 @@ Session-aware Remote Consumers resolve `ctx.sandboxPolicy` with the addressed Ag
 
 ## Deferred work
 
-- Additional asset types beyond the shipped chapter and outline, including characters, ideas, scenes, timelines, relations, and view definitions.
-- Outline creation UI, node insertion/deletion/reordering, outline-to-manuscript links, custom node fields, and multi-node ChangeSets.
+- Additional asset types beyond the shipped chapter, freeform book/volume outline, and chapter outline, including characters, ideas, scenes, timelines, relations, and view definitions.
+- Outline-to-manuscript derivation beyond the explicit chapter parent, optional structured planning types, and multi-asset ChangeSets.
 - A persistent disposable search index, full-text search, semantic search, inferred mentions, and reverse relations. `novel_list` is only bounded catalog discovery and does not satisfy these search capabilities.
 - File watching, remote filesystem parity, multiple concurrent Host writers, collaboration, and CRDT positions.
 - Persistent block ids, fuzzy relocation, three-way merge, multi-asset ChangeSets, branches, and cross-project references.
@@ -309,8 +311,8 @@ The generic [Domain KV storage proposal](2026-07-24-domain-kv-storage-and-worksp
 
 - A proposed implementation has a complete `ctx.novelRepository` capability seam with independently testable Service Definition, local Service Provider, and Consumers; every registration disposes cleanly under HMR and plugin unload.
 - Real profile composition tests prove `web` and `headless` load no Novel Repository, Remote, workbench UI, or Novel tools, while `novel-studio` loads the intended exact roster without replacing the existing session-scoped Preset contract.
-- A project scan identifies `manuscript.chapter` Markdown and `planning.outline` YAML through their exact declarations, preserves identity across rename, rejects duplicate ids and escaped paths, reports malformed declarations without rewriting them, and rebuilds every derived catalog value from files.
-- Outline tests cover stable unique node ids, depth and count bounds, exact node-hash selection, deterministic full and selected-node model projections, guarded human field saves, typed Agent proposals, field Diff rendering, stale-node refusal, and preservation of unrelated top-level YAML metadata.
+- A project scan identifies `manuscript.chapter`, `planning.outline`, and `planning.chapter-outline` Markdown through their exact declarations, preserves identity across rename, rejects duplicate ids, invalid parent relationships, cycles, cardinality violations, and escaped paths, reports malformed declarations without rewriting them, and rebuilds every derived catalog value from files.
+- Planning tests cover freeform Markdown round-trips, the exact two-level book/volume hierarchy, one chapter outline per manuscript parent, Revision-bound UTF-16 selection, deterministic model projection, guarded human saves, typed Agent creation and proposals, text Diff rendering, and stale-selection refusal without method-specific fields.
 - Revision tests prove exact UTF-8 snapshot retention, parent continuity, content-hash equality, explicit schema migration or refusal, and no automatic reset of `.novel/history.sqlite`.
 - Selection tests cover Chinese text, emoji, CRLF input, surrogate-pair boundaries, dirty-draft flush, old-Revision display, quote-hash mismatch, and fail-closed stale application without fuzzy relocation.
 - Context tests prove canonical refs resolve only retained immutable Revisions, cross-project and oversized context fail before a model call, exact safely serialized content appears in `user/message`, and replay, resume, fork, and compaction never reread mutable latest files.

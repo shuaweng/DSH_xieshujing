@@ -1,27 +1,26 @@
 /**
- * Three-column shell frame, registered into the built-in 'root' slot (the web
- * shell renders only 'root'). Owns the grid tracks (sidebar | center |
- * details), the drag handles (pointer capture + rAF throttle), the concession
- * chain (columns.ts), and the child-slot render decisions: the sidebar slot
- * renders HERE with live parameters from the concession solve, and the
- * session-aware occupants render in fixed column positions; strict entries
- * gate themselves on current-session availability while session-maybe
- * entries retain identity. Pure component: everything arrives
- * through the three framework shares — zero cordis or framework imports,
- * zero self-made hooks.
+ * Shell frame registered into the built-in `root` slot. In ordinary mode it
+ * owns the shipped sidebar | conversation | details grid and its drag/
+ * concession behavior. When `ctx.layout` selects a domain workbench it keeps
+ * the sidebar, seats conversation in the Agent column, and renders the elected
+ * `shell.workbench` surface as the primary canvas. Pure component: everything
+ * arrives through framework shares — zero Cordis access or self-made hooks.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
+import type { LayoutRootInjected } from './index.ts'
+import type { InjectFace } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './AppFrame.module.css'
 
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay'>
+  & PropsRenderSlots<'sidebar' | 'conversation' | 'details' | 'shell.overlay' | 'shell.workbench'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
+  & InjectFace<LayoutRootInjected>
 
 /** Center column grid item (session-body building block). */
 function CenterColumn(props: { children?: ReactNode }) {
@@ -83,20 +82,42 @@ function DragHandle(props: { side: 'sidebar' | 'details'; left: number; onStart:
   )
 }
 
-/** The three-column frame (see module doc). */
+/** The ordinary/workbench shell frame (see module doc). */
 export function AppFrame({
   useStore,
   useSessions,
   actions,
   renderSlot,
+  renderSlotChain,
+  useWorkbench,
+  closeWorkbench,
 }: AppFrameProps) {
   const panels = useStore(s => s)
-  const detailsSession = useSessions((s) => {
+  const currentSession = useSessions((s) => {
     const current = s.current
-    return current !== undefined && s.byId[current]?.blank === false ? current : undefined
+    if (current === undefined) return undefined
+    const session = s.byId[current]
+    return session === undefined ? undefined : {
+      id: session.blank ? undefined : current,
+      agentPreset: session.agentPreset,
+    }
   })
+  const detailsSession = currentSession?.id
+  const workbench = useWorkbench(state => state)
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState(() => window.innerWidth)
+
+  // The separator previews this private CSS variable without notifying React
+  // on every pointermove. Normal state changes synchronize it before paint;
+  // an in-flight gesture owns it until the final width is committed.
+  useLayoutEffect(() => {
+    const frame = frameRef.current
+    if (frame === null) return
+    if (workbench.id === null) frame.style.removeProperty('--dsh-workbench-agent-width')
+    else if (!frame.hasAttribute('data-workbench-resizing')) {
+      frame.style.setProperty('--dsh-workbench-agent-width', `${workbench.agentWidth}px`)
+    }
+  }, [workbench.agentWidth, workbench.id])
 
   const lastSession = useRef(detailsSession)
   useLayoutEffect(() => {
@@ -106,6 +127,11 @@ export function AppFrame({
     }
     lastSession.current = detailsSession
   }, [actions, detailsSession])
+
+  useEffect(() => {
+    if (workbench.id === null) return
+    if (currentSession?.agentPreset !== workbench.agentPreset) closeWorkbench()
+  }, [closeWorkbench, currentSession?.agentPreset, workbench.agentPreset, workbench.id])
 
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.
   useEffect(() => {
@@ -139,7 +165,11 @@ export function AppFrame({
   const sidebarPreference = sidebarCollapsed
     ? 0
     : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
-  const cols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
+  const cols = computeColumns(
+    viewport,
+    sidebarPreference,
+    workbench.id === null && detailsSession !== undefined ? panels.details : 0,
+  )
   const colsRef = useRef(cols)
   colsRef.current = cols
 
@@ -165,9 +195,14 @@ export function AppFrame({
     <div
       ref={frameRef}
       className={css.frame}
-      style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` }}
+      style={{
+        gridTemplateColumns: workbench.id === null
+          ? `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px`
+          : `${cols.sidebar}px var(--dsh-workbench-agent-width) minmax(320px, 1fr)`,
+      }}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-details-collapsed={cols.details === 0 || undefined}
+      data-workbench={workbench.id ?? undefined}
       data-dragging={dragging || undefined}
     >
       <div className={css.sidebarCol}>
@@ -181,7 +216,7 @@ export function AppFrame({
           width: cols.sidebar,
         })}
       </div>
-      <>
+      {workbench.id === null ? <>
         {/* Both column occupants stay at fixed tree positions from first
             paint — no loading gate: a bare status line reads worse than
             the shell's own pending rendering. The conversation
@@ -189,13 +224,24 @@ export function AppFrame({
             empty while no session is current. */}
         <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
         <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
-      </>
+      </> : <>
+        <div className={css.workbenchAgentCol} data-details-open={panels.details > 0 || undefined}>
+          <CenterColumn>{renderSlot('conversation', {})}</CenterColumn>
+          <DetailsColumn>{renderSlot('details', {})}</DetailsColumn>
+        </div>
+        <div className={css.workbenchCol}>
+          {renderSlotChain('shell.workbench', {
+            id: workbench.id,
+            agentWidth: workbench.agentWidth,
+          })}
+        </div>
+      </>}
       <div className={css.overlayLayer} data-shell-overlay>
         {renderSlot('shell.overlay', {})}
       </div>
       {/* The collapsed rail is fixed-width: no resize handle while closed. */}
       {!sidebarCollapsed && <DragHandle side="sidebar" left={cols.sidebar} onStart={onSidebarStart} onDrag={onSidebarDrag} onEnd={onDragEnd} />}
-      {cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
+      {workbench.id === null && cols.details > 0 && <DragHandle side="details" left={viewport - cols.details} onStart={onDetailsStart} onDrag={onDetailsDrag} onEnd={onDragEnd} />}
     </div>
   )
 }

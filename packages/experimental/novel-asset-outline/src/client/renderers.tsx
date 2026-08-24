@@ -1,207 +1,120 @@
-/** Human editor and field-level Diff for structured outline Assets. */
+/** Freeform planning editors and exact text Diffs. */
 
-import { useEffect, useMemo, useState } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { NovelWireValue } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type {
   NovelAssetEditorProps,
   NovelAssetRendererDefinition,
 } from '@deepseek-ai/dsh-experimental-novel-workbench/client'
-import type { OutlineNode, OutlineNodeChanges, PlanningOutlineContent } from '../types.ts'
 import css from './outline.module.css'
 
 type OutlineTranslate = TranslateNS<'novel-asset-outline'>
-type EditableField = 'title' | 'summary' | 'goal' | 'conflict' | 'turn'
-const OPTIONAL_FIELDS = ['summary', 'goal', 'conflict', 'turn'] as const
 
-/** Create one localized exact-type renderer contribution. */
+/** Create the freeform book/volume outline renderer. */
 export function createPlanningOutlineRenderer(t: OutlineTranslate): NovelAssetRendererDefinition {
+  return freeformRenderer('planning.outline', t('outlineEditor'), outlineContent, t)
+}
+
+/** Create the freeform chapter-plan renderer used by proposal review and direct navigation. */
+export function createChapterOutlineRenderer(t: OutlineTranslate): NovelAssetRendererDefinition {
+  return freeformRenderer('planning.chapter-outline', t('chapterOutlineEditor'), chapterContent, t)
+}
+
+function freeformRenderer(
+  type: 'planning.outline' | 'planning.chapter-outline',
+  label: string,
+  decode: (value: NovelWireValue) => {
+    readonly body: string
+    readonly withBody: (body: string) => NovelWireValue
+  },
+  t: OutlineTranslate,
+): NovelAssetRendererDefinition {
   return {
-    type: 'planning.outline',
-    editorLabel: () => t('editor'),
+    type,
+    editorLabel: () => label,
     renderEditor(props) {
-      return <OutlineEditor {...props} t={t} />
+      const value = decode(props.content)
+      return <FreeformEditor {...props} body={value.body} contentOf={value.withBody} t={t} />
     },
     renderDiff(before, operations) {
-      const content = outlineContent(before)
-      const operation = outlineOperation(operations)
-      const node = findNode(content.nodes, operation.nodeId)
-      if (node === undefined) throw new Error('novel outline renderer: Diff target node is absent')
-      return <OutlineDiff node={node} changes={operation.changes} t={t} />
+      const body = decode(before).body
+      const operation = textOperation(operations)
+      return <div className={css.diff}>
+        <del aria-label={t('before')}>{body.slice(operation.start, operation.end)}</del>
+        <ins aria-label={t('after')}>{operation.replacement}</ins>
+      </div>
     },
     describeSelection(selector) {
-      if (!isRecord(selector) || selector['kind'] !== 'outline-node' || typeof selector['nodeId'] !== 'string') {
-        throw new Error('novel outline renderer: incompatible node selection')
+      if (!isRecord(selector) || selector['kind'] !== 'text-range'
+        || typeof selector['startUtf16'] !== 'number' || typeof selector['endUtf16'] !== 'number') {
+        throw new Error('novel planning renderer: incompatible text selection')
       }
-      return selector['nodeId']
+      return `${selector['startUtf16']}–${selector['endUtf16']}`
     },
   }
 }
 
-interface OutlineEditorProps extends NovelAssetEditorProps {
-  readonly t: OutlineTranslate
-}
-
-function OutlineEditor({ content, title, ariaLabel, onContentChange, onTitleChange, onSelectionChange, t }: OutlineEditorProps) {
-  const outline = outlineContent(content)
-  const firstId = outline.nodes[0]?.id
-  const [selectedId, setSelectedId] = useState<string | undefined>(firstId)
-  const selected = useMemo(() => selectedId === undefined ? undefined : findNode(outline.nodes, selectedId), [outline.nodes, selectedId])
-
-  useEffect(() => {
-    if (selected !== undefined || firstId === undefined) return
-    setSelectedId(firstId)
-    onSelectionChange({ kind: 'outline-node', nodeId: firstId })
-  }, [firstId, onSelectionChange, selected])
-
-  const choose = (nodeId: string) => {
-    setSelectedId(nodeId)
-    onSelectionChange({ kind: 'outline-node', nodeId })
-  }
-  const editNode = (field: EditableField, value: string) => {
-    if (selectedId === undefined) return
-    const next = updateNode(outline.nodes, selectedId, (node) => {
-      if (field === 'title') return { ...node, title: value }
-      const optional = value === '' ? undefined : value
-      return { ...node, [field]: optional }
-    })
-    onContentChange({ kind: 'outline', nodes: next } as unknown as NovelWireValue)
-  }
-
-  return (
-    <section className={css.shell} aria-label={ariaLabel}>
-      <header className={css.header}>
-        <label>
-          <span>{t('outlineTitle')}</span>
-          <input value={title} onChange={(event) => { onTitleChange(event.target.value) }} />
-        </label>
-      </header>
-      <div className={css.workspace}>
-        <nav className={css.tree} aria-label={t('tree')}>
-          {outline.nodes.length === 0
-            ? <p>{t('empty')}</p>
-            : <OutlineTree nodes={outline.nodes} selectedId={selectedId} choose={choose} />}
-        </nav>
-        <div className={css.inspector}>
-          {selected === undefined ? <p>{t('empty')}</p> : (
-            <>
-              <Field label={t('nodeTitle')} value={selected.title} onChange={(value) => { editNode('title', value) }} />
-              {OPTIONAL_FIELDS.map(field => (
-                <Field
-                  key={field}
-                  label={`${t(field)} · ${t('optional')}`}
-                  value={selected[field] ?? ''}
-                  multiline
-                  onChange={(value) => { editNode(field, value) }}
-                />
-              ))}
-            </>
-          )}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function OutlineTree({ nodes, selectedId, choose }: {
-  readonly nodes: readonly OutlineNode[]
-  readonly selectedId: string | undefined
-  readonly choose: (nodeId: string) => void
-}) {
-  return <ul>{nodes.map(node => (
-    <li key={node.id}>
-      <button type="button" aria-pressed={node.id === selectedId} onClick={() => { choose(node.id) }}>{node.title}</button>
-      {node.children.length > 0 && <OutlineTree nodes={node.children} selectedId={selectedId} choose={choose} />}
-    </li>
-  ))}</ul>
-}
-
-function Field({ label, value, multiline = false, onChange }: {
-  readonly label: string
-  readonly value: string
-  readonly multiline?: boolean
-  readonly onChange: (value: string) => void
-}) {
-  return <label className={css.field}>
-    <span>{label}</span>
-    {multiline
-      ? <textarea value={value} rows={3} onChange={(event) => { onChange(event.target.value) }} />
-      : <input value={value} onChange={(event) => { onChange(event.target.value) }} />}
-  </label>
-}
-
-function OutlineDiff({ node, changes, t }: {
-  readonly node: OutlineNode
-  readonly changes: OutlineNodeChanges
+function FreeformEditor({
+  body, title, ariaLabel, onContentChange, onTitleChange, onSelectionChange, contentOf, t,
+}: NovelAssetEditorProps & {
+  readonly body: string
+  readonly contentOf: (body: string) => NovelWireValue
   readonly t: OutlineTranslate
 }) {
-  return <div className={css.diff}>
-    <strong>{node.title}</strong>
-    {(['title', ...OPTIONAL_FIELDS] as const).filter(field => field in changes).map(field => (
-      <div key={field} className={css.diffRow}>
-        <span>{t(field === 'title' ? 'nodeTitle' : field)}</span>
-        <del aria-label={t('before')}>{node[field] ?? '—'}</del>
-        <ins aria-label={t('after')}>{changes[field] ?? '—'}</ins>
-      </div>
-    ))}
-  </div>
+  const editor = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    if (editor.current === null) return
+    editor.current.style.height = '0px'
+    editor.current.style.height = `${Math.max(620, editor.current.scrollHeight)}px`
+  }, [body])
+  return <section className={css.shell} aria-label={ariaLabel}>
+    <label className={css.titleField}>
+      <span>{t('outlineTitle')}</span>
+      <input value={title} onChange={(event) => { onTitleChange(event.target.value) }} />
+    </label>
+    <textarea
+      ref={editor}
+      className={css.editor}
+      aria-label={t('freeformBody')}
+      value={body}
+      placeholder={t('freeformPlaceholder')}
+      spellCheck
+      onChange={(event) => { onContentChange(contentOf(event.target.value)) }}
+      onSelect={(event) => {
+        const startUtf16 = event.currentTarget.selectionStart
+        const endUtf16 = event.currentTarget.selectionEnd
+        onSelectionChange(endUtf16 <= startUtf16 ? undefined : { kind: 'text-range', startUtf16, endUtf16 })
+      }}
+    />
+  </section>
 }
 
-function outlineContent(value: NovelWireValue): PlanningOutlineContent {
-  if (!isRecord(value) || value['kind'] !== 'outline' || !Array.isArray(value['nodes'])) {
-    throw new Error('novel outline renderer: incompatible content')
+function outlineContent(value: NovelWireValue): { body: string; withBody: (body: string) => NovelWireValue } {
+  if (!isRecord(value) || value['kind'] !== 'outline' || (value['level'] !== 'book' && value['level'] !== 'volume')
+    || typeof value['body'] !== 'string') throw new Error('novel planning renderer: incompatible outline content')
+  const level = value['level']
+  return { body: value['body'], withBody: body => ({ kind: 'outline', level, body }) }
+}
+
+function chapterContent(value: NovelWireValue): { body: string; withBody: (body: string) => NovelWireValue } {
+  if (!isRecord(value) || value['kind'] !== 'chapter-outline' || typeof value['body'] !== 'string') {
+    throw new Error('novel planning renderer: incompatible chapter-outline content')
   }
-  return { kind: 'outline', nodes: value['nodes'].map(outlineNode) }
+  return { body: value['body'], withBody: body => ({ kind: 'chapter-outline', body }) }
 }
 
-function outlineNode(value: NovelWireValue): OutlineNode {
-  if (!isRecord(value) || typeof value['id'] !== 'string' || typeof value['title'] !== 'string'
-    || !Array.isArray(value['children'])) throw new Error('novel outline renderer: incompatible node')
-  const summary = optionalNodeField(value, 'summary')
-  const goal = optionalNodeField(value, 'goal')
-  const conflict = optionalNodeField(value, 'conflict')
-  const turn = optionalNodeField(value, 'turn')
+function textOperation(operations: readonly NovelWireValue[]): { start: number; end: number; replacement: string } {
+  const [operation] = operations
+  if (operations.length !== 1 || !isRecord(operation) || operation['kind'] !== 'replace-text'
+    || !isRecord(operation['selector']) || typeof operation['selector']['startUtf16'] !== 'number'
+    || typeof operation['selector']['endUtf16'] !== 'number' || typeof operation['replacement'] !== 'string') {
+    throw new Error('novel planning renderer: incompatible operation')
+  }
   return {
-    id: value['id'], title: value['title'],
-    ...(summary === undefined ? {} : { summary }),
-    ...(goal === undefined ? {} : { goal }),
-    ...(conflict === undefined ? {} : { conflict }),
-    ...(turn === undefined ? {} : { turn }),
-    children: value['children'].map(outlineNode),
-  }
-}
-
-function optionalNodeField(value: Readonly<Record<string, NovelWireValue>>, field: typeof OPTIONAL_FIELDS[number]): string | undefined {
-  const candidate = value[field]
-  if (candidate === undefined) return undefined
-  if (typeof candidate !== 'string') throw new Error('novel outline renderer: incompatible node field')
-  return candidate
-}
-
-function outlineOperation(operations: readonly NovelWireValue[]): { nodeId: string; changes: OutlineNodeChanges } {
-  const [raw] = operations
-  if (operations.length !== 1 || !isRecord(raw) || raw['kind'] !== 'update-outline-node'
-    || !isRecord(raw['selector']) || typeof raw['selector']['nodeId'] !== 'string'
-    || !isRecord(raw['changes'])) throw new Error('novel outline renderer: incompatible operation')
-  const changes: Record<string, string | null> = {}
-  for (const [field, value] of Object.entries(raw['changes'])) {
-    if (!['title', ...OPTIONAL_FIELDS].includes(field) || (typeof value !== 'string' && value !== null)) {
-      throw new Error('novel outline renderer: incompatible operation changes')
-    }
-    changes[field] = value
-  }
-  return { nodeId: raw['selector']['nodeId'], changes }
-}
-
-function updateNode(nodes: readonly OutlineNode[], nodeId: string, update: (node: OutlineNode) => OutlineNode): readonly OutlineNode[] {
-  return nodes.map(node => node.id === nodeId ? update(node) : { ...node, children: updateNode(node.children, nodeId, update) })
-}
-
-function findNode(nodes: readonly OutlineNode[], nodeId: string): OutlineNode | undefined {
-  for (const node of nodes) {
-    if (node.id === nodeId) return node
-    const child = findNode(node.children, nodeId)
-    if (child !== undefined) return child
+    start: operation['selector']['startUtf16'],
+    end: operation['selector']['endUtf16'],
+    replacement: operation['replacement'],
   }
 }
 

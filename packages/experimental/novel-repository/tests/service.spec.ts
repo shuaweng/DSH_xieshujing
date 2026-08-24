@@ -13,6 +13,7 @@ import NovelRepository, {
   type CaptureSelectionRequest,
   type ChangeSet,
   type ChangeSetAuthorization,
+  type CreateAssetRequest,
   type NovelProjectSnapshot,
   type NovelSelectionInput,
   type ProposeChangeSetRequest,
@@ -28,6 +29,13 @@ class StubNovelRepository extends NovelRepository {
 
   override listAssets(): Promise<readonly AssetSummary[]> {
     return Promise.resolve([])
+  }
+
+  override createAsset(
+    _project: NovelProjectSnapshot,
+    _request: CreateAssetRequest,
+  ): Promise<AssetSnapshot> {
+    return Promise.reject(new Error('not configured'))
   }
 
   override readAsset(): Promise<AssetSnapshot> {
@@ -117,8 +125,13 @@ describe('NovelAssetTypeRegistry', () => {
     type: 'manuscript.chapter',
     contentRoot: 'manuscript',
     extensions: ['.md'],
-    model: { description: 'chapter', proposalInstructions: 'replace selected text' },
+    model: {
+      description: 'chapter',
+      creationInstructions: 'create one chapter',
+      proposalInstructions: 'replace selected text',
+    },
     parse: () => { throw new Error('unused') },
+    create: () => { throw new Error('unused') },
     serializeContent: () => { throw new Error('unused') },
     captureSelection: () => { throw new Error('unused') },
     modelText: () => 'unused',
@@ -169,5 +182,20 @@ describe('NovelAssetTypeRegistry', () => {
     ]) {
       expect(() => ctx.novelAssetTypes.register(invalid as never)).toThrow()
     }
+  })
+
+  it('allows read-and-edit types to opt out of direct creation', async () => {
+    const ctx = new Context()
+    await ctx.plugin(NovelAssetTypeRegistry)
+    const { create: _create, ...withoutCreate } = definition
+    const readOnlyCreation = {
+      ...withoutCreate,
+      model: {
+        description: definition.model.description,
+        proposalInstructions: definition.model.proposalInstructions,
+      },
+    } satisfies NovelAssetTypeDefinition
+    ctx.novelAssetTypes.register(readOnlyCreation)
+    expect(ctx.novelAssetTypes.get('manuscript.chapter').create === undefined).toBe(true)
   })
 })

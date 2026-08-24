@@ -13,17 +13,18 @@ import { FsError, type FsTarget, type FsVersion } from '@deepseek-ai/dsh-fs'
 import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
 import NovelRepository, {
   ChangeSetId,
+  AssetId,
   NovelRepositoryError,
   RevisionId,
   SelectionRefId,
   type Asset,
-  type AssetId,
   type AssetRevision,
   type AssetSnapshot,
   type AssetSummary,
   type CaptureSelectionRequest,
   type ChangeSet,
   type ChangeSetAuthorization,
+  type CreateAssetRequest,
   type NovelProjectSnapshot,
   type NovelSelectionInput,
   type ProjectId,
@@ -246,6 +247,83 @@ export class LocalNovelRepository extends NovelRepository {
         return cloneSnapshot(asset.snapshot)
       }
       return this.snapshotFromHistory(project, state, assetId, revisionId)
+    })
+  }
+
+  override async createAsset(
+    project: NovelProjectSnapshot,
+    request: CreateAssetRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<AssetSnapshot> {
+    return await this.withProject(project, async (state) => {
+      const catalog = await this.scan(project, state, signal, sandboxPolicy)
+      if (catalog.size >= this.config.maxAssets) {
+        throw new NovelRepositoryError(
+          `novel repository: project contains at least ${this.config.maxAssets} authored assets`,
+          'NOVEL_ASSET_INVALID',
+        )
+      }
+      const definition = this.ctx.novelAssetTypes.get(request.type)
+      if (definition.create === undefined) {
+        throw new NovelRepositoryError(
+          `novel repository: Asset type ${JSON.stringify(definition.type)} does not support direct creation`,
+          'NOVEL_ASSET_INVALID',
+        )
+      }
+      const contentRoot = project.contentRoots[definition.contentRoot]
+      if (contentRoot === undefined) {
+        throw new NovelRepositoryError(
+          `novel repository: project does not declare content root ${JSON.stringify(definition.contentRoot)} for Asset type ${JSON.stringify(definition.type)}`,
+          'NOVEL_PROJECT_MANIFEST_INVALID',
+        )
+      }
+      const id = AssetId(`asset_${randomUUID()}`)
+      const extension = definition.extensions[0]
+      if (extension === undefined) throw new NovelRepositoryError('novel repository: Asset type has no file extension', 'NOVEL_ASSET_INVALID')
+      const target = await this.ctx.fs.resolve(`${id}${extension}`, {
+        cwd: this.ctx.fs.processPath(contentRoot),
+        ...(signal === undefined ? {} : { signal }),
+      })
+      if (!this.ctx.fs.contains(contentRoot, target) || !this.ctx.fs.contains(project.root, target)) {
+        throw new NovelRepositoryError('novel repository: generated Asset path escapes its content root', 'NOVEL_PROJECT_PATH_ESCAPE')
+      }
+      const projectRelativePath = relativeProjectPath(project, target, this.ctx.fs.processPath.bind(this.ctx.fs))
+      const materialized = definition.create({
+        id,
+        title: request.title,
+        ...(request.parentId === undefined ? {} : { parentId: request.parentId }),
+        content: request.content,
+      }, projectRelativePath)
+      if (materialized.serializedUtf8.byteLength > this.config.assetMaxBytes) {
+        throw new NovelRepositoryError(
+          `novel repository: asset exceeds ${this.config.assetMaxBytes} bytes`,
+          'NOVEL_ASSET_TOO_LARGE',
+        )
+      }
+      if (materialized.parsed.id !== id || !sameAssetType(materialized.parsed.type, definition.type)
+        || materialized.parsed.parentId !== request.parentId) {
+        throw new NovelRepositoryError('novel repository: Asset creator changed identity, type, or parent', 'NOVEL_ASSET_INVALID')
+      }
+      validateParentRelationship(materialized.parsed, definition, catalog)
+      const outcome = await this.ctx.fs.writeText(
+        target,
+        new TextDecoder().decode(materialized.serializedUtf8),
+        { kind: 'createIfAbsent' },
+        signal,
+        sandboxPolicy,
+      )
+      const revision = newRevision(
+        project.id,
+        id,
+        undefined,
+        materialized.serializedUtf8,
+        request.actor.kind === 'agent' ? 'agent-apply' : 'user-edit',
+      )
+      state.history.commitRevision(revision, projectRelativePath)
+      const observed = observedAsset(project, projectRelativePath, target, outcome.version, materialized.parsed, revision)
+      state.catalog.set(id, observed)
+      return cloneSnapshot(observed.snapshot)
     })
   }
 
@@ -535,6 +613,7 @@ export class LocalNovelRepository extends NovelRepository {
         revision,
       ))
     }
+    validateCatalogRelationships(catalog, this.ctx.novelAssetTypes)
     state.catalog = catalog
     return catalog
   }
@@ -903,6 +982,7 @@ function snapshot(
     id: parsed.id,
     projectId: project.id,
     type: parsed.type,
+    ...(parsed.parentId === undefined ? {} : { parentId: parsed.parentId }),
     projectRelativePath,
   }
   return {
@@ -977,6 +1057,82 @@ function authorizeChangeSet(value: ChangeSet, authorization: ChangeSetAuthorizat
 
 function invalidChangeSet(detail: string): NovelRepositoryError {
   return new NovelRepositoryError(`novel repository: invalid ChangeSet: ${detail}`, 'NOVEL_CHANGESET_INVALID')
+}
+
+function validateCatalogRelationships(
+  catalog: ReadonlyMap<AssetId, ObservedAsset>,
+  registry: Context['novelAssetTypes'],
+): void {
+  for (const observed of catalog.values()) {
+    validateParentRelationship(observed.parsed, registry.get(observed.parsed.type), catalog)
+  }
+}
+
+function validateParentRelationship(
+  parsed: ParsedNovelAsset,
+  definition: ReturnType<Context['novelAssetTypes']['get']>,
+  catalog: ReadonlyMap<AssetId, ObservedAsset>,
+): void {
+  const relation = definition.parent
+  if (parsed.parentId === undefined) {
+    if (relation?.required === true) {
+      throw new NovelRepositoryError(
+        `novel repository: Asset ${JSON.stringify(parsed.id)} requires a semantic parent`,
+        'NOVEL_ASSET_INVALID',
+      )
+    }
+    return
+  }
+  if (relation === undefined) {
+    throw new NovelRepositoryError(
+      `novel repository: Asset type ${JSON.stringify(parsed.type)} does not permit a semantic parent`,
+      'NOVEL_ASSET_INVALID',
+    )
+  }
+  const parent = catalog.get(parsed.parentId)
+  if (parent === undefined) {
+    throw new NovelRepositoryError(
+      `novel repository: parent Asset ${JSON.stringify(parsed.parentId)} was not found for ${JSON.stringify(parsed.id)}`,
+      'NOVEL_ASSET_INVALID',
+    )
+  }
+  if (!relation.allowedTypes.some(type => sameAssetType(type, parent.parsed.type))) {
+    throw new NovelRepositoryError(
+      `novel repository: parent Asset ${JSON.stringify(parsed.parentId)} has incompatible type ${JSON.stringify(parent.parsed.type)}`,
+      'NOVEL_ASSET_INVALID',
+    )
+  }
+  if (relation.singleton === true) {
+    for (const sibling of catalog.values()) {
+      if (sibling.parsed.id !== parsed.id && sibling.parsed.parentId === parsed.parentId
+        && sameAssetType(sibling.parsed.type, parsed.type)) {
+        throw new NovelRepositoryError(
+          `novel repository: parent Asset ${JSON.stringify(parsed.parentId)} has multiple ${JSON.stringify(parsed.type)} children`,
+          'NOVEL_ASSET_INVALID',
+        )
+      }
+    }
+  }
+  if (relation.maxDepth !== undefined) {
+    let cursor: ParsedNovelAsset | undefined = parsed
+    const visited = new Set<AssetId>([parsed.id])
+    let depth = 0
+    while (cursor.parentId !== undefined) {
+      if (visited.has(cursor.parentId)) {
+        throw new NovelRepositoryError('novel repository: Asset parent relationship contains a cycle', 'NOVEL_ASSET_INVALID')
+      }
+      visited.add(cursor.parentId)
+      depth += 1
+      if (depth > relation.maxDepth) {
+        throw new NovelRepositoryError(
+          `novel repository: Asset ${JSON.stringify(parsed.id)} exceeds parent depth ${relation.maxDepth}`,
+          'NOVEL_ASSET_INVALID',
+        )
+      }
+      cursor = catalog.get(cursor.parentId)?.parsed
+      if (cursor === undefined) break
+    }
+  }
 }
 
 function assetNotFound(assetId: AssetId): NovelRepositoryError {

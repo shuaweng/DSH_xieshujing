@@ -314,6 +314,7 @@ describe('ui-agent-preset apply', () => {
 
     const chip = slots.entries('conversation.hero.agentPreset')[0]!
     expect(chip.component).toBe(AgentPresetSeat)
+    expect(ctx.agentPresetSelection.getSnapshot().current).toBe('')
     const label = slots.entries('conversation.session.header.actions')[0]!
     expect(label.component).toBe(AgentPresetLabel)
     expect(label.options).toMatchObject({ id: 'agent-preset', order: -10 })

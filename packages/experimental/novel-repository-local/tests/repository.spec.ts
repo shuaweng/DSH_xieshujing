@@ -66,25 +66,35 @@ async function boot(
   return ctx
 }
 
+function parseTestNote(serializedUtf8: Uint8Array): ParsedNovelAsset {
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(serializedUtf8)
+  const id = /^\s+id: ([^\n]+)$/mu.exec(text)?.[1]
+  const title = /^\s+title: ([^\n]+)$/mu.exec(text)?.[1]
+  const body = text.split('---\n').at(-1)
+  if (id === undefined || title === undefined || body === undefined) throw new Error('invalid test note')
+  return {
+    id: AssetId(id),
+    type: 'bible.test' as never,
+    title,
+    frontmatter: { novel: { schema: 1, id, type: 'bible.test', title } },
+    content: { kind: 'test-note', text: body } as never,
+    source: undefined,
+  }
+}
+
 const testNoteType = {
   type: 'bible.test',
   contentRoot: 'notes',
   extensions: ['.note'],
-  model: { description: 'test note', proposalInstructions: 'test only' },
-  parse(serializedUtf8: Uint8Array): ParsedNovelAsset {
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(serializedUtf8)
-    const id = /^\s+id: ([^\n]+)$/mu.exec(text)?.[1]
-    const title = /^\s+title: ([^\n]+)$/mu.exec(text)?.[1]
-    const body = text.split('---\n').at(-1)
-    if (id === undefined || title === undefined || body === undefined) throw new Error('invalid test note')
-    return {
-      id: AssetId(id),
-      type: 'bible.test' as never,
-      title,
-      frontmatter: { novel: { schema: 1, id, type: 'bible.test', title } },
-      content: { kind: 'test-note', text: body } as never,
-      source: undefined,
-    }
+  model: { description: 'test note', creationInstructions: 'create test note', proposalInstructions: 'test only' },
+  parse: parseTestNote,
+  create(request: { id: string; title: string; content: unknown }) {
+    const content = request.content as { text: string }
+    const serializedUtf8 = new TextEncoder().encode([
+      '---', 'novel:', '  schema: 1', `  id: ${request.id}`, '  type: bible.test',
+      `  title: ${request.title}`, '---', content.text,
+    ].join('\n'))
+    return { serializedUtf8, parsed: parseTestNote(serializedUtf8) }
   },
   serializeContent: () => { throw new Error('unused') },
   captureSelection: () => { throw new Error('unused') },
@@ -127,6 +137,28 @@ function manifest(overrides: string[] = []): string {
 }
 
 describe('LocalNovelRepository', () => {
+  it('creates a registered typed Asset at a repository-owned path and retains its first Revision', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await mkdir(join(dir, 'notes'))
+    await writeFile(join(dir, 'novel.yaml'), manifest(['  notes: notes']))
+    const ctx = await boot(dir, {}, [testNoteType])
+    const novel = await project(ctx)
+
+    const created = await ctx.novelRepository.createAsset(novel, {
+      type: 'bible.test' as never,
+      title: '雾港设定',
+      content: { kind: 'test-note', text: '雾覆盖整个港口。' } as never,
+      actor: { kind: 'user', sessionId: SessionId('session-user') },
+    })
+    expect(created.asset.type).toBe('bible.test')
+    expect(created.asset.projectRelativePath).toMatch(/^notes\/asset_.+\.note$/u)
+    expect(created.content).toEqual({ kind: 'test-note', text: '雾覆盖整个港口。' })
+    expect(await readFile(join(dir, created.asset.projectRelativePath), 'utf8')).toContain('title: 雾港设定')
+    const listed = await ctx.novelRepository.listAssets(novel)
+    expect(listed.some(item => item.asset.id === created.asset.id)).toBe(true)
+  })
+
   it('discovers a second registered Asset type without repository type branches', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))

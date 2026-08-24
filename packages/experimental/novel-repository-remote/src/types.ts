@@ -31,11 +31,20 @@ export interface NovelAssetDescriptor {
   readonly id: AssetId
   readonly projectId: ProjectId
   readonly type: string
+  readonly parentId?: AssetId
   readonly projectRelativePath: string
   readonly revisionId: RevisionId
   /** Canonical `sha256:` content hash validated by the Host repository. */
   readonly contentHash: string
   readonly title: string
+}
+
+/** Browser request to create one new typed Asset at a provider-owned path. */
+export interface CreateNovelAssetRequest {
+  readonly type: string
+  readonly title: string
+  readonly parentId?: AssetId
+  readonly content: NovelWireValue
 }
 
 /** Browser-safe typed Asset content bound to one exact Revision. */

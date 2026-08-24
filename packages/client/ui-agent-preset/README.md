@@ -14,6 +14,8 @@ A second surface, beside the workspace picker on the new-session screen. It sits
 
 The chip opens on the deployment default and its pick is *staged* — the screen precedes the session it would apply to. The stage reaches a session when one becomes current and is still blank, which covers both the session the workspace connect created and the blank one it reused; riding along on `sessions.create` would miss the second. It is spent on first use, so the next new session opens on the default again, exactly like the workspace picker beside it.
 
+The same chooser store is published through the read-only `ctx.agentPresetSelection` browser face. Preset-gated Composer controls may use it only while their owner Session is blank, before a committed session-list row exists; started Sessions remain authoritative in `ctx.sessions`. This prevents the previous Session's preset from leaking into a new-session Composer without giving consumers a second writable preset controller.
+
 A session that has started is refused rather than queued: the host answers `agent-preset-locked`, and the stage is dropped instead of waiting for a session that will never accept it.
 
 ## The session-header label

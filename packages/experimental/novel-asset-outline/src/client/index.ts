@@ -1,60 +1,51 @@
-/** Browser registration for the structured outline editor and Diff renderer. */
+/** Browser registration for freeform outline and chapter-plan renderers. */
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-experimental-novel-workbench/client'
-import { createPlanningOutlineRenderer } from './renderers.tsx'
+import { createChapterOutlineRenderer, createPlanningOutlineRenderer } from './renderers.tsx'
 
-export { createPlanningOutlineRenderer } from './renderers.tsx'
+export { createChapterOutlineRenderer, createPlanningOutlineRenderer } from './renderers.tsx'
 
 export const name = 'novel-asset-outline-client'
 export const inject = ['novelAssetRenderers', 'locale']
-/** Locale namespace owned by the outline Asset renderer. */
+
+/** Locale namespace owned by the freeform planning client plugin. */
 export const NS = 'novel-asset-outline' as const
 
-/** Chinese product copy for the structured outline surface. */
+/** Simplified Chinese copy for freeform planning surfaces. */
 export const zh = {
-  editor: '结构化大纲',
-  outlineTitle: '大纲名称',
-  tree: '大纲结构',
-  empty: '这份大纲还没有节点。请先在 YAML 文件中加入节点。',
-  nodeTitle: '节点名称',
-  summary: '概要',
-  goal: '目标',
-  conflict: '冲突',
-  turn: '转折',
-  optional: '可选',
+  outlineEditor: '自由大纲',
+  chapterOutlineEditor: '自由章纲',
+  outlineTitle: '名称',
+  freeformBody: '自由策划内容',
+  freeformPlaceholder: '自由写作。可使用标题、列表、表格或任何适合这本书的方法……',
   before: '修改前',
   after: '修改后',
 } as const
 
-/** Stable translation keys shared by both outline dictionaries. */
+/** Message keys shared by every supported planning locale. */
 export type OutlineLocaleKey = keyof typeof zh
 
-/** English product copy for the structured outline surface. */
+/** English copy for freeform planning surfaces. */
 export const en: Record<OutlineLocaleKey, string> = {
-  editor: 'Structured outline',
-  outlineTitle: 'Outline title',
-  tree: 'Outline structure',
-  empty: 'This outline has no nodes yet. Add nodes to its YAML file first.',
-  nodeTitle: 'Node title',
-  summary: 'Summary',
-  goal: 'Goal',
-  conflict: 'Conflict',
-  turn: 'Turn',
-  optional: 'optional',
+  outlineEditor: 'Freeform outline',
+  chapterOutlineEditor: 'Freeform chapter plan',
+  outlineTitle: 'Name',
+  freeformBody: 'Freeform planning content',
+  freeformPlaceholder: 'Write freely. Use headings, lists, tables, or any method that fits this book…',
   before: 'Before',
   after: 'After',
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface LocaleNamespaceMap {
-    'novel-asset-outline': OutlineLocaleKey
-  }
+  interface LocaleNamespaceMap { 'novel-asset-outline': OutlineLocaleKey }
 }
 
-/** Register locale copy and the exact `planning.outline` browser renderer. */
+/** Register locale copy and both exact planning renderers. */
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'novel-asset-outline: dictionaries')
-  ctx.novelAssetRenderers.register(createPlanningOutlineRenderer(ctx.locale.bind(NS)))
+  const t = ctx.locale.bind(NS)
+  ctx.novelAssetRenderers.register(createPlanningOutlineRenderer(t))
+  ctx.novelAssetRenderers.register(createChapterOutlineRenderer(t))
 }
