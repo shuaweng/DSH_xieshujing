@@ -19,6 +19,7 @@ This experimental Client Consumer contributes an Agent-native Novel Studio surfa
 - Agent-created Assets return a replayable creation card and refresh the authoritative explorer. Human and Agent creation both use the same typed Remote/Repository path; neither invents a filesystem path.
 - The Novel Agent can call `novel_present` with `open-workbench` or `close-workbench`. Its durable tool-result metadata drives the same browser-local `ctx.layout` selection as the Composer toggle; ordinary Agent prose never controls layout and presentation never mutates an Asset.
 - “Reference selection to Agent” first saves a dirty typed draft, stops safely if that save fails, then freezes the selection. Composer displays only `@[the first ten characters…]`; its hidden occurrence retains the complete canonical `dsh-novel:` mention and serializes that exact value for the Agent on submit.
+- The preset-scoped `conversation.input.dock` adds a compact Context Tray for the next turn. Authors can follow the currently open saved Asset, search the current Project, pin exact results, and remove pins. The tray reads the Session Projection, while every mutation replaces the complete workset through the Host; a dirty editor retains the last saved Revision and visibly asks for save instead of advancing context silently.
 - `novel_propose_changes` tool results render a durable inline Diff card. Accept and Reject call Session-owned Remote methods; Accept refreshes the explorer and canvas from authoritative repository state.
 - The workbench resolves the conversation service lazily after its slot owner mounts, avoiding a client-plugin dependency cycle while still using DSH's ordinary Composer draft state.
 
@@ -28,11 +29,11 @@ This experimental Client Consumer contributes an Agent-native Novel Studio surfa
 
 #### What the model sees
 
-The Client package itself adds no model content. A user-created context mention is resolved by `@deepseek-ai/dsh-experimental-novel-context`, and model proposals are created by `@deepseek-ai/dsh-experimental-tool-novel`.
+The Client package itself adds no hidden model content. Explicit mentions and the visible Context Tray workset are resolved by `@deepseek-ai/dsh-experimental-novel-context`, and model proposals are created by `@deepseek-ai/dsh-experimental-tool-novel`.
 
 #### Token effect
 
-The layout, editor, reader controls, short reference label, and review card add no tokens. Only the full reference serialized on submit and the stable Novel tool schemas affect a model request.
+The layout, editor, reader controls, short reference label, tray chrome, and review card add no tokens. Only explicit references, exact retained workset material frozen for that turn, and stable Novel tool schemas affect a model request.
 
 #### KV Cache effect
 
@@ -42,6 +43,6 @@ Opening assets, editing drafts, reviewing ChangeSets, and toggling panels do not
 
 - **Three shipped renderers** — the canvas installs `manuscript.chapter`; the planning package adds `planning.outline` and `planning.chapter-outline`. Characters, ideas, scenes, timelines, relations, and multiple editor tabs are deferred.
 - **No live file events** — the explorer refreshes after in-workbench applies and repository calls reconcile external edits; there is no filesystem watcher or browser invalidation stream.
-- **One active selection** — pinned context, multi-selection, block ids, annotations, and old-Revision badges are deferred.
+- **One active text selection** — exact Asset pins now exist, but pinned selections, multi-selection, block ids, annotations, and old-Revision badges are deferred.
 - **Desktop-first layout** — mobile layout, route-level multi-workbench switching, persisted panel geometry, and cross-browser synchronization of the transient open state are deferred.
 - **Basic text editor** — rich Markdown editing, syntax decorations, autosave cadence, import/export, and publishing views are deferred.

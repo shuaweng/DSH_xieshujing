@@ -18,6 +18,8 @@ import NovelRepository, {
   type NovelSelectionInput,
   type ProposeChangeSetRequest,
   type SaveAssetContentRequest,
+  type SearchAssetsRequest,
+  type AssetSearchResult,
   type SelectionRef,
 } from '../src/index.ts'
 import NovelAssetTypeRegistry, { type NovelAssetTypeDefinition } from '../src/asset-types.ts'
@@ -28,6 +30,13 @@ class StubNovelRepository extends NovelRepository {
   }
 
   override listAssets(): Promise<readonly AssetSummary[]> {
+    return Promise.resolve([])
+  }
+
+  override searchAssets(
+    _project: NovelProjectSnapshot,
+    _request: SearchAssetsRequest,
+  ): Promise<readonly AssetSearchResult[]> {
     return Promise.resolve([])
   }
 

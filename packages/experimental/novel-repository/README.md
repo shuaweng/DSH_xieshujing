@@ -10,7 +10,7 @@ This experimental package defines the provider-neutral `ctx.novelRepository` cap
 
 - `NovelRepository.discoverProject()` accepts one canonical filesystem directory target and returns `undefined` only when that directory has no `novel.yaml`.
 - A discovered `NovelProjectSnapshot` contains schema `1`, the stable `ProjectId`, author-visible title, canonical project and manifest targets, and canonical named content-root targets.
-- `listAssets()` reconciles authored files into current catalog rows, `createAsset()` creates one registered type at a provider-owned path, `readAsset()` reads the current or one retained immutable Revision, `saveAssetContent()` performs a guarded typed-content save, and `captureSelection()` freezes one type-defined semantic selection.
+- `listAssets()` reconciles authored files into current catalog rows, `searchAssets()` discovers bounded current exact Revisions through a provider-owned search strategy, `createAsset()` creates one registered type at a provider-owned path, `readAsset()` reads the current or one retained immutable Revision, `saveAssetContent()` performs a guarded typed-content save, and `captureSelection()` freezes one type-defined semantic selection.
 - `NovelAssetTypeMap` is merge-extensible. Each matching Host definition owns creation instructions, optional semantic-parent rules, exact authored-type parsing/creation, model projection, selection validation, save materialization, durable operation decoding, and ChangeSet materialization; registrations are unique and disappear with their caller effect.
 - Version one ships `manuscript.chapter` plus separately contributed freeform `planning.outline` and `planning.chapter-outline` types, exact `sha256:` content hashes, immutable Revision ancestry, Revision-bound `SelectionRef` values, typed `replace-text` operations, and durable single-asset ChangeSets carrying their target Asset type.
 - `proposeChangeSet()` records a proposal without changing authored files. `readChangeSet()`, `applyChangeSet()`, and `rejectChangeSet()` expose explicit review transitions; apply authority is a Session id supplied by an authorized Consumer.
@@ -38,5 +38,5 @@ The package does not change message ordering or reusable KV-cache prefixes.
 
 - **Three shipped asset types** — the kernel installs `manuscript.chapter`; the planning package contributes `planning.outline` and `planning.chapter-outline`. Characters, ideas, relations, scenes, and view definitions are deferred.
 - **One operation per ChangeSet** — current shipped text Assets support one exact `replace-text` and reject automatic relocation to a newer Revision.
-- **No search or live watching** — catalog reconciliation is explicit. Search, file watching, and browser invalidation are deferred.
+- **No live watching** — catalog reconciliation is explicit. The Service now exposes bounded search, while file watching and browser invalidation remain deferred.
 - **Definition only** — Remote projection, workbench presentation, Session-log context, and model-facing Novel tools belong to separate Consumers.

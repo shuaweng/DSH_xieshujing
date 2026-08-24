@@ -6,6 +6,7 @@ import { AssetId, ProjectId, RevisionId } from '@deepseek-ai/dsh-experimental-no
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -58,6 +59,7 @@ async function harness(config: ConstructorParameters<typeof NovelContextResolver
   await ctx.plugin(NovelAssetTypeRegistry)
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SessionStore)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(NovelContextResolver, config)
   cleanups.push(async () => { await ctx.fiber.dispose() })
   const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
@@ -189,16 +191,63 @@ describe('Novel context preparation', () => {
       source: { kind: 'user' },
       content: [{ type: 'text', text: '写得更克制 @白港选区' }],
     })
-    expect(decision.messages[1]?.source).toMatchObject({
+    const source = decision.messages[1]?.source
+    expect(source).toMatchObject({
       kind: 'novel-context',
-      form: 'catalog',
-      version: 1,
+      form: 'manifest',
+      version: 2,
       projectId: 'project-context',
-      references: [{ assetId: 'chapter-context', revisionId }],
+      references: [{
+        assetId: 'chapter-context', revisionId, origin: 'message', mode: 'explicit',
+      }],
     })
+    expect(source?.kind === 'novel-context' ? source.manifestId : '').toMatch(/^sha256:[a-f0-9]{64}$/u)
     const modelText = decision.messages[1]?.content[0]
     expect(modelText?.type === 'text' ? modelText.text : '').toContain('"text":"下雨"')
     expect(Object.isFrozen(decision.messages[1])).toBe(true)
+  })
+
+  it('retains a whole-value follow and pinned workset, projects it, and freezes it only for a direct turn', async () => {
+    const { ctx, agent, session, revisionId } = await harness()
+    const workset = {
+      version: 1 as const,
+      projectId: ProjectId('project-context'),
+      items: [{
+        ...reference(revisionId),
+        mode: 'follow' as const,
+        origin: 'active-asset' as const,
+      }],
+    }
+    await expect(ctx.novelContextResolver.replaceWorkset(agent, workset)).resolves.toEqual(workset)
+    const eventCount = session.events.filter(event => event.type === 'novel/context-workset').length
+    await ctx.novelContextResolver.replaceWorkset(agent, workset)
+    expect(session.events.filter(event => event.type === 'novel/context-workset')).toHaveLength(eventCount)
+    expect(ctx.sessionProjections.snapshot(session).values.novelContextWorkset).toEqual(workset)
+
+    const direct = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: '继续写。' }] })
+    const signal = new AbortController().signal
+    const entered = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step',
+      { messages: [direct], turn: 1, step: 1, signal },
+      () => Promise.resolve({ kind: 'enter' as const, messages: [direct] }),
+    )
+    expect(entered).toMatchObject({
+      kind: 'enter',
+      messages: [
+        { id: direct.id },
+        { source: { kind: 'novel-context', form: 'manifest', references: [{ mode: 'follow', origin: 'active-asset' }] } },
+      ],
+    })
+    const toolContinuation = createUserMessage({
+      source: { kind: 'novel-context', form: 'catalog', version: 1, projectId: ProjectId('project-context'), references: [] },
+      content: [{ type: 'text', text: 'already frozen' }],
+    })
+    const continuation = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step',
+      { messages: [toolContinuation], turn: 1, step: 2, signal },
+      () => Promise.resolve({ kind: 'enter' as const, messages: [toolContinuation] }),
+    )
+    expect(continuation).toMatchObject({ kind: 'enter', messages: [toolContinuation] })
   })
 
   it('reads retained Revisions exactly, enforces budgets, and locks a Session to one project', async () => {
@@ -249,9 +298,6 @@ describe('Novel context preparation', () => {
       .toThrow(expect.objectContaining({ code: 'NOVEL_CONTEXT_INVALID_CONFIG' }))
     await invalid.fiber.dispose()
 
-    const defaults = new Context()
-    expect(new NovelContextResolver(defaults)).toBeInstanceOf(NovelContextResolver)
-    await defaults.fiber.dispose()
   })
 
   it('rejects invalid reference sets, project drift, missing roots, and cancelled reads', async () => {

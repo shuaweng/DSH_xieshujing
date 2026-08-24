@@ -8,6 +8,7 @@ import NovelRepository, {
   SelectionRefId,
   type AssetSnapshot,
   type AssetSummary,
+  type AssetSearchResult,
   type CaptureSelectionRequest,
   type ChangeSet,
   type ChangeSetAuthorization,
@@ -16,16 +17,20 @@ import NovelRepository, {
   type NovelSelectionInput,
   type ProposeChangeSetRequest,
   type SaveAssetContentRequest,
+  type SearchAssetsRequest,
   type SelectionRef,
   type TextRangeSelector,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs'
 import { describe, expect, it, vi } from 'vitest'
 import NovelRepositoryRemote from '../src/index.ts'
+import type { NovelContextWorksetDescriptor } from '../src/types.ts'
 
 class StubNovelRepository extends NovelRepository {
   project: NovelProjectSnapshot | undefined
   assets: readonly AssetSummary[] = []
+  searchResults: readonly AssetSearchResult[] = []
+  searches: SearchAssetsRequest[] = []
   snapshot: AssetSnapshot | undefined
   selection: SelectionRef | undefined
   changeSetValue: ChangeSet | undefined
@@ -38,6 +43,14 @@ class StubNovelRepository extends NovelRepository {
 
   override listAssets(): Promise<readonly AssetSummary[]> {
     return Promise.resolve(this.assets)
+  }
+
+  override searchAssets(
+    _project: NovelProjectSnapshot,
+    request: SearchAssetsRequest,
+  ): Promise<readonly AssetSearchResult[]> {
+    this.searches.push(request)
+    return Promise.resolve(this.searchResults)
   }
 
   override createAsset(
@@ -263,6 +276,7 @@ describe('NovelRepositoryRemote Host service', () => {
       contentHash: snapshot.contentHash,
       title: '第一章',
     }]
+    repository.searchResults = [{ summary: repository.assets[0]!, excerpt: '旧正文', score: 500 }]
     const textSelector: TextRangeSelector = {
       kind: 'text-range',
       startUtf16: 0,
@@ -308,6 +322,29 @@ describe('NovelRepositoryRemote Host service', () => {
       contentHash: snapshot.contentHash,
       title: '第一章',
     }])
+    await expect(ctx.novelRepositoryRemote.search(agent, {
+      query: '旧', types: ['manuscript.chapter'], limit: 3,
+    }, signal)).resolves.toEqual([{
+      id: 'chapter-1', projectId: 'project-1', type: 'manuscript.chapter',
+      projectRelativePath: 'manuscript/chapter-1.md', revisionId: 'revision-1',
+      contentHash: snapshot.contentHash, title: '第一章', excerpt: '旧正文', score: 500,
+    }])
+    expect(repository.searches).toEqual([{ query: '旧', types: ['manuscript.chapter'], limit: 3 }])
+
+    const workset: NovelContextWorksetDescriptor = {
+      version: 1,
+      projectId: ProjectId('project-1'),
+      items: [{
+        projectId: ProjectId('project-1'), assetId: AssetId('chapter-1'),
+        revisionId: RevisionId('revision-1'), label: '第一章',
+        mode: 'follow', origin: 'active-asset',
+      }],
+    }
+    const replaceWorkset = vi.fn(async () => workset as never)
+    const disposeContext = ctx.provide('novelContextResolver', { replaceWorkset } as never)
+    await expect(ctx.novelRepositoryRemote.replaceContextWorkset(agent, workset, signal)).resolves.toEqual(workset)
+    expect(replaceWorkset).toHaveBeenCalledWith(agent, workset, signal)
+    disposeContext()
     await expect(ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-1'), null, signal))
       .resolves.toMatchObject({ title: '第一章', content: { kind: 'manuscript', body: '旧正文' } })
     await expect(ctx.novelRepositoryRemote.createAsset(agent, {

@@ -123,7 +123,7 @@ describe('Novel model tools', () => {
   it('registers discovery, exact-read, and proposal tools with explicit proposal guidance', async () => {
     const { ctx, agent } = await harness()
     expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('novel_')).sort())
-      .toEqual(['novel_create', 'novel_get', 'novel_list', 'novel_present', 'novel_propose_changes'])
+      .toEqual(['novel_create', 'novel_get', 'novel_list', 'novel_present', 'novel_propose_changes', 'novel_search'])
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.ctx })
     expect(renderPrompt(assembly)).toContain('never means the file changed')
 
@@ -144,6 +144,10 @@ describe('Novel model tools', () => {
     })
     const list = ctx.tools.get('novel_list')!
     expect(list.presentCall?.({})).toEqual({ card: 'generic', title: '浏览小说资产', kind: 'read' })
+    const search = ctx.tools.get('novel_search')!
+    expect(search.presentCall?.({ query: '白港' })).toEqual({
+      card: 'generic', title: '检索小说资产', kind: 'read', rawInput: '白港',
+    })
     const create = ctx.tools.get('novel_create')!
     expect(create.presentCall?.({
       type: 'planning.outline',
@@ -195,6 +199,30 @@ describe('Novel model tools', () => {
     expect(value.assets).toHaveLength(2)
     for (const asset of value.assets) expect(asset.reference).toMatch(/^dsh-novel:[A-Za-z0-9_-]+$/u)
     await expect(execute(ctx, undefined, 'novel_list', {})).resolves.toMatchObject({ isError: true })
+  })
+
+  it('searches authored model text without injecting or mutating assets', async () => {
+    const { ctx, agent, path, revisionId } = await harness()
+    const before = await readFile(path, 'utf8')
+    const result = await execute(ctx, agent, 'novel_search', { query: '下雨', types: ['manuscript.chapter'] })
+    expect(result.isError).toBe(false)
+    if (result.isError) throw new Error('expected novel_search success')
+    const value = result.value as { results: Array<{
+      assetId: string
+      revisionId: string
+      title: string
+      excerpt: string
+      reference: string
+    }> }
+    expect(value.results[0]).toMatchObject({
+      assetId: 'chapter-tool', revisionId, title: 'Tool Chapter',
+    })
+    expect(value.results[0]?.excerpt).toContain('下雨')
+    expect(value.results[0]?.reference)
+      .toMatch(/^dsh-novel:[A-Za-z0-9_-]+$/u)
+    expect(await readFile(path, 'utf8')).toBe(before)
+    await expect(execute(ctx, undefined, 'novel_search', { query: '下雨' }))
+      .resolves.toMatchObject({ isError: true })
   })
 
   it('reads canonical retained references and rejects calls without an owning Agent', async () => {

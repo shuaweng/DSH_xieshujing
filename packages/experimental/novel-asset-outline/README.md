@@ -80,4 +80,4 @@ Switching between Book, Volume, and Chapter Outline surfaces does not change the
 - **Single exact replacement** — multi-range proposals, automatic rebase, and structural merge are deferred.
 - **Two outline levels only** — nested acts or custom hierarchy levels should be expressed inside freeform Markdown until an evidence-backed semantic need appears.
 - **One Chapter Outline per chapter** — alternatives and branch plans are deferred.
-- **No search index** — planning Assets are discoverable by catalog and exact reference; full-text and relation search are deferred.
+- **Lexical discovery only** — planning Assets participate in provider-neutral title/model-text search; semantic and relation-scoped search are deferred.

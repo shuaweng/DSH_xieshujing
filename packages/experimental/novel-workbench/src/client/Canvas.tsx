@@ -14,6 +14,7 @@ import type {
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type { NovelAssetRendererRegistry } from './renderers.tsx'
 import type { NovelReaderFont, NovelReaderSkin, createNovelWorkbenchStore } from './store.ts'
+import type { NovelContextFocus } from './context-controller.ts'
 import css from './workbench.module.css'
 
 export interface CanvasInjected {
@@ -23,6 +24,7 @@ export interface CanvasInjected {
   save: (sessionId: SessionId, request: SaveNovelAssetRequest) => Promise<NovelAssetDocument>
   capture: (sessionId: SessionId, request: CaptureNovelSelectionRequest) => Promise<NovelSelectionDescriptor>
   appendReference: (sessionId: SessionId, reference: NovelSelectionDescriptor, label: string) => void
+  reportContextFocus?: (value?: NovelContextFocus) => void
 }
 
 type CanvasProps = PropsRuntime<'novel.canvas'>
@@ -31,6 +33,7 @@ type CanvasProps = PropsRuntime<'novel.canvas'>
   & InjectFace<CanvasInjected>
 
 const SKINS: readonly NovelReaderSkin[] = ['paper', 'warm', 'green', 'rose', 'blue', 'night']
+const ignoreContextFocus = (): void => {}
 const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 
 只写清楚本章要推进的一件核心事件。
@@ -66,11 +69,28 @@ const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 记录承接上一章、影响下一章以及不能遗忘的设定。`
 
 /** One exact-revision typed Asset editor with an optional chapter-local planning surface. */
-export function Canvas({ useSessions, useStore, actions, renderers, open, create, save, capture, appendReference, t }: CanvasProps) {
+export function Canvas({
+  useSessions, useStore, actions, renderers, open, create, save, capture, appendReference,
+  reportContextFocus = ignoreContextFocus, t,
+}: CanvasProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
   const state = useStore(value => value)
   const [busy, setBusy] = useState(false)
   const [chapterOutlineOpen, setChapterOutlineOpen] = useState(false)
+
+  useEffect(() => {
+    if (sessionId === undefined || state.project === undefined || state.document === undefined) {
+      reportContextFocus(undefined)
+      return
+    }
+    reportContextFocus({
+      sessionId,
+      project: state.project,
+      document: state.document,
+      dirty: state.dirty,
+    })
+  }, [reportContextFocus, sessionId, state.dirty, state.document, state.project])
+  useEffect(() => () => { reportContextFocus(undefined) }, [reportContextFocus])
 
   useEffect(() => {
     if (state.document?.type !== 'manuscript.chapter') setChapterOutlineOpen(false)

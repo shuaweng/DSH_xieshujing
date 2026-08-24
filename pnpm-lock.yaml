@@ -4193,6 +4193,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^
@@ -4218,6 +4221,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: workspace:^
+        version: link:../../session/session-projection
 
   packages/experimental/novel-repository:
     devDependencies:
@@ -4440,6 +4446,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-tool':
         specifier: workspace:^
         version: link:../../client/ui-tool
+      '@deepseek-ai/dsh-experimental-novel-context':
+        specifier: workspace:^
+        version: link:../novel-context
       '@deepseek-ai/dsh-experimental-novel-repository':
         specifier: workspace:^
         version: link:../novel-repository

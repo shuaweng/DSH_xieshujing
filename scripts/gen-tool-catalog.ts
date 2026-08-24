@@ -581,7 +581,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolNovel)
     },
     note:
-      'The Novel Studio Preset ships five stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files.',
+      'The Novel Studio Preset ships six stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_search` finds bounded lexical matches, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

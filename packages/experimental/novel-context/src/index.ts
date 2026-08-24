@@ -1,14 +1,19 @@
 /** Exact Novel references converted into durable, untrusted model context. */
 
+import { createHash } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
+import { z as zod } from 'zod'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-session-projection'
 import { createUserMessage, freezeMessage, type ContentBlock, type UserMessage } from '@deepseek-ai/dsh-llm'
-import type { NovelSelector, ProjectId } from '@deepseek-ai/dsh-experimental-novel-repository'
+import type { NovelProjectSnapshot, NovelSelector, ProjectId } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type {} from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import { NovelContextError } from './error.ts'
 import type {
   NovelContextSource,
+  NovelContextWorkset,
+  NovelContextWorksetItem,
   NovelReferenceInput,
   PreparedNovelMessage,
   ResolvedNovelReference,
@@ -81,6 +86,55 @@ export class NovelContextResolver extends Service {
       if (decision.kind === 'reject') return decision
       return { kind: 'enter', messages: await this.prepareDirectMessages(agent, decision.messages, signal) }
     }, { prepend: true })
+    ctx.inject(['sessionProjections'], (projectionCtx) => {
+      const schema = zod.custom<NovelContextWorkset | null>(value => value === null || isWorkset(value))
+      projectionCtx.sessionProjections.register<'novelContextWorkset', NovelContextWorkset | null>({
+        key: 'novelContextWorkset',
+        stateSchema: schema,
+        init: () => null,
+        apply: (state, event) => event.type === 'novel/context-workset' ? event.data.workset : state,
+        wire: { viewSchema: schema, view: state => state },
+        stateVersion: 1,
+      })
+    })
+  }
+
+  /**
+   * Replace the complete non-prose context workset for one live Session.
+   * @param agent - owning Agent whose Session records the whole value.
+   * @param workset - exact retained references selected by the browser.
+   * @param signal - optional cancellation before validation and append.
+   * @returns the detached normalized value now in force.
+   */
+  async replaceWorkset(
+    agent: Agent,
+    workset: NovelContextWorkset,
+    signal?: AbortSignal,
+  ): Promise<NovelContextWorkset> {
+    signal?.throwIfAborted()
+    if (!isWorkset(workset)) {
+      throw new NovelContextError('novel context: workset shape is invalid', 'NOVEL_CONTEXT_INVALID_REFERENCE')
+    }
+    const normalizedItems = normalizeReferences(workset.items, this.config.maxReferences).map((item) => {
+      if (item.mode === 'explicit') {
+        throw new NovelContextError('novel context: workset items cannot be explicit', 'NOVEL_CONTEXT_INVALID_REFERENCE')
+      }
+      return { ...item, mode: item.mode, origin: item.origin } as NovelContextWorksetItem
+    })
+    if (normalizedItems.filter(item => item.mode === 'follow').length > 1) {
+      throw new NovelContextError('novel context: workset allows at most one follow reference', 'NOVEL_CONTEXT_INVALID_REFERENCE')
+    }
+    await this.resolveProject(agent, workset.projectId, signal)
+    if (normalizedItems.length > 0) await this.resolveReferences(agent, normalizedItems, signal)
+    const normalized: NovelContextWorkset = {
+      version: 1,
+      projectId: workset.projectId,
+      items: normalizedItems.map(item => structuredClone(item)),
+    }
+    const current = foldNovelContextWorkset(agent.session.events)
+    if (current !== null && JSON.stringify(current) === JSON.stringify(normalized)) return structuredClone(current)
+    agent.session.append('novel/context-workset', { version: 1, workset: normalized })
+    return structuredClone(normalized)
   }
 
   /**
@@ -109,19 +163,7 @@ export class NovelContextResolver extends Service {
         throw new NovelContextError('novel context: one request cannot cross projects', 'NOVEL_CONTEXT_PROJECT_MISMATCH')
       }
     }
-    this.assertSessionBinding(agent, projectId)
-    const cwd = agent.session.header.cwd
-    if (cwd === undefined) {
-      throw new NovelContextError('novel context: Session has no project working directory', 'NOVEL_CONTEXT_PROJECT_NOT_FOUND')
-    }
-    const root = await this.ctx.fs.resolve(cwd, { cwd })
-    const project = await this.ctx.novelRepository.discoverProject(root, signal)
-    if (project === undefined) {
-      throw new NovelContextError('novel context: working directory is not a Novel Project', 'NOVEL_CONTEXT_PROJECT_NOT_FOUND')
-    }
-    if (project.id !== projectId) {
-      throw new NovelContextError('novel context: reference project does not match the working directory', 'NOVEL_CONTEXT_PROJECT_MISMATCH')
-    }
+    const project = await this.resolveProject(agent, projectId, signal)
     const resolved: ResolvedNovelReference[] = []
     let retainedBytes = 0
     for (const input of inputs) {
@@ -143,6 +185,27 @@ export class NovelContextResolver extends Service {
       resolved.push({ input, snapshot, text })
     }
     return { project, references: resolved }
+  }
+
+  private async resolveProject(
+    agent: Agent,
+    projectId: ProjectId,
+    signal?: AbortSignal,
+  ): Promise<NovelProjectSnapshot> {
+    this.assertSessionBinding(agent, projectId)
+    const cwd = agent.session.header.cwd
+    if (cwd === undefined) {
+      throw new NovelContextError('novel context: Session has no project working directory', 'NOVEL_CONTEXT_PROJECT_NOT_FOUND')
+    }
+    const root = await this.ctx.fs.resolve(cwd, { cwd })
+    const project = await this.ctx.novelRepository.discoverProject(root, signal)
+    if (project === undefined) {
+      throw new NovelContextError('novel context: working directory is not a Novel Project', 'NOVEL_CONTEXT_PROJECT_NOT_FOUND')
+    }
+    if (project.id !== projectId) {
+      throw new NovelContextError('novel context: reference project does not match the working directory', 'NOVEL_CONTEXT_PROJECT_MISMATCH')
+    }
+    return project
   }
 
   /**
@@ -170,20 +233,26 @@ export class NovelContextResolver extends Service {
       type: reference.snapshot.asset.type,
       path: reference.snapshot.asset.projectRelativePath,
       ...(reference.input.selector === undefined ? {} : { selector: reference.input.selector }),
+      origin: reference.input.origin,
+      mode: reference.input.mode,
       text: reference.text,
     }))
     const prompt = `${PROMPT_PREFIX}${stringifyTagSafeJson(data)}${PROMPT_SUFFIX}`
+    const manifestReferences = resolved.references.map(reference => ({
+      assetId: reference.input.assetId,
+      revisionId: reference.input.revisionId,
+      label: reference.input.label,
+      ...(reference.input.selector === undefined ? {} : { selector: reference.input.selector }),
+      origin: reference.input.origin,
+      mode: reference.input.mode,
+    }))
     const source: NovelContextSource = {
       kind: 'novel-context',
-      form: 'catalog',
-      version: 1,
+      form: 'manifest',
+      version: 2,
+      manifestId: manifestId(resolved.project.id, manifestReferences),
       projectId: resolved.project.id,
-      references: resolved.references.map(reference => ({
-        assetId: reference.input.assetId,
-        revisionId: reference.input.revisionId,
-        label: reference.input.label,
-        ...(reference.input.selector === undefined ? {} : { selector: reference.input.selector }),
-      })),
+      references: manifestReferences,
     }
     const additionalContext: UserMessage = createUserMessage({
       source,
@@ -200,22 +269,32 @@ export class NovelContextResolver extends Service {
     messages: readonly UserMessage[],
     signal: AbortSignal,
   ): Promise<UserMessage[]> {
-    const prepared = await Promise.all(messages.map(async (message): Promise<UserMessage[]> => {
-      if (message.source.kind !== 'user') return [message]
-      const references: NovelReferenceInput[] = []
+    const references: NovelReferenceInput[] = []
+    let lastDirect = -1
+    const parsed = messages.map((message, index): UserMessage => {
+      if (message.source.kind !== 'user') return message
+      lastDirect = index
       const content = message.content.map((block): ContentBlock => {
         if (block.type !== 'text') return block
         const parsed = parseNovelReferenceText(block.text)
-        references.push(...parsed.references)
+        references.push(...parsed.references.map(reference => ({
+          ...reference,
+          origin: 'message' as const,
+          mode: 'explicit' as const,
+        })))
         return { type: 'text', text: parsed.text }
       })
-      if (references.length === 0) return [message]
-      const resolved = await this.prepare(agent, content, references, signal)
-      /* v8 ignore next -- prepare receives a non-empty reference list and therefore always adds context. */
-      if (resolved.additionalContext === undefined) throw new Error('novel context omitted a parsed canonical reference')
-      return [freezeMessage({ ...message, content: resolved.content }), resolved.additionalContext]
-    }))
-    return prepared.flat()
+      return freezeMessage({ ...message, content })
+    })
+    if (lastDirect < 0) return parsed
+    const workset = foldNovelContextWorkset(agent.session.events)
+    if (workset !== null) references.push(...workset.items)
+    if (references.length === 0) return parsed
+    const resolved = await this.prepare(agent, [], references, signal)
+    /* v8 ignore next -- prepare receives a non-empty reference list and therefore always adds context. */
+    const additionalContext = resolved.additionalContext
+    if (additionalContext === undefined) throw new Error('novel context omitted a frozen reference set')
+    return parsed.flatMap((message, index) => index === lastDirect ? [message, additionalContext] : [message])
   }
 
   private assertSessionBinding(agent: Agent, projectId: ProjectId): void {
@@ -234,9 +313,11 @@ export class NovelContextResolver extends Service {
 function normalizeReferences(
   references: readonly NovelReferenceInput[],
   maxReferences: number,
-): Array<Required<Pick<NovelReferenceInput, 'projectId' | 'assetId' | 'revisionId' | 'label'>> & Pick<NovelReferenceInput, 'selector'>> {
+): Array<Required<Pick<NovelReferenceInput,
+  'projectId' | 'assetId' | 'revisionId' | 'label' | 'origin' | 'mode'>> & Pick<NovelReferenceInput, 'selector'>> {
   const seen = new Set<string>()
-  const result: Array<Required<Pick<NovelReferenceInput, 'projectId' | 'assetId' | 'revisionId' | 'label'>> & Pick<NovelReferenceInput, 'selector'>> = []
+  const result: Array<Required<Pick<NovelReferenceInput,
+    'projectId' | 'assetId' | 'revisionId' | 'label' | 'origin' | 'mode'>> & Pick<NovelReferenceInput, 'selector'>> = []
   for (const value of references as readonly unknown[]) {
     if (!isReference(value)) {
       throw new NovelContextError('novel context: reference shape is invalid', 'NOVEL_CONTEXT_INVALID_REFERENCE')
@@ -249,6 +330,8 @@ function normalizeReferences(
       assetId: value.assetId,
       revisionId: value.revisionId,
       label: value.label ?? value.assetId,
+      origin: value.origin ?? 'message',
+      mode: value.mode ?? 'explicit',
       ...(value.selector === undefined ? {} : { selector: structuredClone(value.selector) }),
     })
   }
@@ -265,7 +348,47 @@ function isReference(value: unknown): value is NovelReferenceInput {
     && typeof record['assetId'] === 'string'
     && typeof record['revisionId'] === 'string'
     && (record['label'] === undefined || typeof record['label'] === 'string')
+    && (record['origin'] === undefined || isReferenceOrigin(record['origin']))
+    && (record['mode'] === undefined || isReferenceMode(record['mode']))
     && (record['selector'] === undefined || isSelector(record['selector']))
+}
+
+function isReferenceOrigin(value: unknown): boolean {
+  return value === 'message' || value === 'selection' || value === 'active-asset' || value === 'search'
+}
+
+function isReferenceMode(value: unknown): boolean {
+  return value === 'explicit' || value === 'follow' || value === 'pinned'
+}
+
+function isWorkset(value: unknown): value is NovelContextWorkset {
+  if (typeof value !== 'object' || value === null) return false
+  const record = value as Record<string, unknown>
+  if (record['version'] !== 1 || typeof record['projectId'] !== 'string' || !Array.isArray(record['items'])) return false
+  let follows = 0
+  const valid = record['items'].every((item) => {
+    if (!isReference(item)) return false
+    if (item.mode === 'follow') follows += 1
+    return item.projectId === record['projectId']
+      && (item.mode === 'follow' || item.mode === 'pinned')
+      && (item.origin === 'active-asset' || item.origin === 'selection' || item.origin === 'search')
+  })
+  return valid && follows <= 1
+}
+
+/** Pure latest-value fold shared by Host preparation and Session Projection. */
+export function foldNovelContextWorkset(events: readonly { readonly type: string; readonly data: unknown }[]): NovelContextWorkset | null {
+  let current: NovelContextWorkset | null = null
+  for (const event of events) {
+    if (event.type !== 'novel/context-workset') continue
+    const data = event.data as { workset?: unknown }
+    if (isWorkset(data.workset)) current = data.workset
+  }
+  return current
+}
+
+function manifestId(projectId: ProjectId, references: readonly unknown[]): `sha256:${string}` {
+  return `sha256:${createHash('sha256').update(stringifyTagSafeJson({ projectId, references })).digest('hex')}`
 }
 
 function isSelector(value: unknown): value is NovelSelector {

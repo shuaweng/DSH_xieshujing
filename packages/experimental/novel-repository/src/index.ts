@@ -12,6 +12,7 @@ import type {
   AssetId,
   AssetSnapshot,
   AssetSummary,
+  AssetSearchResult,
   CaptureSelectionRequest,
   CreateAssetRequest,
   ChangeSet,
@@ -22,6 +23,7 @@ import type {
   ProposeChangeSetRequest,
   RevisionId,
   SaveAssetContentRequest,
+  SearchAssetsRequest,
   SelectionRef,
 } from './types.ts'
 
@@ -38,6 +40,7 @@ export type {
   AssetRevision,
   AssetSnapshot,
   AssetSummary,
+  AssetSearchResult,
   CaptureSelectionRequest,
   CreateAssetRequest,
   ChangeSet,
@@ -57,6 +60,7 @@ export type {
   ReplaceTextOperation,
   RevisionOrigin,
   SaveAssetContentRequest,
+  SearchAssetsRequest,
   SelectionRef,
   TextRangeSelectionInput,
   TextRangeSelector,
@@ -95,6 +99,21 @@ export abstract class NovelRepository extends Service {
     signal?: AbortSignal,
     sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<readonly AssetSummary[]>
+
+  /**
+   * Search current typed Assets without exposing paths as identity.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - bounded text query, optional type allowlist, and result cap.
+   * @param signal - optional cancellation for scan and typed model-text extraction.
+   * @param sandboxPolicy - optional write policy if catalog reconciliation must recover a journal.
+   * @returns deterministically ranked exact current Revision results.
+   */
+  abstract searchAssets(
+    project: NovelProjectSnapshot,
+    request: SearchAssetsRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSearchResult[]>
 
   /**
    * Create one new typed authored Asset at a provider-owned safe path.

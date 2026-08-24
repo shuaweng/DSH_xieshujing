@@ -103,6 +103,7 @@ export type NovelRepositoryErrorCode =
   | 'NOVEL_REVISION_NOT_FOUND'
   | 'NOVEL_REVISION_STALE'
   | 'NOVEL_SELECTION_INVALID'
+  | 'NOVEL_SEARCH_INVALID'
   | 'NOVEL_CHANGESET_NOT_FOUND'
   | 'NOVEL_CHANGESET_INVALID'
   | 'NOVEL_CHANGESET_CONFLICT'
@@ -150,6 +151,25 @@ export interface AssetSummary {
   readonly revisionId: RevisionId
   readonly contentHash: ContentHash
   readonly title: string
+}
+
+/** Bounded semantic catalog query shared by browser and Agent Consumers. */
+export interface SearchAssetsRequest {
+  /** Non-empty human query, matched lexically in version one. */
+  readonly query: string
+  /** Optional exact Asset-type allowlist. */
+  readonly types?: readonly NovelAssetType[]
+  /** Positive bounded result count requested by the Consumer. */
+  readonly limit?: number
+}
+
+/** One exact current Revision discovered by the repository search seam. */
+export interface AssetSearchResult {
+  readonly summary: AssetSummary
+  /** Short author-text excerpt around the strongest lexical match. */
+  readonly excerpt: string
+  /** Provider-defined deterministic relevance score; larger ranks first. */
+  readonly score: number
 }
 
 /** One immutable Revision retained in `.novel/history.sqlite`. */

@@ -195,12 +195,16 @@ flowchart TD
   end
   subgraph group_experimental["packages/experimental"]
     pkg_experimental_agent_team["experimental-agent-team"]
+    pkg_experimental_novel_asset_outline["experimental-novel-asset-outline"]
+    pkg_experimental_novel_context["experimental-novel-context"]
     pkg_experimental_novel_repository["experimental-novel-repository"]
     pkg_experimental_novel_repository_client["experimental-novel-repository-client"]
     pkg_experimental_novel_repository_local["experimental-novel-repository-local"]
     pkg_experimental_novel_repository_remote["experimental-novel-repository-remote"]
     pkg_experimental_novel_studio["experimental-novel-studio"]
+    pkg_experimental_novel_workbench["experimental-novel-workbench"]
     pkg_experimental_tool_agent_team["experimental-tool-agent-team"]
+    pkg_experimental_tool_novel["experimental-tool-novel"]
   end
   subgraph group_extensions["packages/extensions"]
     pkg_client_ui_cordis["client-ui-cordis"]
@@ -688,6 +692,8 @@ flowchart TD
   pkg_experimental_novel_repository --> pkg_fs
   pkg_experimental_novel_repository --> pkg_invariants
   pkg_experimental_novel_repository --> pkg_llm
+  pkg_experimental_novel_repository --> pkg_sandbox
+  pkg_experimental_novel_repository --> pkg_session
   pkg_command_feedback --> pkg_anonymous_user_id
   pkg_command_feedback --> pkg_commands
   pkg_command_feedback --> pkg_invariants
@@ -874,15 +880,17 @@ flowchart TD
   pkg_session_reference --> pkg_session
   pkg_session_reference --> pkg_session_query
   pkg_session_reference --> pkg_typert_protocol
+  pkg_experimental_novel_context --> pkg_agent
+  pkg_experimental_novel_context --> pkg_experimental_novel_repository
+  pkg_experimental_novel_context --> pkg_fs
+  pkg_experimental_novel_context --> pkg_invariants
+  pkg_experimental_novel_context --> pkg_llm
+  pkg_experimental_novel_context --> pkg_session
+  pkg_experimental_novel_context --> pkg_session_projection
   pkg_experimental_novel_repository_local --> pkg_experimental_novel_repository
   pkg_experimental_novel_repository_local --> pkg_fs
   pkg_experimental_novel_repository_local --> pkg_invariants
-  pkg_experimental_novel_repository_remote --> pkg_agent
-  pkg_experimental_novel_repository_remote --> pkg_brand
-  pkg_experimental_novel_repository_remote --> pkg_experimental_novel_repository
-  pkg_experimental_novel_repository_remote --> pkg_fs
-  pkg_experimental_novel_repository_remote --> pkg_invariants
-  pkg_experimental_novel_repository_remote --> pkg_typert_protocol
+  pkg_experimental_novel_repository_local --> pkg_sandbox
   pkg_cordis_host_runner --> pkg_agent
   pkg_cordis_host_runner --> pkg_brand
   pkg_cordis_host_runner --> pkg_invariants
@@ -1066,6 +1074,21 @@ flowchart TD
   pkg_experimental_agent_team --> pkg_session
   pkg_experimental_agent_team --> pkg_session_persistence
   pkg_experimental_agent_team --> pkg_subagent
+  pkg_experimental_novel_repository_remote --> pkg_agent
+  pkg_experimental_novel_repository_remote --> pkg_brand
+  pkg_experimental_novel_repository_remote --> pkg_experimental_novel_context
+  pkg_experimental_novel_repository_remote --> pkg_experimental_novel_repository
+  pkg_experimental_novel_repository_remote --> pkg_fs
+  pkg_experimental_novel_repository_remote --> pkg_invariants
+  pkg_experimental_novel_repository_remote --> pkg_sandbox_policy
+  pkg_experimental_novel_repository_remote --> pkg_typert_protocol
+  pkg_experimental_tool_novel --> pkg_experimental_novel_context
+  pkg_experimental_tool_novel --> pkg_experimental_novel_repository
+  pkg_experimental_tool_novel --> pkg_fs
+  pkg_experimental_tool_novel --> pkg_invariants
+  pkg_experimental_tool_novel --> pkg_sandbox_policy
+  pkg_experimental_tool_novel --> pkg_system_prompt
+  pkg_experimental_tool_novel --> pkg_tools
   pkg_tool_cordis --> pkg_agent
   pkg_tool_cordis --> pkg_cordis_host_runner
   pkg_tool_cordis --> pkg_invariants
@@ -1466,6 +1489,21 @@ flowchart TD
   pkg_client_ui_skill --> pkg_client_ui_input_trigger
   pkg_client_ui_skill --> pkg_client_ui_tool
   pkg_client_ui_skill --> pkg_invariants
+  pkg_experimental_novel_workbench --> pkg_client_locale
+  pkg_experimental_novel_workbench --> pkg_client_runtime
+  pkg_experimental_novel_workbench --> pkg_client_ui_agent_preset
+  pkg_experimental_novel_workbench --> pkg_client_ui_conversation
+  pkg_experimental_novel_workbench --> pkg_client_ui_input_trigger
+  pkg_experimental_novel_workbench --> pkg_client_ui_layout
+  pkg_experimental_novel_workbench --> pkg_client_ui_slots
+  pkg_experimental_novel_workbench --> pkg_client_ui_theme
+  pkg_experimental_novel_workbench --> pkg_client_ui_tool
+  pkg_experimental_novel_workbench --> pkg_experimental_novel_context
+  pkg_experimental_novel_workbench --> pkg_experimental_novel_repository
+  pkg_experimental_novel_workbench --> pkg_experimental_novel_repository_client
+  pkg_experimental_novel_workbench --> pkg_experimental_novel_repository_remote
+  pkg_experimental_novel_workbench --> pkg_invariants
+  pkg_experimental_novel_workbench --> pkg_typert_protocol
   pkg_client_ui_cordis --> pkg_api_remotes
   pkg_client_ui_cordis --> pkg_client_connection
   pkg_client_ui_cordis --> pkg_client_locale
@@ -1475,6 +1513,12 @@ flowchart TD
   pkg_client_ui_cordis --> pkg_client_ui_tool
   pkg_client_ui_cordis --> pkg_cordis_client_runner
   pkg_client_ui_cordis --> pkg_invariants
+  pkg_experimental_novel_asset_outline --> pkg_client_locale
+  pkg_experimental_novel_asset_outline --> pkg_client_ui_slots
+  pkg_experimental_novel_asset_outline --> pkg_experimental_novel_repository
+  pkg_experimental_novel_asset_outline --> pkg_experimental_novel_repository_remote
+  pkg_experimental_novel_asset_outline --> pkg_experimental_novel_workbench
+  pkg_experimental_novel_asset_outline --> pkg_invariants
   pkg_host_directory_picker_auto --> pkg_client_ui_directory_picker_browse
   pkg_host_directory_picker_auto --> pkg_client_ui_directory_picker_native
   pkg_host_directory_picker_auto --> pkg_host_directory_picker_browse
@@ -1594,7 +1638,7 @@ flowchart TD
 | [`compaction`](../packages/compaction/compaction) | `compaction` | [`brand`](../packages/util/brand), [`commands`](../packages/interaction/commands), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |
 | [`tmux-context`](../packages/context/tmux-context) | `context` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`shell`](../packages/shell/shell) |
 | [`fs-e2b`](../packages/e2b/fs-e2b) | `e2b` | [`e2b`](../packages/e2b/e2b), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants) |
-| [`experimental-novel-repository`](../packages/experimental/novel-repository) | `experimental` | [`brand`](../packages/util/brand), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm) |
+| [`experimental-novel-repository`](../packages/experimental/novel-repository) | `experimental` | [`brand`](../packages/util/brand), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox), [`session`](../packages/core/session) |
 | [`command-feedback`](../packages/feedback/command-feedback) | `feedback` | [`anonymous-user-id`](../packages/identity/anonymous-user-id), [`commands`](../packages/interaction/commands), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`session-telemetry`](../packages/session/session-telemetry) |
 | [`permission-presets`](../packages/interaction/permission-presets) | `interaction` | [`commands`](../packages/interaction/commands), [`invariants`](../packages/runtime-diagnostics/invariants), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`settings`](../packages/settings/settings), [`shell`](../packages/shell/shell), [`user-approval`](../packages/interaction/user-approval) |
 | [`jobs-local`](../packages/jobs/jobs-local) | `jobs` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`scope`](../packages/core/scope), [`timeout`](../packages/util/timeout) |
@@ -1624,8 +1668,8 @@ flowchart TD
 | [`agent-instructions`](../packages/context/agent-instructions) | `context` | [`agent`](../packages/core/agent), [`fs`](../packages/fs/fs), [`home-paths`](../packages/util/home-paths), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`tools`](../packages/core/tools) |
 | [`file-reference-local`](../packages/context/file-reference-local) | `context` | [`agent`](../packages/core/agent), [`file-reference`](../packages/context/file-reference), [`invariants`](../packages/runtime-diagnostics/invariants), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`session-reference`](../packages/context/session-reference) | `context` | [`agent`](../packages/core/agent), [`compaction`](../packages/compaction/compaction), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`session`](../packages/core/session), [`session-query`](../packages/session-query/session-query), [`typert-protocol`](../packages/typert/protocol) |
-| [`experimental-novel-repository-local`](../packages/experimental/novel-repository-local) | `experimental` | [`experimental-novel-repository`](../packages/experimental/novel-repository), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants) |
-| [`experimental-novel-repository-remote`](../packages/experimental/novel-repository-remote) | `experimental` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`experimental-novel-repository`](../packages/experimental/novel-repository), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants), [`typert-protocol`](../packages/typert/protocol) |
+| [`experimental-novel-context`](../packages/experimental/novel-context) | `experimental` | [`agent`](../packages/core/agent), [`experimental-novel-repository`](../packages/experimental/novel-repository), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection) |
+| [`experimental-novel-repository-local`](../packages/experimental/novel-repository-local) | `experimental` | [`experimental-novel-repository`](../packages/experimental/novel-repository), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants), [`sandbox`](../packages/sandbox/sandbox) |
 | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | `extensions` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
 | [`repeat-tool-reminder`](../packages/guard/repeat-tool-reminder) | `guard` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`tools`](../packages/core/tools) |
 | [`tool-call-timeout-policy`](../packages/guard/timeout-policy) | `guard` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
@@ -1658,6 +1702,8 @@ flowchart TD
 | [`web-app`](../packages/bundle/web-app) | `bundle` | [`invariants`](../packages/runtime-diagnostics/invariants), [`shell-env`](../packages/shell/shell-env), [`system-prompt`](../packages/core/system-prompt) |
 | [`compaction-tool-result-pruner`](../packages/compaction/compaction-tool-result-pruner) | `compaction` | [`compaction`](../packages/compaction/compaction), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`token-meter`](../packages/llm/token-meter) |
 | [`experimental-agent-team`](../packages/experimental/agent-team) | `experimental` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`subagent`](../packages/subagent/subagent) |
+| [`experimental-novel-repository-remote`](../packages/experimental/novel-repository-remote) | `experimental` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`experimental-novel-context`](../packages/experimental/novel-context), [`experimental-novel-repository`](../packages/experimental/novel-repository), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`typert-protocol`](../packages/typert/protocol) |
+| [`experimental-tool-novel`](../packages/experimental/tool-novel) | `experimental` | [`experimental-novel-context`](../packages/experimental/novel-context), [`experimental-novel-repository`](../packages/experimental/novel-repository), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-cordis`](../packages/extensions/tool-cordis) | `extensions` | [`agent`](../packages/core/agent), [`cordis-host-runner`](../packages/extensions/cordis-host-runner), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`host-apiproxy`](../packages/host/apiproxy) | `host` | [`agent-presets`](../packages/preset/agent-presets), [`cordis-host-runner`](../packages/extensions/cordis-host-runner), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`sdk-protocol`](../packages/sdk/protocol) | `sdk` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent) |
@@ -1715,5 +1761,7 @@ flowchart TD
 | [`client-ui-model-selection`](../packages/client/ui-model-selection) | `client` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-commands`](../packages/client/ui-commands), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-input-trigger`](../packages/client/ui-input-trigger), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-ui-permission-presets`](../packages/client/ui-permission-presets) | `client` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-commands`](../packages/client/ui-commands), [`client-ui-input-trigger`](../packages/client/ui-input-trigger), [`client-ui-settings`](../packages/client/ui-settings), [`invariants`](../packages/runtime-diagnostics/invariants), [`permission-presets`](../packages/interaction/permission-presets) |
 | [`client-ui-skill`](../packages/client/ui-skill) | `client` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-input-trigger`](../packages/client/ui-input-trigger), [`client-ui-tool`](../packages/client/ui-tool), [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`experimental-novel-workbench`](../packages/experimental/novel-workbench) | `experimental` | [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-agent-preset`](../packages/client/ui-agent-preset), [`client-ui-conversation`](../packages/client/ui-conversation), [`client-ui-input-trigger`](../packages/client/ui-input-trigger), [`client-ui-layout`](../packages/client/ui-layout), [`client-ui-slots`](../packages/client/ui-slots), [`client-ui-theme`](../packages/client/ui-theme), [`client-ui-tool`](../packages/client/ui-tool), [`experimental-novel-context`](../packages/experimental/novel-context), [`experimental-novel-repository`](../packages/experimental/novel-repository), [`experimental-novel-repository-client`](../packages/experimental/novel-repository-client), [`experimental-novel-repository-remote`](../packages/experimental/novel-repository-remote), [`invariants`](../packages/runtime-diagnostics/invariants), [`typert-protocol`](../packages/typert/protocol) |
 | [`client-ui-cordis`](../packages/extensions/ui-cordis) | `extensions` | [`api-remotes`](../packages/api/remotes), [`client-connection`](../packages/client/connection), [`client-locale`](../packages/client/locale), [`client-runtime`](../packages/client/runtime), [`client-ui-input-trigger`](../packages/client/ui-input-trigger), [`client-ui-sidebar`](../packages/client/ui-sidebar), [`client-ui-tool`](../packages/client/ui-tool), [`cordis-client-runner`](../packages/extensions/cordis-client-runner), [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`experimental-novel-asset-outline`](../packages/experimental/novel-asset-outline) | `experimental` | [`client-locale`](../packages/client/locale), [`client-ui-slots`](../packages/client/ui-slots), [`experimental-novel-repository`](../packages/experimental/novel-repository), [`experimental-novel-repository-remote`](../packages/experimental/novel-repository-remote), [`experimental-novel-workbench`](../packages/experimental/novel-workbench), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`host-directory-picker-auto`](../packages/host/directory-picker-auto) | `host` | [`client-ui-directory-picker-browse`](../packages/client/ui-directory-picker-browse), [`client-ui-directory-picker-native`](../packages/client/ui-directory-picker-native), [`host-directory-picker-browse`](../packages/host/directory-picker-browse), [`host-directory-picker-native`](../packages/host/directory-picker-native), [`host-webserver`](../packages/host/webserver), [`invariants`](../packages/runtime-diagnostics/invariants) |

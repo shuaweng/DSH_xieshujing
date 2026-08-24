@@ -39,6 +39,37 @@ export interface NovelAssetDescriptor {
   readonly title: string
 }
 
+/** Browser and Agent-facing bounded Asset discovery query. */
+export interface SearchNovelAssetsRequest {
+  readonly query: string
+  readonly types?: readonly string[]
+  readonly limit?: number
+}
+
+/** Exact current Revision discovered by the Host repository. */
+export interface NovelAssetSearchResult extends NovelAssetDescriptor {
+  readonly excerpt: string
+  readonly score: number
+}
+
+/** One exact non-prose reference retained across turns. */
+export interface NovelContextWorksetItemDescriptor {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly label: string
+  readonly selector?: NovelWireValue
+  readonly mode: 'follow' | 'pinned'
+  readonly origin: 'active-asset' | 'selection' | 'search'
+}
+
+/** Whole current workset submitted through one guarded Remote mutation. */
+export interface NovelContextWorksetDescriptor {
+  readonly version: 1
+  readonly projectId: ProjectId
+  readonly items: readonly NovelContextWorksetItemDescriptor[]
+}
+
 /** Browser request to create one new typed Asset at a provider-owned path. */
 export interface CreateNovelAssetRequest {
   readonly type: string

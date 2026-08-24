@@ -15,6 +15,8 @@ import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {
   NovelChangeSetDescriptor,
   NovelAssetDocument,
+  NovelAssetSearchResult,
+  NovelContextWorksetDescriptor,
   NovelSelectionDescriptor,
   CreateNovelAssetRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
@@ -23,6 +25,8 @@ import { WorkbenchToggle } from '../src/client/WorkbenchToggle.tsx'
 import { NovelPresentationCard } from '../src/client/NovelPresentationCard.tsx'
 import { Explorer } from '../src/client/Explorer.tsx'
 import { Canvas, shortReferenceLabel } from '../src/client/Canvas.tsx'
+import { ContextTray } from '../src/client/ContextTray.tsx'
+import { NovelContextFocusController } from '../src/client/context-controller.ts'
 import { ChangeSetCard, type NovelChangeReview } from '../src/client/ChangeSetCard.tsx'
 import { createNovelWorkbenchStore } from '../src/client/store.ts'
 import { NovelWorkbenchViewController } from '../src/client/view-controller.ts'
@@ -513,6 +517,84 @@ describe('Canvas', () => {
   })
 })
 
+describe('ContextTray', () => {
+  const project = {
+    schema: 1, id: 'project-1', title: '白港', rootDisplayPath: '/story',
+    manifestDisplayPath: '/story/novel.yaml', contentRootDisplayPaths: { manuscript: '/story/manuscript' },
+  } as never
+
+  it('is preset-scoped and replaces exact follow and searched pinned worksets', async () => {
+    const focus = new NovelContextFocusController()
+    act(() => { focus.set({ sessionId: SID, project, document: chapter(), dirty: false }) })
+    const replace = vi.fn(async (workset: NovelContextWorksetDescriptor) => workset)
+    const result: NovelAssetSearchResult = {
+      id: 'asset-outline-1' as never, projectId: 'project-1' as never, type: 'planning.outline',
+      projectRelativePath: 'planning/main.md', revisionId: 'revision-outline-1' as never,
+      contentHash: `sha256:${'c'.repeat(64)}`, title: '全书大纲', excerpt: '主角抵达白港。', score: 500,
+    }
+    const search = vi.fn(async () => [result])
+    const view = render(<ContextTray
+      sessionId={SID} useSessions={useSessions as never} useProjection={() => null}
+      useContextFocus={hookOf(focus) as never} search={search} replace={replace} t={t}
+      useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
+      useWorkspaces={vi.fn() as never}
+    />)
+
+    fireEvent.click(view.getByText(zh.followCurrent))
+    await waitFor(() => { expect(replace).toHaveBeenCalledWith({
+      version: 1, projectId: 'project-1', items: [{
+        projectId: 'project-1', assetId: 'asset-chapter-1', revisionId: 'revision-1',
+        label: '第一章', mode: 'follow', origin: 'active-asset',
+      }],
+    }) })
+    fireEvent.click(view.getByText(`＋ ${zh.searchContext}`))
+    fireEvent.change(view.getByPlaceholderText(zh.searchContextPlaceholder), { target: { value: '白港' } })
+    fireEvent.click(view.getByText(zh.search))
+    await waitFor(() => { expect(view.getByText('全书大纲')).toBeTruthy() })
+    fireEvent.click(view.getByText('全书大纲'))
+    await waitFor(() => { expect(replace).toHaveBeenLastCalledWith({
+      version: 1, projectId: 'project-1', items: [{
+        projectId: 'project-1', assetId: 'asset-outline-1', revisionId: 'revision-outline-1',
+        label: '全书大纲', mode: 'pinned', origin: 'search',
+      }],
+    }) })
+    expect(search).toHaveBeenCalledWith({ query: '白港', limit: 8 })
+
+    view.unmount()
+    const hidden = render(<ContextTray
+      sessionId={SID}
+      useSessions={((select: (state: SessionListState) => unknown) => select({
+        ids: [SID], byId: { [SID]: { id: SID, agentPreset: 'code' } }, current: SID,
+        phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+      } as never)) as never}
+      useProjection={() => null} useContextFocus={hookOf(focus) as never}
+      search={search} replace={replace} t={t} useSession={vi.fn() as never}
+      useInput={vi.fn() as never} inputActions={{} as never} useWorkspaces={vi.fn() as never}
+    />)
+    expect(hidden.container.innerHTML).toBe('')
+  })
+
+  it('retains the last saved Revision while the active editor is dirty', () => {
+    const focus = new NovelContextFocusController()
+    act(() => { focus.set({ sessionId: SID, project, document: chapter(), dirty: true }) })
+    const workset: NovelContextWorksetDescriptor = {
+      version: 1, projectId: 'project-1' as never, items: [{
+        projectId: 'project-1' as never, assetId: 'asset-chapter-1' as never,
+        revisionId: 'revision-1' as never, label: '第一章', mode: 'follow', origin: 'active-asset',
+      }],
+    }
+    const replace = vi.fn(async (value: NovelContextWorksetDescriptor) => value)
+    const view = render(<ContextTray
+      sessionId={SID} useSessions={useSessions as never} useProjection={() => workset}
+      useContextFocus={hookOf(focus) as never} search={vi.fn()} replace={replace} t={t}
+      useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
+      useWorkspaces={vi.fn() as never}
+    />)
+    expect(view.getAllByText(zh.contextNeedsSave).length).toBeGreaterThan(0)
+    expect(replace).not.toHaveBeenCalled()
+  })
+})
+
 describe('Explorer', () => {
   function sessionHook(current: SessionId | undefined) {
     return function useCurrent<T>(select: (state: SessionListState) => T): T {
@@ -936,6 +1018,8 @@ describe('Novel workbench stores and browser assembly', () => {
       changeSet: vi.fn(async () => ({ ok: true as const, value: changeSet() })),
       applyChangeSet: vi.fn(async () => ({ ok: true as const, value: changeSet('applied') })),
       rejectChangeSet: vi.fn(async () => ({ ok: true as const, value: changeSet('rejected') })),
+      search: vi.fn(async () => ({ ok: true as const, value: [] })),
+      replaceContextWorkset: vi.fn(async (_sid: unknown, value: NovelContextWorksetDescriptor) => ({ ok: true as const, value })),
     }
     ctx.provide('remote', { novelRepository: remote } as never)
     const layout = new LayoutController()
@@ -953,6 +1037,7 @@ describe('Novel workbench stores and browser assembly', () => {
       children: {
         'tool.call.toolview': { kind: 'keyed', scope: 'session' },
         'conversation.input.left': { kind: 'list', scope: 'session' },
+        'conversation.input.dock': { kind: 'list', scope: 'session' },
         'shell.workbench': { kind: 'chain', scope: 'root' },
       },
     } as never, () => null)
@@ -986,6 +1071,16 @@ describe('Novel workbench stores and browser assembly', () => {
     toggleFace.toggleWorkbench()
     expect(layout.workbench.getSnapshot().id).toBeNull()
 
+    const tray = slots.entries('conversation.input.dock').find(entry => entry.component === ContextTray)!
+    const trayFace = (tray.inject as (sessionId: SessionId) => {
+      hooks: { contextFocus: NovelContextFocusController }
+      search: (request: unknown) => Promise<unknown>
+      replace: (workset: NovelContextWorksetDescriptor) => Promise<unknown>
+    })(SID)
+    await expect(trayFace.search({ query: '白港' })).resolves.toEqual([])
+    const workset: NovelContextWorksetDescriptor = { version: 1, projectId: 'project-1' as never, items: [] }
+    await expect(trayFace.replace(workset)).resolves.toEqual(workset)
+
     const explorer = slots.entries('novel.explorer')[0]!.inject as () => {
       load: (id: SessionId) => Promise<unknown>
       open: (id: SessionId, assetId: string) => Promise<unknown>
@@ -1001,8 +1096,11 @@ describe('Novel workbench stores and browser assembly', () => {
       save: (id: SessionId, request: unknown) => Promise<unknown>
       capture: (id: SessionId, request: unknown) => Promise<unknown>
       appendReference: (id: SessionId, reference: NovelSelectionDescriptor, label: string) => void
+      reportContextFocus: (value?: Parameters<NovelContextFocusController['set']>[0]) => void
     }
     const canvasFace = canvas()
+    canvasFace.reportContextFocus({ sessionId: SID, project: project as never, document: chapter(), dirty: false })
+    expect(trayFace.hooks.contextFocus.getSnapshot()).toMatchObject({ sessionId: SID, document: { id: 'asset-chapter-1' } })
     await expect(canvasFace.save(SID, {})).resolves.toMatchObject({ revisionId: 'revision-2' })
     await expect(canvasFace.capture(SID, {})).resolves.toMatchObject({ id: 'selection-1' })
     expect(() => { canvasFace.appendReference(SID, selection(), '[新句]') }).toThrow(/no browser scope/u)

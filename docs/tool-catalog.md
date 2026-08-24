@@ -38,7 +38,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`, `ctx.systemPrompt`, `a live continuable in-process child Agent` | `tool/call`, `tool/result`, `a user-role message in the direct parent session` | - | Registered per continuable in-process child rather than globally, so this schema is visible only inside such a child and survives its global `toolFilter`. The same contribution installs the child-scoped `tool:report` prompt section, which this catalog does not render. The parent-facing `send_message` tool is installed independently. |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
-| `@deepseek-ai/dsh-experimental-tool-novel` | `novel_create`, `novel_get`, `novel_list`, `novel_present`, `novel_propose_changes` | `ctx.tools`, `ctx.systemPrompt`, `ctx.novelContextResolver`, `ctx.novelRepository`, `ctx.novelAssetTypes`, `ctx.fs`, `ctx.sandboxPolicy`, `an owning Agent Session at execution time` | `tool/call`, `durable proposal-only ChangeSet from novel_propose_changes`, `tool/result` | - | The Novel Studio Preset ships five stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files. |
+| `@deepseek-ai/dsh-experimental-tool-novel` | `novel_create`, `novel_get`, `novel_list`, `novel_present`, `novel_propose_changes`, `novel_search` | `ctx.tools`, `ctx.systemPrompt`, `ctx.novelContextResolver`, `ctx.novelRepository`, `ctx.novelAssetTypes`, `ctx.fs`, `ctx.sandboxPolicy`, `an owning Agent Session at execution time` | `tool/call`, `durable proposal-only ChangeSet from novel_propose_changes`, `tool/result` | - | The Novel Studio Preset ships six stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_search` finds bounded lexical matches, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
@@ -2179,7 +2179,39 @@ Create one reviewable typed ChangeSet against an exact retained Novel Asset Revi
 
 Source: [`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
 
-The Novel Studio Preset ships five stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files.
+### `novel_search`
+
+Search current Novel Assets by bounded lexical title/content match and return exact current Revision references. Results are discovery only and are not automatically added to context.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Non-empty title or authored-content clue."
+    },
+    "types": {
+      "type": "array",
+      "description": "Optional exact Asset-type allowlist.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "limit": {
+      "type": "integer",
+      "description": "Optional result count from 1 to 50."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
+
+The Novel Studio Preset ships six stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_search` finds bounded lexical matches, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

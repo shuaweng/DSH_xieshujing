@@ -20,7 +20,10 @@ import {
   type NovelProjectSnapshot,
   type RevisionId,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
-import { formatNovelReferenceMention } from '@deepseek-ai/dsh-experimental-novel-context'
+import {
+  formatNovelReferenceMention,
+  type NovelContextWorkset,
+} from '@deepseek-ai/dsh-experimental-novel-context'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 // Typert-generated ./typert and ./remote artifacts import Zod at runtime.
 import type {} from 'zod'
@@ -31,6 +34,9 @@ import type {
   NovelChangeSetDescriptor,
   NovelAssetDocument,
   NovelProjectDescriptor,
+  NovelAssetSearchResult,
+  NovelContextWorksetDescriptor,
+  SearchNovelAssetsRequest,
   NovelSelectionDescriptor,
   NovelWireValue,
   SaveNovelAssetRequest,
@@ -43,6 +49,9 @@ export type {
   NovelChangeSetDescriptor,
   NovelAssetDocument,
   NovelProjectDescriptor,
+  NovelAssetSearchResult,
+  NovelContextWorksetDescriptor,
+  SearchNovelAssetsRequest,
   NovelSelectionDescriptor,
   NovelWireValue,
   SaveNovelAssetRequest,
@@ -128,6 +137,59 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     }))
     assertResponseBytes(assets, this.responseMaxBytes, 'asset catalog')
     return assets
+  }
+
+  /** Search current typed Assets and return exact current Revision references. */
+  @Remote('search')
+  async search(
+    agent: Agent,
+    request: SearchNovelAssetsRequest,
+    signal: AbortSignal,
+  ): Promise<NovelAssetSearchResult[]> {
+    const project = await this.requireProject(agent, signal)
+    const results = await this.ctx.novelRepository.searchAssets(
+      project,
+      {
+        query: request.query,
+        ...(request.types === undefined ? {} : { types: request.types as readonly NovelAssetType[] }),
+        ...(request.limit === undefined ? {} : { limit: request.limit }),
+      },
+      signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
+    const descriptors = results.map(({ summary, excerpt, score }) => ({
+      id: summary.asset.id,
+      projectId: summary.asset.projectId,
+      type: summary.asset.type,
+      ...(summary.asset.parentId === undefined ? {} : { parentId: summary.asset.parentId }),
+      projectRelativePath: summary.asset.projectRelativePath,
+      revisionId: summary.revisionId,
+      contentHash: summary.contentHash,
+      title: summary.title,
+      excerpt,
+      score,
+    }))
+    assertResponseBytes(descriptors, this.responseMaxBytes, 'Asset search results')
+    return descriptors
+  }
+
+  /** Replace the Session-owned non-prose Novel context workset. */
+  @Remote('replaceContextWorkset')
+  async replaceContextWorkset(
+    agent: Agent,
+    workset: NovelContextWorksetDescriptor,
+    signal: AbortSignal,
+  ): Promise<NovelContextWorksetDescriptor> {
+    const resolver = this.ctx.get('novelContextResolver')
+    if (resolver === undefined) throw new Error('Novel context workset capability is not composed')
+    const value = await resolver.replaceWorkset(
+      agent,
+      workset as unknown as NovelContextWorkset,
+      signal,
+    )
+    const descriptor = value as unknown as NovelContextWorksetDescriptor
+    assertResponseBytes(descriptor, this.responseMaxBytes, 'Novel context workset')
+    return descriptor
   }
 
   /**

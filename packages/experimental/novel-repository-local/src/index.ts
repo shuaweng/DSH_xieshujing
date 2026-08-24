@@ -20,6 +20,7 @@ import NovelRepository, {
   type Asset,
   type AssetRevision,
   type AssetSnapshot,
+  type AssetSearchResult,
   type AssetSummary,
   type CaptureSelectionRequest,
   type ChangeSet,
@@ -32,6 +33,7 @@ import NovelRepository, {
   type RevisionId as RevisionIdValue,
   type RevisionOrigin,
   type SaveAssetContentRequest,
+  type SearchAssetsRequest,
   type SelectionRef,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type { ParsedNovelAsset } from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
@@ -53,6 +55,10 @@ const DEFAULT_SCAN_MAX_DEPTH = 64
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000
 const DEFAULT_SELECTION_CONTEXT_CHARS = 32
 const DEFAULT_SELECTION_PREVIEW_CHARS = 160
+const MAX_SEARCH_QUERY_CHARS = 200
+const DEFAULT_SEARCH_LIMIT = 20
+const MAX_SEARCH_LIMIT = 50
+const SEARCH_EXCERPT_CHARS = 180
 const MAX_BUFFER_BYTES = Math.min(bufferConstants.MAX_LENGTH, bufferConstants.MAX_STRING_LENGTH)
 
 /** Local provider bounds and SQLite lock policy. */
@@ -229,6 +235,60 @@ export class LocalNovelRepository extends NovelRepository {
       return [...catalog.values()]
         .sort((left, right) => left.summary.asset.projectRelativePath.localeCompare(right.summary.asset.projectRelativePath))
         .map(value => cloneSummary(value.summary))
+    })
+  }
+
+  override async searchAssets(
+    project: NovelProjectSnapshot,
+    request: SearchAssetsRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSearchResult[]> {
+    const query = request.query.trim()
+    if (query.length === 0 || query.length > MAX_SEARCH_QUERY_CHARS) {
+      throw new NovelRepositoryError(
+        `novel repository: search query must contain 1-${MAX_SEARCH_QUERY_CHARS} characters`,
+        'NOVEL_SEARCH_INVALID',
+      )
+    }
+    const limit = request.limit ?? DEFAULT_SEARCH_LIMIT
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_SEARCH_LIMIT) {
+      throw new NovelRepositoryError(
+        `novel repository: search limit must be an integer between 1 and ${MAX_SEARCH_LIMIT}`,
+        'NOVEL_SEARCH_INVALID',
+      )
+    }
+    const types = request.types === undefined ? undefined : new Set(request.types)
+    return await this.withProject(project, async (state) => {
+      const catalog = await this.scan(project, state, signal, sandboxPolicy)
+      const lowered = query.toLocaleLowerCase()
+      const results: AssetSearchResult[] = []
+      for (const observed of catalog.values()) {
+        signal?.throwIfAborted()
+        if (types !== undefined && !types.has(observed.summary.asset.type)) continue
+        const title = observed.summary.title
+        const titleLower = title.toLocaleLowerCase()
+        const modelText = this.ctx.novelAssetTypes.get(observed.summary.asset.type).modelText(observed.snapshot)
+        const normalizedModelText = modelText.replace(/\s+/gu, ' ').trim()
+        const bodyLower = normalizedModelText.toLocaleLowerCase()
+        const titleIndex = titleLower.indexOf(lowered)
+        const bodyIndex = bodyLower.indexOf(lowered)
+        if (titleIndex < 0 && bodyIndex < 0) continue
+        const score = titleLower === lowered ? 1_000
+          : titleIndex === 0 ? 850
+            : titleIndex > 0 ? 700
+              : Math.max(100, 500 - Math.min(bodyIndex, 400))
+        results.push({
+          summary: cloneSummary(observed.summary),
+          excerpt: searchExcerpt(normalizedModelText, bodyIndex < 0 ? 0 : bodyIndex, lowered.length),
+          score,
+        })
+      }
+      return results
+        .sort((left, right) => right.score - left.score
+          || left.summary.title.localeCompare(right.summary.title)
+          || left.summary.asset.id.localeCompare(right.summary.asset.id))
+        .slice(0, limit)
     })
   }
 
@@ -1140,6 +1200,16 @@ function assetNotFound(assetId: AssetId): NovelRepositoryError {
     `novel repository: asset ${JSON.stringify(assetId)} is not in the current project catalog`,
     'NOVEL_ASSET_NOT_FOUND',
   )
+}
+
+function searchExcerpt(text: string, matchIndex: number, queryLength: number): string {
+  const normalized = text.replace(/\s+/gu, ' ').trim()
+  if (normalized.length <= SEARCH_EXCERPT_CHARS) return normalized
+  const safeIndex = Math.max(0, Math.min(matchIndex, normalized.length))
+  const lead = Math.floor((SEARCH_EXCERPT_CHARS - Math.min(queryLength, SEARCH_EXCERPT_CHARS)) / 2)
+  const start = Math.max(0, Math.min(safeIndex - lead, normalized.length - SEARCH_EXCERPT_CHARS))
+  const excerpt = normalized.slice(start, start + SEARCH_EXCERPT_CHARS)
+  return `${start > 0 ? '…' : ''}${excerpt}${start + SEARCH_EXCERPT_CHARS < normalized.length ? '…' : ''}`
 }
 
 function staleRevision(revisionId: RevisionIdValue, cause?: unknown): NovelRepositoryError {

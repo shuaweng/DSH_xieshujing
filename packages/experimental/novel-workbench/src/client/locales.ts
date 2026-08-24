@@ -71,6 +71,14 @@ export const zh = {
   conflicted: '版本冲突，未覆盖当前资产',
   loading: '正在载入小说项目…',
   failed: '小说工作台加载失败',
+  context: '上下文',
+  followCurrent: '跟随当前资产',
+  contextNeedsSave: '保存后更新上下文',
+  removeContext: '移除上下文',
+  searchContext: '添加资产',
+  searchContextPlaceholder: '搜索标题或正文内容',
+  search: '搜索',
+  noSearchResults: '没有找到匹配资产',
 }
 
 /** English Novel workbench dictionary paired with the Chinese source. */
@@ -139,4 +147,12 @@ export const en: Record<NovelWorkbenchKey, string> = {
   conflicted: 'Version conflict; the current Asset was not overwritten',
   loading: 'Loading Novel Project…',
   failed: 'Novel Workbench failed to load',
+  context: 'Context',
+  followCurrent: 'Follow current Asset',
+  contextNeedsSave: 'Save to update context',
+  removeContext: 'Remove context',
+  searchContext: 'Add Asset',
+  searchContextPlaceholder: 'Search titles or authored text',
+  search: 'Search',
+  noSearchResults: 'No matching Assets',
 }

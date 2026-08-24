@@ -15,6 +15,7 @@
     { "path": "../../client/locale" },
     { "path": "../novel-repository-client" },
     { "path": "../novel-repository-remote" },
+    { "path": "../novel-context" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]
 }

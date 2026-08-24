@@ -188,6 +188,37 @@ describe('LocalNovelRepository', () => {
     expect(snapshot.content).toEqual({ kind: 'test-note', text: 'Fog covers the harbor.' })
   })
 
+  it('searches titles and typed model text with deterministic exact Revision results', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await mkdir(join(dir, 'notes'))
+    await writeFile(join(dir, 'novel.yaml'), manifest(['  notes: notes']))
+    await writeFile(join(dir, 'manuscript', 'chapter.md'), chapter('chapter-search', '抵达', '林澈第一次看见白港。'))
+    await writeFile(join(dir, 'notes', 'setting.note'), [
+      '---', 'novel:', '  schema: 1', '  id: note-search', '  type: bible.test',
+      '  title: 白港', '---', 'Fog covers the harbor.',
+    ].join('\n'))
+    const ctx = await boot(dir, {}, [testNoteType])
+    const novel = await project(ctx)
+
+    const matches = await ctx.novelRepository.searchAssets(novel, { query: '白港' })
+    expect(matches.map(match => ({ id: match.summary.asset.id, excerpt: match.excerpt })))
+      .toEqual([
+        { id: 'note-search', excerpt: 'Fog covers the harbor.' },
+        { id: 'chapter-search', excerpt: '林澈第一次看见白港。' },
+      ])
+    expect(matches[0]?.score).toBe(1_000)
+    expect(typeof matches[1]?.score).toBe('number')
+    expect(matches[0]?.summary.revisionId).toMatch(/^revision_/u)
+    await expect(ctx.novelRepository.searchAssets(novel, {
+      query: 'harbor', types: ['bible.test' as never], limit: 1,
+    })).resolves.toMatchObject([{ summary: { asset: { id: 'note-search', type: 'bible.test' } } }])
+    await expect(ctx.novelRepository.searchAssets(novel, { query: '   ' }))
+      .rejects.toMatchObject({ code: 'NOVEL_SEARCH_INVALID' })
+    await expect(ctx.novelRepository.searchAssets(novel, { query: '白港', limit: 51 }))
+      .rejects.toMatchObject({ code: 'NOVEL_SEARCH_INVALID' })
+  })
+
   it('discovers one project and resolves every declared content root through ctx.fs', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))

@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 ## Purpose
 
-This experimental Host Consumer exposes Novel Project discovery plus bounded typed-Asset catalog, creation, read, guarded-save, selection, and review methods without adding transport behavior to the provider-neutral Repository Service Definition.
+This experimental Host Consumer exposes Novel Project discovery plus bounded typed-Asset catalog, search, creation, read, guarded-save, selection, context-workset, and review methods without adding transport behavior to the provider-neutral Repository Service Definition.
 
 ## Behavior
 
@@ -12,6 +12,8 @@ This experimental Host Consumer exposes Novel Project discovery plus bounded typ
 - `novelRepository/discover` resolves the addressed Agent Session's working directory, delegates validation to the active Novel Repository provider, and returns `undefined` only when the provider finds no `novel.yaml`.
 - `NovelProjectDescriptor` contains the stable project id, schema, title, and display paths. It never exposes filesystem target keys or mutable provider objects to the browser.
 - `assets`, `createAsset`, `asset`, and `saveAsset` project only browser-safe ids, semantic parent ids, metadata, and lossless JSON Asset content. Browser creation supplies type/title/parent/content while the Repository owns identity and path. `captureSelection` carries a type-defined JSON selector and returns a readable Markdown mention containing the canonical `dsh-novel:` reference.
+- `search` delegates bounded lexical discovery to the active Repository provider and returns browser-safe excerpts plus exact current Revision identities. Results remain discovery data until the user pins one or sends an explicit reference.
+- `replaceContextWorkset` delegates one whole-value follow/pinned workset to the optional Novel context capability. The context Consumer validates every exact Revision and records the Session event; the Remote owns neither the fold nor model injection.
 - Asset types, content, selectors, and operations cross Remote as a bounded JSON envelope. Host and Client registries own their exact semantics, so adding a type does not require widening the generated Remote method list; incompatible or non-JSON values fail explicitly.
 - `changeSet`, `applyChangeSet`, and `rejectChangeSet` expose browser review. Apply and reject pass the addressed Agent Session id as explicit authorization and return the durable terminal or conflict state.
 - Catalog, creation, current-head reads, saves, and applies resolve the addressed Agent Session's sandbox policy and forward it through repository reconciliation. This keeps an external Session workspace writable without widening the deployment fallback root.

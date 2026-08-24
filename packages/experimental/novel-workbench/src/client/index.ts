@@ -19,6 +19,8 @@ import { CreatedAssetCard, type CreatedAssetInjected } from './CreatedAssetCard.
 import { NovelPresentationCard, type NovelPresentationInjected } from './NovelPresentationCard.tsx'
 import { WorkbenchToggle, type WorkbenchToggleInjected } from './WorkbenchToggle.tsx'
 import { NovelFrame, type NovelFrameInjected } from './NovelFrame.tsx'
+import { ContextTray, type ContextTrayInjected } from './ContextTray.tsx'
+import { NovelContextFocusController } from './context-controller.ts'
 import {
   manuscriptChapterRenderer,
   NovelAssetRendererRegistry,
@@ -90,6 +92,7 @@ export function apply(ctx: Context): void {
   const remote = ctx.remote.novelRepository
   const store = createNovelWorkbenchStore()
   const workbench = new NovelWorkbenchViewController()
+  const contextFocus = new NovelContextFocusController()
   const refreshListeners = new Set<() => void>()
   const refreshWorkbench = (): void => { for (const listener of refreshListeners) listener() }
   const renderers = new NovelAssetRendererRegistry(ctx)
@@ -128,6 +131,21 @@ export function apply(ctx: Context): void {
       },
     }),
   }, WorkbenchToggle))
+
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'novel-context',
+    order: 5,
+    locale: NS,
+    inject: (sessionId): ContextTrayInjected => ({
+      hooks: { contextFocus },
+      search: async request => await unwrapRemote(remote.search(sessionId, request), 'search Novel Assets'),
+      replace: async workset => await unwrapRemote(
+        remote.replaceContextWorkset(sessionId, workset),
+        'update Novel context',
+      ),
+    }),
+  }, ContextTray))
 
   ctx.slots.register({
     name: 'novel.explorer',
@@ -200,6 +218,7 @@ export function apply(ctx: Context): void {
         })
         if (!inserted) throw new Error('novel workbench: Composer rejected the SelectionRef insertion')
       },
+      reportContextFocus: (value) => { contextFocus.set(value) },
     }),
   }, Canvas)
 

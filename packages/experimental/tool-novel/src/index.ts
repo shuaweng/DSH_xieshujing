@@ -24,7 +24,9 @@ const PROMPT = `## Novel workbench tools
 
 Novel Assets are versioned authored material. When the user names an Asset but no
 canonical reference is available, use \`novel_list\` to discover the current Project
-and the exact creation formats. Use \`novel_create\` for new typed Assets; never invent
+and the exact creation formats, or \`novel_search\` when a title or content clue is known.
+Search only discovers exact current references; read chosen results with \`novel_get\`.
+Use \`novel_create\` for new typed Assets; never invent
 a file path. Use \`novel_get\` for exact retained Revisions and proposal instructions.
 Use \`novel_propose_changes\` for existing Asset changes; it only creates a ChangeSet
 for user review and never means the file changed. Use \`novel_present\` only to open or
@@ -192,6 +194,62 @@ export function apply(ctx: Context): void {
       }
     },
     presentCall: args => ({ card: 'generic', title: '读取小说资产', kind: 'read', rawInput: args.references }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'novel_search',
+    description: 'Search current Novel Assets by bounded lexical title/content match and return exact current Revision references. Results are discovery only and are not automatically added to context.',
+    parameters: {
+      query: { type: 'string', required: true, description: 'Non-empty title or authored-content clue.' },
+      types: { type: 'array', items: { type: 'string' }, description: 'Optional exact Asset-type allowlist.' },
+      limit: { type: 'integer', description: 'Optional result count from 1 to 50.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          results: {
+            type: 'array', required: true,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                assetId: { type: 'string', required: true },
+                revisionId: { type: 'string', required: true },
+                type: { type: 'string', required: true },
+                title: { type: 'string', required: true },
+                excerpt: { type: 'string', required: true },
+                reference: { type: 'string', required: true },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value.results) }],
+    },
+    async execute(args, exec) {
+      const { agent, project } = await requireProject(ctx, exec)
+      const results = await ctx.novelRepository.searchAssets(project, {
+        query: args.query,
+        ...(args.types === undefined ? {} : { types: args.types as NovelAssetType[] }),
+        ...(args.limit === undefined ? {} : { limit: args.limit }),
+      }, exec.signal, ctx.sandboxPolicy.resolve({ session: agent.session }))
+      return {
+        results: results.map(({ summary, excerpt }) => ({
+          assetId: summary.asset.id,
+          revisionId: summary.revisionId,
+          type: summary.asset.type,
+          title: summary.title,
+          excerpt,
+          reference: encodeNovelReferenceUri({
+            projectId: project.id,
+            assetId: summary.asset.id,
+            revisionId: summary.revisionId,
+            label: summary.title,
+          }),
+        })),
+      }
+    },
+    presentCall: args => ({ card: 'generic', title: '检索小说资产', kind: 'read', rawInput: args.query }),
   }))
 
   ctx.tools.register(defineTool({
