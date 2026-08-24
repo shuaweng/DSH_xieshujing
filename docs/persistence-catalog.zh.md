@@ -500,6 +500,19 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
 
+### `novel/*`
+
+<a id="novelcontext-workset--log-only"></a>
+
+#### `novel/context-workset` — log-only
+
+```ts persistence-catalog
+/** Whole-value non-prose reference workset; latest event wins. */
+'novel/context-workset': NovelContextWorksetChange
+```
+
+来源：[`packages/experimental/novel-context/src/types.ts:98`](../packages/experimental/novel-context/src/types.ts)
+
 ### `permission/*`
 
 <a id="permissionpreset--log-only"></a>

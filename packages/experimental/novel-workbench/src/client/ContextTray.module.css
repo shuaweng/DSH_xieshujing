@@ -1,8 +1,14 @@
 .tray {
+  box-sizing: border-box;
   position: relative;
   display: flex;
+  flex: none;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  width: calc(100% - var(--dsh-composer-side-clearance) - var(--dsh-composer-side-clearance));
+  max-width: var(--dsh-composer-card-max-width);
+  margin: 0 auto;
   min-height: 32px;
   padding: 4px 8px;
   border: 1px solid var(--ds-border-subtle, #e7e8e5);
