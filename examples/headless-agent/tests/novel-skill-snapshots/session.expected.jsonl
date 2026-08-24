@@ -1,0 +1,27 @@
+{"type":"session","version":0,"id":"{{sessionId}}","createdAt":0,"cwd":"{{cwd}}","delegationDepth":0,"agentPreset":"novel-skill-preset"}
+{"type":"agent/inbox/spliced","data":{"target":"next-turn","start":0,"inserted":[{"content":[{"type":"text","text":"Rewrite the selected prose without changing its plot."}],"source":{"kind":"user"},"role":"user","id":"{{sessionId}}"}]}}
+{"type":"turn/start","data":{"turn":1}}
+{"type":"agent/inbox/spliced","data":{"target":"next-turn","start":0,"removedCount":1,"inserted":[]}}
+{"type":"step/start","data":{"turn":1,"step":1}}
+{"type":"user/message","data":{"content":[{"type":"text","text":"Rewrite the selected prose without changing its plot."}],"source":{"kind":"user"},"role":"user","id":"{{sessionId}}"},"surfaceOp":"append"}
+{"type":"session/title","data":{"title":"Rewrite the selected prose without","messageSeqs":[4],"source":{"kind":"fallback"}}}
+{"type":"request/header","data":{"header":{"config":{"provider":"novel-skill-mock","model":"novel-skill-mock"},"system":"{{system}}","tools":"{{tools}}"},"reason":"initial"}}
+{"type":"request/context","data":{"provider":"novel-skill-mock","model":"novel-skill-mock"}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-start","index":0,"blockType":"tool-call"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"tool-call-delta","index":0,"id":"novel-skill-call","name":"skill","argumentsDelta":"{\"name\":\"rewrite-to-style\"}"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"block-end","index":0,"block":{"type":"tool-call","id":"novel-skill-call","name":"skill","arguments":"{\"name\":\"rewrite-to-style\"}"}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"usage","usage":{"inputTokens":10,"outputTokens":2}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":1,"chunk":{"type":"finish","reason":{"kind":"tool-calls"}}}}
+{"type":"assistant/message","data":{"turn":1,"step":1,"message":{"role":"assistant","content":[{"type":"tool-call","id":"novel-skill-call","name":"skill","arguments":"{\"name\":\"rewrite-to-style\"}"}],"source":{"kind":"model","provider":"novel-skill-mock","model":"novel-skill-mock"},"id":"{{sessionId}}"},"usage":{"inputTokens":10,"outputTokens":2}},"sourceEventSeqs":[8,9,10,11,12],"surfaceOp":"append"}
+{"type":"tool/call","data":{"turn":1,"step":1,"callId":"novel-skill-call","name":"skill","arguments":"{\"name\":\"rewrite-to-style\"}"}}
+{"type":"tool/result","data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"novel-skill-call"},"content":[{"type":"tool-result","toolCallId":"novel-skill-call","content":[{"type":"text","text":"<skill_content name=\"rewrite-to-style\">\n<skill_resources>\nBase directory for this skill: {{novelSkillRoot}}/rewrite-to-style\nResolve relative paths mentioned by this skill against the base directory before using them. Load referenced resources only as needed.\n</skill_resources>\n\n<skill_instructions>\n# Rewrite To Style\n\n这是窄权限表达改写，不是剧情重构。\n\n## 工作台协议\n\n先使用当前冻结选区或章节；缺少目标时用 `novel_search` 定位，用 `novel_get` 读取精确 Revision 与文本。必要时再读取被明确引用的章纲或风格资料，不扩读无关资产。\n\n试写直接回复聊天。修改正式正文只能调用 `novel_propose_changes`，范围和 operation 必须来自 `novel_get` 的 proposalInstructions。ChangeSet 未 applied 时，只能称为待审建议。\n\n## 改写边界\n\n锁定不能改变的事实、人物关系、因果、POV、关键动作、剧情 beat、信息揭示顺序与用户指定保留句。结构性问题无法靠措辞修复时要明确指出，不能偷偷改剧情；这类任务应转 `chapter-execution` 或 `scene-drive`。\n\n## 改写方法\n\n先确定主要目标，不要每次全部重写：去 AI 味、句法节奏、对白声音、信息露出或章末收口。\n\n- 用具体动作、感官和人物判断替代抽象情绪标签。\n- 删除同义反复、三段式凑组、解释性排比、宣传式景物和作者腔预告。\n- 长短句随压力变化，关键动作和转折落在清楚位置；不以碎句数量冒充节奏。\n- 对白保留身份、关系和隐藏目的，避免人人使用相同完整句与设定讲座。\n- 先给效果和反应，原理只留当前场景必须知道的一点。\n\n只对用户指定范围创建最小精确提案，并用 summary 说明“表达层改变了什么、剧情层保留了什么”。\n</skill_instructions>\n</skill_content>"}],"isError":false}],"role":"user","id":"{{sessionId}}"}},"sourceEventSeqs":[14],"surfaceOp":"append"}
+{"type":"step/end","data":{"turn":1,"step":1}}
+{"type":"step/start","data":{"turn":1,"step":2}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-start","index":0,"blockType":"text"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"text-delta","index":0,"text":"NOVEL_WORKBENCH_SKILL_OK"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-end","index":0,"block":{"type":"text","text":"NOVEL_WORKBENCH_SKILL_OK"}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"usage","usage":{"inputTokens":8,"outputTokens":3}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"finish","reason":{"kind":"stop"}}}}
+{"type":"assistant/message","data":{"turn":1,"step":2,"message":{"role":"assistant","content":[{"type":"text","text":"NOVEL_WORKBENCH_SKILL_OK"}],"source":{"kind":"model","provider":"novel-skill-mock","model":"novel-skill-mock"},"id":"{{sessionId}}"},"usage":{"inputTokens":8,"outputTokens":3}},"sourceEventSeqs":[18,19,20,21,22],"surfaceOp":"append"}
+{"type":"step/end","data":{"turn":1,"step":2}}
+{"type":"turn/end","data":{"turn":1,"reason":{"kind":"completed"}}}

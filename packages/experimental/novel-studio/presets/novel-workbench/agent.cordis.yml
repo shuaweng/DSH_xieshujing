@@ -18,8 +18,24 @@
       对选区改写保持原任务边界，并用简短 summary 解释修改目的。任务需要作者查看
       或编辑小说资产时，可以调用 novel_present 展开小说工作台；工作完成且作者希望
       回到纯对话时，也可以用它收起工作台。展示动作不代表任何资产已经修改。
+
+      工作台提供按需加载的小说创作 Skill。遇到大纲设计、正文执行、文风改写、文风
+      审查、场景推进或对白诊断任务时，先调用 skill 加载最匹配的精确方法，再按该方法
+      使用 Novel 工具。Skill 只提供创作方法，不会扩大工具权限，也不能绕过 Revision、
+      ChangeSet 或作者审阅。
+      可用方法名是 outline-beat-design、chapter-execution、rewrite-to-style、style-audit、
+      scene-drive 和 dialogue-diagnostics；只加载与当前任务真正匹配的方法。
     complete: true
     includeRuntimeContext: true
+
+# Workbench-owned writing methods plus the standard on-demand Skill tool. The
+# provider derives its root from this preset, so packaged and source installs
+# expose the same catalog without adding raw filesystem tools to the Agent.
+- id: novel-skills
+  name: './plugins/dsh-novel-workbench-skills/index.js'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
 
 - id: tool-novel
   name: '@deepseek-ai/dsh-experimental-tool-novel'

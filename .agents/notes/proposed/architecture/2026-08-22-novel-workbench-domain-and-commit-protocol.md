@@ -20,7 +20,7 @@ Current author content remains authoritative in the project files. `.novel/histo
 
 The existing `novel` Agent Preset remains a session-scoped writing capability and a source of persona and skill behavior. It does not own the workbench domain. The MVP adds a separate package-owned `novel-workbench` Preset that consumes Novel tools and omits raw mutation tools for formal asset roots; research and development Presets may retain generic filesystem and shell tools without gaining authority to commit Novel ChangeSets.
 
-PR1, PR2, the PR3 MVP, the PR4 asset type kernel, the PR5 registry proof, and the freeform planning slice are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
+PR1, PR2, the PR3 MVP, the PR4 asset type kernel, the PR5 registry proof, the PR6 presentation slice, the PR7 context workset, and the PR8 authoring Skill slice are implemented on the feature stack. This note remains proposed because its acceptance criteria intentionally cover later asset types, invalidation events, restart snapshots, and orchestration that the MVP defers.
 
 This proposal extends the existing Profile, filesystem, Session-history, Remote, and client-presentation decisions. It supersedes none of them.
 
@@ -73,6 +73,14 @@ A `planning.outline` Asset has a freeform Markdown body and only one structural 
 Both planning types reuse Revision-bound UTF-16 text-range selections and the exact `replace-text` ChangeSet operation. The Host freezes the quote hash against the retained body; apply fails closed when the base Revision or selected bytes no longer match. Human full-body saves remain guarded by the current Revision and filesystem version.
 
 The type definition also owns creation serialization. `novel_create` accepts the semantic type, title, optional parent id, and typed freeform content; the Repository mints identity and a safe path, validates hierarchy and singleton rules, publishes only with `createIfAbsent`, and records the resulting Revision. `novel_get` reads exact retained bodies, and `novel_propose_changes` remains proposal-only for edits to existing planning Assets.
+
+## PR8 workbench authoring Skill slice
+
+The package-owned `novel-workbench` Preset mounts a Preset-relative Skill root through the standard filesystem Skill Provider and exposes the standard on-demand `skill` tool. The first catalog contains six self-contained methods adapted from the existing session-scoped `novel` Preset: `outline-beat-design`, `chapter-execution`, `rewrite-to-style`, `style-audit`, `scene-drive`, and `dialogue-diagnostics`. The existing `novel` Preset and its direct-file workflows remain unchanged.
+
+Workbench Skills describe creative method, routing, and product vocabulary; they grant no authority and add no asset-specific mutation tools. Every method starts from the frozen current selection and context workset, falls back to `novel_search` or `novel_list` for discovery, uses `novel_get` for an exact Revision, and sends durable creation or mutation through `novel_create` or `novel_propose_changes`. A diagnostic method returns chat evidence only. A mutation method must distinguish chat drafts, new Assets, and pending ChangeSets and must never describe a proposal as applied.
+
+The six files are self-contained because the safe Workbench Preset deliberately exposes no generic `read` tool for loading reference files. Their planning guidance preserves the freeform planning decision: book, volume, and chapter-outline checks are methods, not a fixed payload or required field schema. The standard Skill runtime logs the catalog and every loaded Skill body into Session history, preserving reconstructability without inflating the stable system prompt. Default project, user, and bundled Skill roots remain discoverable, but a Skill cannot grant absent shell or filesystem tools or bypass Repository authorization.
 
 ## PR4 workbench presentation slice
 
@@ -307,6 +315,12 @@ The generic [Domain KV storage proposal](2026-07-24-domain-kv-storage-and-worksp
 
 **Implement multi-asset transactions and multi-Agent orchestration in the first slice.** Both multiply recovery and ownership states before the semantic edit loop is proven. Version one establishes a single-asset durable boundary; orchestration consumes it later.
 
+**Mount the existing `novel` Skills unchanged.** Those methods assume generic file discovery, fixed paths, and direct writes, which would teach the Workbench Agent to bypass Asset identity and ChangeSets. PR8 adapts a small self-contained set to Novel tool semantics and leaves the original Preset intact.
+
+**Put every writing method into the persona.** A large always-visible methodology prefix would increase every request and make method evolution disturb the reusable prefix. The stable catalog stays small; the model loads one exact Skill body only when needed.
+
+**Add one model tool per writing workflow.** Writing method does not require a wider authority surface. The six stable Novel tools remain the only domain operations; Skills compose them without introducing parallel chapter, outline, or dialogue mutation APIs.
+
 ## Acceptance criteria
 
 - A proposed implementation has a complete `ctx.novelRepository` capability seam with independently testable Service Definition, local Service Provider, and Consumers; every registration disposes cleanly under HMR and plugin unload.
@@ -319,6 +333,7 @@ The generic [Domain KV storage proposal](2026-07-24-domain-kv-storage-and-worksp
 - ChangeSet tests prove proposal does not mutate files, unauthorized or stale apply cannot publish, apply/reject/retry are idempotent, and crash injection before journal commit, before file publish, after file publish, and before final SQLite commit converges to the documented state.
 - A guarded write racing a user or external edit preserves the newer file, records divergence, and leaves the Agent proposal `conflicted`; no test permits last-writer-wins overwrite.
 - Browser tests prove asset and ChangeSet invalidations refetch authoritative state, reconnect needs no event replay, keyed Tool presentation restores the card from durable `meta`, and absent Novel presentation falls back to the generic Tool row.
+- Preset and keyless model snapshots prove the Workbench exposes exactly the six package-owned writing Skills plus the standard `skill` loader, loads a selected Skill body on demand into reconstructable Session history, and exposes no generic shell or filesystem mutation tool. Loaded methods use Asset, Revision, and ChangeSet semantics and do not depend on legacy fixed paths or external reference files.
 - Keyless runnable application snapshots cover the technical Novel view and the final `novel-studio` root composition, including a selected range, compact human reference backed by an exact model reference, a ChangeSet card, Diff review, acceptance, stale conflict, and restart recovery. Default Web snapshots remain unchanged apart from separately intentional Preset roster facts.
 - Documentation records the on-disk formats, migration policy, single-writer limit, security framing, token effect, KV Cache effect, and operational recovery procedure before the proposal moves to `implemented`.
 
@@ -335,3 +350,5 @@ UTF-16 body offsets match the browser and TypeScript runtime but require explici
 Novel files are untrusted model context. Incorrect framing can turn quoted prose or research into instructions, and excessive automatic context can consume the request budget. The Resolver must fail closed on size, escape deterministically, and disclose every included Revision.
 
 An isolated Profile duplicates some shell composition and postpones seamless in-app switching. That cost is accepted to keep default DSH stable and avoid a speculative global Workbench abstraction.
+
+The adapted Workbench Skills intentionally duplicate a bounded subset of the older `novel` Preset's methodology. Their tool protocol has different invariants, so sharing the same file would couple safe Asset workflows back to generic file writes. The copies may drift until both Presets converge on a common semantic layer; package tests pin the Workbench inventory and forbid known legacy path and direct-write assumptions.

@@ -46,7 +46,9 @@
     "@deepseek-ai/dsh-experimental-novel-repository-remote": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-workbench": "workspace:^",
     "@deepseek-ai/dsh-experimental-tool-novel": "workspace:^",
-    "@deepseek-ai/dsh-persona": "workspace:^"
+    "@deepseek-ai/dsh-persona": "workspace:^",
+    "@deepseek-ai/dsh-skill-filesystem": "workspace:^",
+    "@deepseek-ai/dsh-tool-skill": "workspace:^"
   },
   "peerDependencies": {
     "@deepseek-ai/dsh-invariants": "workspace:^",

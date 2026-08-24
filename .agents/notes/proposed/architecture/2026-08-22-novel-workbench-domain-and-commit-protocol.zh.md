@@ -20,7 +20,7 @@ Status: proposed
 
 现有 `novel` Agent Preset 继续作为 Session 级写作能力，并提供 persona 和 skill 行为，但不拥有工作台领域。MVP 增加独立的包内 `novel-workbench` Preset，它使用 Novel 工具，并从正式资产根目录的能力中移除原始修改工具；研究和开发 Preset 可以保留通用文件系统与 shell 工具，但不会因此取得提交 Novel ChangeSet 的权限。
 
-PR1、PR2、PR3 MVP、PR4 Asset 类型内核、PR5 Registry 验证以及自由规划切片已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照和编排能力。
+PR1、PR2、PR3 MVP、PR4 Asset 类型内核、PR5 Registry 验证、PR6 展示切片、PR7 上下文工作集与 PR8 创作 Skill 切片已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照和编排能力。
 
 本提案扩展现有 Profile、文件系统、Session 历史、Remote 和客户端展示决策，不取代其中任何一项。
 
@@ -73,6 +73,14 @@ PR4 不增加另一种作者资产。最初的 `planning.outline` 实现验证�
 两种规划类型都复用 Revision 绑定的 UTF-16 文本范围选区与精确 `replace-text` ChangeSet operation。Host 针对保留正文冻结 quote hash；base Revision 或选中字节不再匹配时，Apply 闭合失败。人类整篇保存仍受当前 Revision 与文件系统版本保护。
 
 类型定义同时拥有创建序列化。`novel_create` 接收语义类型、标题、可选父级 id 与类型化自由正文；Repository 生成身份和安全路径，校验层级与 singleton 规则，只用 `createIfAbsent` 发布，并记录结果 Revision。`novel_get` 读取精确保留正文；对既有规划 Asset 的 `novel_propose_changes` 仍然只创建提案。
+
+## PR8 工作台创作 Skill 切片
+
+包内 `novel-workbench` Preset 通过标准文件系统 Skill Provider 挂载相对 Preset 的 Skill 根，并暴露标准按需 `skill` 工具。第一批目录包含从现有 Session 级 `novel` Preset 方法改造而来的六个自包含 Skill：`outline-beat-design`、`chapter-execution`、`rewrite-to-style`、`style-audit`、`scene-drive` 与 `dialogue-diagnostics`。现有 `novel` Preset 及其直接文件工作流保持不变。
+
+工作台 Skill 只描述创作方法、路由和产品词汇，不授予权限，也不增加资产专用修改工具。每个方法都优先从冻结的当前选区与上下文工作集开始，在缺少目标时使用 `novel_search` 或 `novel_list` 发现资产，用 `novel_get` 读取精确 Revision，并通过 `novel_create` 或 `novel_propose_changes` 提交持久创建或修改。诊断类方法只返回带依据的聊天报告。修改类方法必须区分聊天草稿、新 Asset 与待审 ChangeSet，绝不能把 proposal 描述为已应用。
+
+这六个文件全部自包含，因为安全 Workbench Preset 有意不暴露通用 `read` 工具来加载外部参考文件。其规划方法继续遵守自由规划决策：书纲、卷纲与章纲检查项是方法，不是固定 payload 或必填字段 Schema。标准 Skill 运行时会把目录与每次加载的 Skill 正文记录进 Session 历史，在不扩大稳定 system prompt 的前提下保持可重建性。默认项目、用户与 bundled Skill 根仍可发现，但 Skill 无法授予不存在的 shell 或文件系统工具，也不能绕过 Repository 授权。
 
 ## PR4 工作台展示切片
 
@@ -307,6 +315,12 @@ ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客
 
 **在首个切片实现多资产事务与多 Agent 编排。** 两者都会在语义编辑闭环得到验证前成倍增加恢复和所有权状态。版本一先建立单资产持久边界，后续编排再消费它。
 
+**不改造地挂载现有 `novel` Skills。** 旧方法假设通用文件发现、固定路径和直接写入，会教工作台 Agent 绕过 Asset 身份与 ChangeSet。PR8 只把一小组方法改造成自包含的 Novel 工具语义，并保持原 Preset 不变。
+
+**把所有写作方法塞进 persona。** 永久可见的大段方法会增加每次请求 token，也会让方法演进扰动可复用前缀。稳定目录保持简短；模型只在需要时加载一个精确 Skill 正文。
+
+**为每个写作流程增加一个模型工具。** 创作方法不需要扩大权限面。六个稳定 Novel 工具仍是唯一领域操作；Skill 组合它们，而不另建章节、大纲或对白修改 API。
+
 ## 验收标准
 
 - 提议的实现包含完整 `ctx.novelRepository` 能力 seam，具有可独立测试的 Service Definition、本地 Service Provider 与 Consumer；每项注册在 HMR 和插件卸载时都能正确 dispose。
@@ -319,6 +333,7 @@ ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客
 - ChangeSet 测试证明提出提案不会修改文件，未授权或陈旧应用无法发布，apply/reject/retry 保持幂等，并且在日志提交前、文件发布前、文件发布后和最终 SQLite 提交前注入崩溃时，状态都会收敛到已记录结果。
 - 与用户或外部修改竞争的带守卫写入会保留更新文件，记录分歧，并让 Agent 提案保持 `conflicted`；任何测试都不允许 last-writer-wins 覆盖。
 - 浏览器测试证明资产与 ChangeSet 失效通知会重新获取权威状态，重连不需要事件回放，带键工具展示会从持久 `meta` 恢复卡片，并且缺少 Novel 展示时回退到通用工具行。
+- Preset 与无密钥模型快照证明工作台只暴露六个包内写作 Skill 加标准 `skill` loader，能按需把指定 Skill 正文加载进可重建 Session 历史，并且不暴露通用 shell 或文件系统修改工具。已加载方法使用 Asset、Revision 与 ChangeSet 语义，不依赖旧固定路径或外部参考文件。
 - 无密钥可运行应用快照覆盖技术 Novel view 和最终 `novel-studio` root 组合，包括选中范围、由精确模型引用支撑的人类短引用、ChangeSet 卡片、diff 审阅、接受、陈旧冲突和重启恢复。默认 Web 快照除独立且有意的 Preset roster 事实外保持不变。
 - 在提案移动到 `implemented` 前，文档会记录磁盘格式、迁移策略、单写入者限制、安全框定、token 影响、KV Cache 影响和运维恢复流程。
 
@@ -335,3 +350,5 @@ UTF-16 正文 offset 与浏览器和 TypeScript 运行时一致，但需要显�
 Novel 文件是不可信模型上下文。错误框定可能让引用正文或资料变成指令，过量自动上下文也可能耗尽请求预算。Resolver 必须在大小超限时快速失败，执行确定性转义，并披露每个包含的 Revision。
 
 独立 Profile 会重复部分 shell 组合，也会推迟应用内无缝切换。为了保持默认 DSH 稳定，并避免推测性的全局 Workbench 抽象，本提案接受这一成本。
+
+改造后的 Workbench Skills 有意复制旧 `novel` Preset 的有限方法子集。两者的工具协议拥有不同不变量，共用同一文件会把安全 Asset 工作流重新耦合到通用文件写入。在两个 Preset 收敛到共同语义层之前，副本可能发生漂移；包测试会固定工作台目录，并禁止已知旧路径与直接写入假设。

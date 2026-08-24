@@ -1,0 +1,7 @@
+# Skill-only fixture using the exact package-owned Workbench provider. The
+# package test separately pins these same rows inside the complete Preset.
+- id: novel-skills
+  name: '../../../../../packages/experimental/novel-studio/presets/novel-workbench/plugins/dsh-novel-workbench-skills/index.js'
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'

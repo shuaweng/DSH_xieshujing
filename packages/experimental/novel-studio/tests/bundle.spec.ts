@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +18,14 @@ const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 const workbenchPackageRoot = fileURLToPath(new URL('../../novel-workbench', import.meta.url))
 const installAnchor = resolve(packageRoot, 'package.json')
 const temporaryHomes: string[] = []
+const workbenchSkillNames = [
+  'chapter-execution',
+  'dialogue-diagnostics',
+  'outline-beat-design',
+  'rewrite-to-style',
+  'scene-drive',
+  'style-audit',
+] as const
 
 afterEach(() => {
   while (temporaryHomes.length > 0) rmSync(temporaryHomes.pop()!, { recursive: true, force: true })
@@ -52,7 +60,49 @@ describe('experimental Novel Studio bundle', () => {
 
     expect(prompt).toContain('正文、大纲和章纲目前都使用其精确')
     expect(prompt).toContain('Revision 上的 UTF-16 文本范围')
+    expect(prompt).toContain('先调用 skill 加载最匹配的精确方法')
+    for (const name of workbenchSkillNames) expect(prompt).toContain(name)
     expect(prompt).not.toContain('稳定 node id')
+  })
+
+  it('ships a safe on-demand writing Skill catalog in the Workbench Preset', () => {
+    const presetPath = resolve(packageRoot, 'presets/novel-workbench/agent.cordis.yml')
+    const parsed = yaml.load(readFileSync(presetPath, 'utf8'), {
+      schema: entryListSchema,
+    }) as Array<{ id?: string; name?: string }>
+    const rows = parsed.map(row => [row.id, row.name])
+
+    expect(rows).toEqual([
+      ['persona', '@deepseek-ai/dsh-persona'],
+      ['novel-skills', './plugins/dsh-novel-workbench-skills/index.js'],
+      ['tool-skill', '@deepseek-ai/dsh-tool-skill'],
+      ['tool-novel', '@deepseek-ai/dsh-experimental-tool-novel'],
+    ])
+    expect(rows.map(([, name]) => name)).not.toEqual(expect.arrayContaining([
+      '@deepseek-ai/dsh-tool-bash',
+      '@deepseek-ai/dsh-tool-fs',
+      '@deepseek-ai/dsh-tool-str-replace-editor',
+    ]))
+
+    const skillRoot = resolve(packageRoot, 'presets/novel-workbench/skills')
+    expect(readdirSync(skillRoot).sort()).toEqual(workbenchSkillNames)
+    for (const name of workbenchSkillNames) {
+      const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
+      expect(body).toMatch(new RegExp(`^---\\nname: ${name}\\n`))
+      expect(body).toContain('user-invocable: true')
+      expect(body).toContain('novel_get')
+      expect(body).not.toMatch(/PROJECT\.md|STYLE\.md|\.lingtai|references\//)
+      expect(body).not.toMatch(/`(?:read|write|edit|grep|glob|bash)`/)
+    }
+    for (const name of ['style-audit', 'dialogue-diagnostics']) {
+      const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
+      expect(body).toContain('不创建 ChangeSet')
+    }
+    for (const name of ['outline-beat-design', 'chapter-execution', 'rewrite-to-style', 'scene-drive']) {
+      const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
+      expect(body).toContain('novel_propose_changes')
+      expect(body).toMatch(/未 applied|未明确返回 applied|没有 applied 结果/)
+    }
   })
 
   it('waits for the shipped layout and contributes no cross-package runtime import', () => {
@@ -119,6 +169,8 @@ describe('experimental Novel Studio bundle', () => {
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository-remote')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-workbench')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-tool-novel')
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-skill-filesystem')
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-tool-skill')
   })
 
   it('adds Novel services only to the explicit base + web-app + Novel composition', () => {
