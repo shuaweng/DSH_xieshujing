@@ -3,7 +3,9 @@
   min-height: 100%;
   margin: 0 auto;
   padding: 38px 0 80px;
-  color: var(--novel-reader-text, #293028);
+  color: var(--novel-text, #293028);
+  font-family: var(--novel-reader-font, inherit);
+  font-size: var(--novel-reader-size, 16px);
 }
 
 .titleField { display: grid; gap: 8px; margin-bottom: 26px; }
@@ -16,7 +18,8 @@
 
 .editor {
   display: block; width: 100%; min-height: 620px; resize: none; overflow: hidden; border: 0; outline: none;
-  background: transparent; color: inherit; font: 16px/1.95 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: transparent; color: inherit; font-family: var(--novel-reader-font, inherit);
+  font-size: var(--novel-reader-size, 16px); line-height: 1.95;
   white-space: pre-wrap;
 }
 .editor::placeholder { color: color-mix(in srgb, currentColor 34%, transparent); }

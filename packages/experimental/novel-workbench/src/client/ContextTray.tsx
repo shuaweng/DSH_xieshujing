@@ -40,14 +40,22 @@ export function ContextTray({
     version: 1 as const, projectId: focus.project.id, items: [],
   })
   const follow = workset?.items.find(item => item.mode === 'follow')
+  const currentFollow = follow ?? (focus === undefined || focus.dirty ? undefined : {
+    projectId: focus.project.id,
+    assetId: focus.document.id,
+    revisionId: focus.document.revisionId,
+    label: focus.document.title,
+    mode: 'follow' as const,
+    origin: 'active-asset' as const,
+  })
   const pinned = useMemo(
     () => workset?.items.filter(item => item.mode === 'pinned') ?? [],
     [workset],
   )
 
   useEffect(() => {
-    if (preset !== NOVEL_WORKBENCH_PRESET || focus === undefined || focus.dirty || follow === undefined) return
-    if (follow.assetId === focus.document.id && follow.revisionId === focus.document.revisionId) return
+    if (preset !== NOVEL_WORKBENCH_PRESET || focus === undefined || focus.dirty) return
+    if (follow?.assetId === focus.document.id && follow.revisionId === focus.document.revisionId) return
     const next: NovelContextWorksetDescriptor = {
       version: 1,
       projectId: focus.project.id,
@@ -77,19 +85,6 @@ export function ContextTray({
     finally { setBusy(false) }
   }
 
-  const toggleFollow = (): void => {
-    if (follow !== undefined) { void commit(pinned); return }
-    if (focus === undefined || focus.dirty) return
-    void commit([{
-      projectId: focus.project.id,
-      assetId: focus.document.id,
-      revisionId: focus.document.revisionId,
-      label: focus.document.title,
-      mode: 'follow',
-      origin: 'active-asset',
-    }, ...pinned])
-  }
-
   const runSearch = async (): Promise<void> => {
     if (query.trim() === '') return
     setBusy(true); setError(undefined)
@@ -101,7 +96,7 @@ export function ContextTray({
   const pin = (result: NovelAssetSearchResult): void => {
     const kept = pinned.filter(item => !(item.assetId === result.id && item.revisionId === result.revisionId))
     void commit([
-      ...(follow === undefined ? [] : [follow]),
+      ...(currentFollow === undefined ? [] : [currentFollow]),
       ...kept,
       {
         projectId: result.projectId,
@@ -117,16 +112,15 @@ export function ContextTray({
 
   return <div className={css.tray} data-novel-context-tray>
     <span className={css.title}>{t('context')}</span>
-    <button type="button" className={css.follow} data-active={follow !== undefined || undefined}
-      disabled={busy || focus === undefined || (focus.dirty && follow === undefined)} onClick={toggleFollow}
-      title={focus?.dirty === true ? t('contextNeedsSave') : t('followCurrent')}>
-      <span aria-hidden="true">◎</span>{follow === undefined ? t('followCurrent') : follow.label}
-    </button>
+    <span className={css.follow} data-active={currentFollow !== undefined || undefined}
+      title={currentFollow === undefined ? t('followCurrent') : `${currentFollow.label} · ${contextCoordinate(currentFollow)}`}>
+      <span aria-hidden="true">◎</span>{currentFollow === undefined ? t('followCurrent') : contextCoordinate(currentFollow)}
+    </span>
     {pinned.map(item => <span className={css.chip} key={`${item.assetId}:${item.revisionId}`}>
-      <span title={item.label}>{item.label}</span>
+      <span title={`${item.label} · ${contextCoordinate(item)}`}>{contextCoordinate(item)}</span>
       <button type="button" aria-label={`${t('removeContext')} ${item.label}`} disabled={busy}
         onClick={() => { void commit([
-          ...(follow === undefined ? [] : [follow]),
+          ...(currentFollow === undefined ? [] : [currentFollow]),
           ...pinned.filter(candidate => candidate !== item),
         ]) }}>×</button>
     </span>)}
@@ -151,3 +145,8 @@ export function ContextTray({
 }
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error) }
+
+/** Compact human coordinate; the model manifest also carries the canonical dsh-novel URI. */
+export function contextCoordinate(item: NovelContextWorksetDescriptor['items'][number]): string {
+  return `novel://${item.projectId}/${item.assetId}@${item.revisionId}`
+}

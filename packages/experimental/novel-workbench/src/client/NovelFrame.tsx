@@ -26,9 +26,7 @@ export function NovelFrame({ renderSlot, t, workbench, agentWidth, setAgentWidth
     <main
       className={css.frame}
       data-novel-workbench
-      style={{
-        gridTemplateColumns: `${explorerWidth}px minmax(320px, 1fr)`,
-      }}
+      style={{ gridTemplateColumns: `${explorerWidth}px minmax(320px, 1fr)` }}
     >
       <PanelResizer
         value={agentWidth}
@@ -54,6 +52,7 @@ export function NovelFrame({ renderSlot, t, workbench, agentWidth, setAgentWidth
         onClick={() => { workbench.toggleExplorer() }}
       >{explorerCollapsed ? '›' : '‹'}</button>
       <section className={css.canvas}>{renderSlot('novel.canvas', {})}</section>
+      <div className={css.statusHost} data-novel-status-host />
     </main>
   )
 }

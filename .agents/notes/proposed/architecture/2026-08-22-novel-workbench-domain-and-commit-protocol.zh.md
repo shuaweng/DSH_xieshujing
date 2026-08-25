@@ -96,7 +96,9 @@ PR9 不定义定稿或自进化。后续切片可以让作者显式把某个 Rev
 
 Composer 是显式冻结选区唯一可见的披露位置。Novel Client 插入普通 reference occurrence，其 label 最多包含前十个 Unicode 字符与一个省略号。隐藏的 occurrence identity 保留完整规范 `dsh-novel:` mention，已注册 Input Trigger codec 只在普通 Composer 提交时序列化该精确 mention。剪贴板投影仍是紧凑的人类 label。删除重复的画布 Context Tray 不改变任何模型输入：上下文解析器和不可变 Session 事件继续作为权威。
 
-阅读展示是可选 Client Renderer 能力，而不是共享画布中针对 `manuscript.chapter` 的分支。Renderer 可以提供作者字符统计；共享的全宽底栏呈现该统计，并提供画布/纸张/文字联动皮肤浮层及字体和字号浮层。纸张填满头部与底栏之间的画布，纵向滚动属于工作台视口而不是可编辑纸张。项目/章节面包屑与可编辑的作者标题取代写作表面的技术类型和路径元数据。资产浏览器始终呈现书籍级“正文”和“大纲”分支（包括空分支），并可独立收起。视图偏好、资产栏可见性以及 Agent/工作台分栏宽度都只是客户端状态，绝不进入 Frontmatter、Revision 历史、Context Manifest、system prompt 或工具 Schema。面板边界是同时支持指针和键盘、宽度有界的无障碍 separator；丢弃当前值不会改变作者内容。
+输入框上方的坐标栏自动跟随当前可见、已保存的注册 Asset 精确 Revision；从章节切换到大纲、卷纲或全书指导 Asset 时会替换该坐标。跟随项与检索固定项在用户披露和模型 Manifest 中都只携带坐标，使用正文前必须 `novel_get`。显式 UTF-16 划词保持刻意简单：规范坐标与完整选中文字一起冻结。第一版不引入 block id、不隐藏注入整 Asset，也不把 UI 文本当作权威。
+
+阅读展示是可选 Client Renderer 能力，而不是共享画布中针对 `manuscript.chapter` 的分支。Renderer 可以提供作者字符统计与纸张表面；共享底栏跨越完整工作台，并始终提供画布/纸张/文字联动皮肤、字体和字号控件。只有正文额外显示本章字数与章纲入口。纸张填满头部与底栏之间的画布，纵向滚动属于工作台视口而不是可编辑纸张。项目/章节面包屑与可编辑的作者标题取代写作表面的技术类型和路径元数据。资产浏览器始终呈现书籍级“正文”和“大纲”分支（包括空分支），并可独立收起。视图偏好、资产栏可见性以及 Agent/工作台分栏宽度都只是客户端状态，绝不进入 Frontmatter、Revision 历史、Context Manifest、system prompt 或工具 Schema。面板边界是同时支持指针和键盘、宽度有界的无障碍 separator；丢弃当前值不会改变作者内容。
 
 ## 范围与不变量
 

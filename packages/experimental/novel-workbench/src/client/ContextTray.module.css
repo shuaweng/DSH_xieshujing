@@ -27,6 +27,7 @@
   padding: 4px 7px;
   cursor: pointer;
 }
+.follow { max-width: min(560px, 60vw); overflow: hidden; cursor: default; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .follow:hover, .add:hover, .follow[data-active] { background: var(--ds-bg-hover, #f0f2ed); color: var(--ds-text-primary, #242622); }
 .follow:disabled { cursor: not-allowed; opacity: .5; }
 .chip {

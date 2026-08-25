@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
@@ -77,6 +78,9 @@ export function Canvas({
   const state = useStore(value => value)
   const [busy, setBusy] = useState(false)
   const [chapterOutlineOpen, setChapterOutlineOpen] = useState(false)
+  const [statusHost, setStatusHost] = useState<Element | null>(null)
+
+  useEffect(() => { setStatusHost(document.querySelector('[data-novel-status-host]')) }, [])
 
   useEffect(() => {
     if (sessionId === undefined || state.project === undefined || state.document === undefined) {
@@ -139,7 +143,14 @@ export function Canvas({
   const title = state.titleDraft ?? state.document.title
   const editorLabel = renderer.editorLabel?.() ?? t('editor')
   const characterCount = reader?.countCharacters(state.draft)
-  return <div className={css.editorShell} data-reader-shell={reader === undefined ? undefined : ''}>
+  const controls = <ReaderControls
+    activeSkin={state.readerSkin} activeFont={state.readerFont} fontSize={state.readerFontSize}
+    characterCount={characterCount} chapterOutlineAvailable={state.document.type === 'manuscript.chapter'}
+    chapterOutlineOpen={chapterOutlineOpen}
+    openChapterOutline={() => { setChapterOutlineOpen(true) }}
+    setSkin={actions.setReaderSkin} setFont={actions.setReaderFont} setFontSize={actions.setReaderFontSize} t={t}
+  />
+  return <div className={css.editorShell} data-reader-shell="">
     <header className={css.editorHeader} data-novel-chrome="header">
       <nav className={css.breadcrumb} aria-label={t('location')}>
         <strong>{state.project?.title ?? t('studio')}</strong><span aria-hidden="true">/</span><span>{title}</span>
@@ -154,9 +165,9 @@ export function Canvas({
     <div
       className={css.editorStage}
       data-reader={reader === undefined ? undefined : ''}
-      data-reader-skin={reader === undefined ? undefined : state.readerSkin}
-      data-reader-font={reader === undefined ? undefined : state.readerFont}
-      style={reader === undefined ? undefined : { '--novel-reader-size': `${state.readerFontSize}px` } as CSSProperties}
+      data-reader-skin={state.readerSkin}
+      data-reader-font={state.readerFont}
+      style={{ '--novel-reader-size': `${state.readerFontSize}px` } as CSSProperties}
     >
       {reader === undefined ? renderer.renderEditor({
         document: state.document, content: state.draft, title, ariaLabel: `${title} · ${editorLabel}`,
@@ -172,12 +183,7 @@ export function Canvas({
         </article>
       </div>}
     </div>
-    {reader !== undefined && <ReaderControls
-      activeSkin={state.readerSkin} activeFont={state.readerFont} fontSize={state.readerFontSize}
-      characterCount={characterCount ?? 0} chapterOutlineOpen={chapterOutlineOpen}
-      openChapterOutline={() => { setChapterOutlineOpen(true) }}
-      setSkin={actions.setReaderSkin} setFont={actions.setReaderFont} setFontSize={actions.setReaderFontSize} t={t}
-    />}
+    {statusHost === null ? controls : createPortal(controls, statusHost)}
     {reader !== undefined && chapterOutlineOpen && sessionId !== undefined && <ChapterOutlineDrawer
       key={state.document.id}
       sessionId={sessionId}
@@ -299,13 +305,14 @@ function ChapterOutlineDrawer({
 }
 
 function ReaderControls({
-  activeSkin, activeFont, fontSize, characterCount, chapterOutlineOpen,
+  activeSkin, activeFont, fontSize, characterCount, chapterOutlineAvailable, chapterOutlineOpen,
   openChapterOutline, setSkin, setFont, setFontSize, t,
 }: {
   readonly activeSkin: NovelReaderSkin
   readonly activeFont: NovelReaderFont
   readonly fontSize: number
-  readonly characterCount: number
+  readonly characterCount: number | undefined
+  readonly chapterOutlineAvailable: boolean
   readonly chapterOutlineOpen: boolean
   readonly openChapterOutline: () => void
   readonly setSkin: (skin: NovelReaderSkin) => void
@@ -325,7 +332,8 @@ function ReaderControls({
     return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', dismissKey) }
   }, [panel])
   return <footer className={css.readerStatusBar} ref={root} aria-label={t('readerSettings')} data-novel-chrome="status">
-    <div className={css.readerStats}><span>{t('chapterCharacters')}：<strong>{characterCount.toLocaleString()}</strong></span></div>
+    <div className={css.readerStats}>{characterCount === undefined ? null
+      : <span>{t('chapterCharacters')}：<strong>{characterCount.toLocaleString()}</strong></span>}</div>
     {panel === 'skin' && <section className={css.readerPopover} role="dialog" aria-label={t('chooseSkin')}>
       <strong>{t('chooseSkin')}</strong><div className={css.skinGrid}>{SKINS.map(skin => <button key={skin} type="button"
         className={css.skinChoice} data-skin={skin} aria-label={t(skin)} aria-pressed={activeSkin === skin}
@@ -341,9 +349,9 @@ function ReaderControls({
       </div>
     </section>}
     <div className={css.readerDock}>
-      <button type="button" className={css.chapterOutlineTrigger} aria-label={t('chapterOutline')}
+      {chapterOutlineAvailable && <><button type="button" className={css.chapterOutlineTrigger} aria-label={t('chapterOutline')}
         aria-expanded={chapterOutlineOpen} onClick={openChapterOutline}><ChapterOutlineIcon /></button>
-      <span className={css.dockDivider} aria-hidden="true" />
+      <span className={css.dockDivider} aria-hidden="true" /></>}
       <button type="button" className={css.skinTrigger} data-skin={activeSkin} aria-label={t('skinSettings')}
         aria-expanded={panel === 'skin'} onClick={() => { setPanel(current => current === 'skin' ? undefined : 'skin') }}><span aria-hidden="true" /></button>
       <span className={css.dockDivider} aria-hidden="true" />

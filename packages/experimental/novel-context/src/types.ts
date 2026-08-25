@@ -115,6 +115,7 @@ export interface ResolvedNovelReference {
     'projectId' | 'assetId' | 'revisionId' | 'label' | 'origin' | 'mode'>>
     & Pick<NovelReferenceInput, 'selector'>
   readonly snapshot: AssetSnapshot
+  /** Exact model projection; workset preparation may intentionally omit it from the Manifest. */
   readonly text: string
 }
 

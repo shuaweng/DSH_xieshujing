@@ -635,7 +635,7 @@ export interface Config {
 }
 ```
 
-来源：[`packages/experimental/novel-context/src/index.ts:47`](../packages/experimental/novel-context/src/index.ts)
+来源：[`packages/experimental/novel-context/src/index.ts:49`](../packages/experimental/novel-context/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-novel-repository-local"></a>
 

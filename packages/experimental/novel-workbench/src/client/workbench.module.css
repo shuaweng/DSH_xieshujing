@@ -29,6 +29,7 @@
 
 .explorer { min-width: 0; overflow: hidden; border-right: 1px solid var(--ds-color-border-subtle); }
 .canvas { min-width: 0; overflow: hidden; }
+.statusHost { position: absolute; right: 0; bottom: 0; left: 0; z-index: 8; height: 38px; }
 .panelResizer { position: absolute; top: 0; bottom: 0; left: -7px; z-index: 12; width: 14px; cursor: col-resize; outline: 0; background: transparent; touch-action: none; }
 .panelResizer::after { position: absolute; inset: 0 6px; content: ''; background: var(--ds-color-border-subtle); transition: background 140ms ease, inset 140ms ease; }
 .panelResizer:hover::after, .panelResizer:focus-visible::after, .panelResizer[data-dragging]::after { inset-inline: 5px; background: #7c5cff; }
@@ -82,7 +83,7 @@
 .editorActions button:hover { color: var(--novel-chrome-text); background: var(--novel-chrome-bg); }
 .editorActions button:last-child { border-color: var(--novel-accent); color: var(--novel-accent-contrast); background: var(--novel-accent); }
 .editorActions button:disabled, .changeCard button:disabled { opacity: .45; cursor: default; }
-.editorStage { position: relative; min-width: 0; min-height: 0; overflow: auto; color: var(--ds-color-text-primary); background: var(--ds-color-bg-primary); }
+.editorStage { position: relative; min-width: 0; min-height: 0; overflow: auto; color: var(--novel-text); background: var(--novel-workspace-bg); font-family: var(--novel-reader-font, inherit); font-size: var(--novel-reader-size, 16px); transition: color 180ms ease, background 180ms ease; }
 .editorStage[data-reader] { overflow: hidden; background: var(--novel-workspace-bg); transition: background 180ms ease; }
 .editorStage[data-reader-font='song'] { --novel-reader-font: 'Songti SC', 'Noto Serif SC', 'STSong', ui-serif, Georgia, serif; }
 .editorStage[data-reader-font='kai'] { --novel-reader-font: 'Kaiti SC', 'STKaiti', 'KaiTi', ui-serif, Georgia, serif; }
@@ -94,7 +95,7 @@
 .editor { display: block; box-sizing: border-box; width: 100%; min-height: 540px; flex: 0 0 auto; margin: 0; padding: 22px 54px 72px; overflow: hidden; resize: none; border: 0; outline: 0; color: inherit; background: transparent; font-family: var(--novel-reader-font, ui-serif, Georgia, 'Noto Serif SC', serif); font-size: var(--novel-reader-size, 18px); line-height: 1.95; caret-color: currentColor; }
 .editor::placeholder { color: var(--novel-muted); }
 .editor::selection { background: color-mix(in srgb, #4c84f4 24%, transparent); }
-.readerStatusBar { position: absolute; right: 0; bottom: 0; left: 0; z-index: 8; display: flex; height: 38px; min-width: 0; box-sizing: border-box; align-items: center; justify-content: space-between; padding: 0 14px 0 16px; border-top: 1px solid var(--novel-chrome-border); color: var(--novel-chrome-muted); background: var(--novel-chrome-strong); font-size: 11px; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
+.readerStatusBar { position: relative; z-index: 8; display: flex; width: 100%; height: 38px; min-width: 0; box-sizing: border-box; align-items: center; justify-content: space-between; padding: 0 14px 0 16px; border-top: 1px solid var(--novel-chrome-border); color: var(--novel-chrome-muted); background: var(--novel-chrome-strong); font-size: 11px; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
 .readerStats { display: flex; align-items: center; gap: 18px; font-variant-numeric: tabular-nums; }
 .readerStats strong { color: var(--novel-chrome-text); font-weight: 600; }
 .readerDock { display: flex; height: 100%; align-items: center; gap: 4px; }

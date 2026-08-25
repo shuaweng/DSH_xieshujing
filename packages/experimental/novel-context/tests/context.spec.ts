@@ -204,7 +204,9 @@ describe('Novel context preparation', () => {
     expect(source?.kind === 'novel-context' && source.version === 2 ? source.manifestId : '')
       .toMatch(/^sha256:[a-f0-9]{64}$/u)
     const modelText = decision.messages[1]?.content[0]
-    expect(modelText?.type === 'text' ? modelText.text : '').toContain('"text":"下雨"')
+    const frozenText = modelText?.type === 'text' ? modelText.text : ''
+    expect(frozenText).toContain('"reference":"dsh-novel:')
+    expect(frozenText).toContain('"text":"下雨"')
     expect(Object.isFrozen(decision.messages[1])).toBe(true)
   })
 
@@ -239,6 +241,11 @@ describe('Novel context preparation', () => {
         { source: { kind: 'novel-context', form: 'manifest', references: [{ mode: 'follow', origin: 'active-asset' }] } },
       ],
     })
+    if (entered.kind !== 'enter') throw new Error('expected entered step')
+    const followed = entered.messages[1]?.content[0]
+    const followedText = followed?.type === 'text' ? followed.text : ''
+    expect(followedText).toContain('"reference":"dsh-novel:')
+    expect(followedText).not.toContain('"text":')
     const toolContinuation = createUserMessage({
       source: { kind: 'novel-context', form: 'catalog', version: 1, projectId: ProjectId('project-context'), references: [] },
       content: [{ type: 'text', text: 'already frozen' }],

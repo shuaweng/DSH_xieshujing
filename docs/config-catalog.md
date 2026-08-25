@@ -633,7 +633,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/novel-context/src/index.ts:47`](../packages/experimental/novel-context/src/index.ts)
+Source: [`packages/experimental/novel-context/src/index.ts:49`](../packages/experimental/novel-context/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-novel-repository-local"></a>
 

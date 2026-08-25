@@ -541,7 +541,6 @@ describe('ContextTray', () => {
       useWorkspaces={vi.fn() as never}
     />)
 
-    fireEvent.click(view.getByText(zh.followCurrent))
     await waitFor(() => { expect(replace).toHaveBeenCalledWith({
       version: 1, projectId: 'project-1', items: [{
         projectId: 'project-1', assetId: 'asset-chapter-1', revisionId: 'revision-1',
@@ -553,8 +552,11 @@ describe('ContextTray', () => {
     fireEvent.click(view.getByText(zh.search))
     await waitFor(() => { expect(view.getByText('全书大纲')).toBeTruthy() })
     fireEvent.click(view.getByText('全书大纲'))
-    await waitFor(() => { expect(replace).toHaveBeenLastCalledWith({
+    await waitFor(() => { expect(replace).toHaveBeenCalledWith({
       version: 1, projectId: 'project-1', items: [{
+        projectId: 'project-1', assetId: 'asset-chapter-1', revisionId: 'revision-1',
+        label: '第一章', mode: 'follow', origin: 'active-asset',
+      }, {
         projectId: 'project-1', assetId: 'asset-outline-1', revisionId: 'revision-outline-1',
         label: '全书大纲', mode: 'pinned', origin: 'search',
       }],
