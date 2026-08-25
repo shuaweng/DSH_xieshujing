@@ -16,6 +16,7 @@
 - `replaceContextWorkset` 把一份整值的跟随/固定工作集委托给可选 Novel context 能力。Context Consumer 校验每个精确 Revision 并记录 Session 事件；Remote 不拥有 fold 或模型注入。
 - Asset 类型、内容、selector 和 operation 通过 Remote 以有边界的 JSON 信封传输。Host 与 Client 注册表拥有其精确语义，因此增加类型不需要扩展生成的 Remote 方法清单；不兼容或非 JSON 的值会显式失败。
 - `changeSet`、`applyChangeSet` 和 `rejectChangeSet` 暴露浏览器审阅。应用和拒绝把被寻址 Agent Session id 作为显式授权，并返回持久终态或冲突状态。
+- `revisions` 返回不可变历史摘要，`asset` 可以打开一个已保留 Revision。`analysisReports`、`scanNoAi` 和 `reviewChapter` 都是精确 Revision 端点；确定性扫描与 Subagent 编排归 `ctx.novelAnalysis` 所有，而不是传输层。
 - 资产目录、创建、当前 head 读取、保存与应用都会解析被寻址 Agent Session 的 sandbox policy，并把它传入 Repository 协调流程。这样外部 Session 工作区可写，同时不会放宽部署 fallback 根目录。
 - `responseMaxBytes` 默认是 8 MiB，对所有非发现 JSON 完整响应设置边界；超出预算时明确失败，不截断也不静默漏掉数据。
 - 现有 Gateway 身份策略负责解析被寻址的 Agent；本包不增加授权机制。`descriptorMaxBytes` 限制以 UTF-8 编码的完整 descriptor JSON，默认值为 256 KiB，且不能超过运行时最大字符串长度。
@@ -43,4 +44,5 @@ Remote descriptor 与浏览器结果不会增加提示词或工具 schema token�
 - **没有提案端点**：模型提案通过独立 Novel 工具进入；浏览器 Remote 只能读取、接受或拒绝已有 ChangeSet。
 - **没有工作台 UI**：本包发布类型化浏览器 API，但不渲染资产浏览器、编辑器、Context Tray 或审阅卡片。
 - **不拥有 Session Log**：独立 Novel context Consumer 拥有持久模型上下文；浏览器 discovery 响应本身不会进入 Session Log。
+- **仅分析传输**：Remote 暴露报告命令，但不解释报告 payload、不运行模型，也不应用任何建议修改。
 - **需要显式组合**：Host 服务不属于默认 Web Profile；Novel Studio 组合必须将其与 Repository 提供方及独立 Client adapter 一起安装。

@@ -18,7 +18,7 @@ import NovelContextResolver, {
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -89,6 +89,7 @@ async function harness(): Promise<{
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NovelContextResolver)
+  ctx.provide('novelAnalysis', { candidateWarning: vi.fn(() => undefined) } as never)
   await ctx.plugin(ToolNovel)
   cleanups.push(async () => { await ctx.fiber.dispose() })
   const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
@@ -248,6 +249,20 @@ describe('Novel model tools', () => {
 
   it('creates a durable proposal and presentation card without changing the authored file', async () => {
     const { ctx, agent, path, revisionId } = await harness()
+    const analysis = ctx.novelAnalysis as unknown as {
+      candidateWarning: ReturnType<typeof vi.fn>
+    }
+    analysis.candidateWarning.mockReturnValue({
+      report: {
+        version: 1,
+        characterCount: 1_200,
+        sampleLevel: 'strong',
+        riskScore: 74,
+        counts: { high: 4, medium: 1, low: 0 },
+        findings: [],
+      },
+      text: '<novel-noai-candidate-warning>NOAI candidate risk 74/100</novel-noai-candidate-warning>',
+    })
     const before = await readFile(path, 'utf8')
     const result = await execute(ctx, agent, 'novel_propose_changes', {
       project_id: 'project-tool',
@@ -273,6 +288,14 @@ describe('Novel model tools', () => {
       changeSetId: value.changeSetId,
       projectId: 'project-tool',
     })
+    const additionalContexts: unknown = result.additionalContexts
+    expect(additionalContexts).toMatchObject([{
+      source: {
+        kind: 'plugin', plugin: 'novel-analysis', form: 'notice', summary: 'NOAI candidate risk 74/100',
+      },
+      content: [{ type: 'text' }],
+    }])
+    expect(JSON.stringify(additionalContexts)).toContain('NOAI candidate risk 74/100')
     expect(await readFile(path, 'utf8')).toBe(before)
     const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
     if (project === undefined) throw new Error('expected Novel Project')

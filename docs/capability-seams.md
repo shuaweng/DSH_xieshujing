@@ -153,14 +153,16 @@ flowchart LR
   svc_fs["ctx.fs<br/>Filesystem provider seam"]
   pkg_fs_local["fs-local"]
   pkg_fs_observation_policy["fs-observation-policy"]
+  pkg_novel_analysis["novel-analysis"]
+  svc_novelAnalysis["ctx.novelAnalysis<br/>Experimental Revision-bound Novel analysis"]
+  pkg_novel_repository_remote["novel-repository-remote"]
+  pkg_tool_novel["tool-novel"]
   pkg_novel_context["novel-context"]
   svc_novelContextResolver["ctx.novelContextResolver<br/>Experimental exact Novel context resolver"]
-  pkg_tool_novel["tool-novel"]
   pkg_novel_repository["novel-repository"]
   svc_novelAssetTypes["ctx.novelAssetTypes<br/>Experimental Novel Asset type registry"]
   pkg_novel_repository_local["novel-repository-local"]
   svc_novelRepository["ctx.novelRepository<br/>Experimental Novel Project repository seam"]
-  pkg_novel_repository_remote["novel-repository-remote"]
   svc_novelRepositoryRemote["ctx.novelRepositoryRemote<br/>Experimental Novel Project Remote Consumer"]
   pkg_novel_studio["novel-studio"]
   svc_novelStudioPaths["ctx.novelStudioPaths<br/>Experimental Novel Studio composition paths"]
@@ -258,6 +260,7 @@ flowchart LR
   pkg_lsp_local --> svc_lsp
   pkg_message_feedback --> svc_messageFeedback
   pkg_modules --> svc_clientModules
+  pkg_novel_analysis --> svc_novelAnalysis
   pkg_novel_context --> svc_novelContextResolver
   pkg_novel_repository --> svc_novelAssetTypes
   pkg_novel_repository --> svc_novelRepository
@@ -359,6 +362,8 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_novelAnalysis --> pkg_novel_repository_remote
+  svc_novelAnalysis --> pkg_tool_novel
   svc_novelAssetTypes --> pkg_novel_context
   svc_novelAssetTypes --> pkg_novel_repository_local
   svc_novelAssetTypes --> pkg_tool_novel
@@ -496,6 +501,7 @@ flowchart LR
 | `ctx.permissionPresets` | `core` | [`permission-presets`](../packages/interaction/permission-presets) | - | - | - | User-facing preset table (`workspace-write`/`danger-full-access`) bundling the sandbox-mode and approval-policy knobs; a switch writes one `permission/preset` event through to both knob events. |
 | `ctx.codeRuntime` | `seam` | [`code-runtime`](../packages/code-runtime/code-runtime) | `code-runtime-worker` | [`tools`](../packages/core/tools) | - | Runs one model-written program against host-provided async bindings; backends differ by substrate and language (the tool registry consumes it for Code Mode). |
 | `ctx.fs` | `seam` | [`fs`](../packages/fs/fs) | [`fs-local`](../packages/fs/fs-local), [`fs-sandbox`](../packages/fs/fs-sandbox), [`fs-e2b`](../packages/e2b/fs-e2b) | [`tool-fs`](../packages/fs/tool-fs) | [`fs-observation-policy`](../packages/fs/fs-observation-policy) | tool-fs executes read/write/edit through ctx.fs; fs-sandbox fences mutations by the shared sandbox mode; fs-observation-policy contributes observed-state checks through the fs/* event gate. |
+| `ctx.novelAnalysis` | `core` | `novel-analysis` | - | `novel-repository-remote`, `tool-novel` | - | Runs deterministic NOAI scans and a fixed read-only chapter-review Subagent against exact retained chapter Revisions, persists one current report per Revision and kind, and returns bounded candidate warnings to the proposing Agent through the Session log. |
 | `ctx.novelContextResolver` | `core` | `novel-context` | - | `tool-novel` | - | Resolves canonical Revision-bound references, enforces one-Project Session binding and context budgets, and appends frozen untrusted Novel context to the Session log before model execution. |
 | `ctx.novelAssetTypes` | `core` | `novel-repository` | - | `novel-context`, `novel-repository-local`, `tool-novel` | - | Owns effect-scoped exact-type parsing, serialization, selection, model projection, mutation validation, and Diff materialization contributions shared by the repository and model-facing tools. |
 | `ctx.novelRepository` | `seam` | `novel-repository` | `novel-repository-local` | `novel-context`, `novel-repository-remote`, `tool-novel` | - | The local provider reconciles chapter files into immutable SQLite Revisions and publishes explicit ChangeSets through a crash-recoverable journal; default Profiles load neither the seam nor its consumers. |

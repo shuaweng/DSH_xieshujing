@@ -87,6 +87,46 @@ The current slice supports `manuscript.chapter`, `planning.outline`, `planning.c
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxnovelanalysis--novelanalysis"></a>
+
+### `ctx.novelAnalysis` — `NovelAnalysis`
+
+Host coordinator for exact-Revision scans and read-only chapter review.
+
+```ts cordis-catalog
+/**
+ * Deterministically scan and persist one exact chapter Revision.
+ * @param agent - owning Session used to locate and authorize the Novel Project.
+ * @param assetId - exact manuscript chapter identity.
+ * @param revisionId - retained Revision to scan.
+ * @param signal - optional caller cancellation before persistence.
+ * @returns the upserted exact-Revision report.
+ */
+async scanChapter( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal?: AbortSignal, ): Promise<NovelAnalysisReport>
+
+/**
+ * Run the fixed read-only chapter reviewer and persist valid structured output.
+ * @param agent - owning root Agent and review provenance.
+ * @param assetId - exact manuscript chapter identity.
+ * @param revisionId - retained Revision to review.
+ * @param signal - canonical cancellation for worker startup and execution.
+ * @returns the upserted exact-Revision review.
+ */
+async reviewChapter( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal: AbortSignal, ): Promise<NovelAnalysisReport>
+
+/**
+ * Scan one proposal candidate and render bounded deferred model feedback.
+ * @param base - exact ChangeSet base snapshot.
+ * @param operations - type-validated operations already accepted for proposal.
+ * @returns material warning, or `undefined` for non-chapters, small samples, or low risk.
+ */
+candidateWarning( base: AssetSnapshot, operations: readonly NovelOperation[], ): NovelCandidateAnalysisWarning | undefined
+```
+
+Types: [Agent](core.md)
+
+Source: [`packages/experimental/novel-analysis/src/index.ts`](../../packages/experimental/novel-analysis/src/index.ts)
+
 <a id="ctxnovelassettypes--novelassettyperegistry"></a>
 
 ### `ctx.novelAssetTypes` — `NovelAssetTypeRegistry`
@@ -216,6 +256,34 @@ abstract createAsset( project: NovelProjectSnapshot, request: CreateAssetRequest
 abstract readAsset( project: NovelProjectSnapshot, assetId: AssetId, revisionId?: RevisionId, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>
 
 /**
+ * List metadata for every retained Revision of one Asset, newest first.
+ * @param project - validated Project declaration returned by this provider.
+ * @param assetId - stable authored Asset identity.
+ * @param signal - optional cancellation before history access.
+ * @returns exact immutable Revision summaries without serialized prose bytes.
+ */
+abstract listAssetRevisions( project: NovelProjectSnapshot, assetId: AssetId, signal?: AbortSignal, ): Promise<readonly AssetRevisionSummary[]>
+
+/**
+ * List generated reports attached to one exact retained Revision.
+ * @param project - validated Project declaration returned by this provider.
+ * @param assetId - stable authored Asset identity.
+ * @param revisionId - exact retained Revision identity.
+ * @param signal - optional cancellation before history access.
+ * @returns reports in stable report-kind order.
+ */
+abstract listAnalysisReports( project: NovelProjectSnapshot, assetId: AssetId, revisionId: RevisionId, signal?: AbortSignal, ): Promise<readonly NovelAnalysisReport[]>
+
+/**
+ * Atomically replace the successful report for one Revision and report kind.
+ * @param project - validated Project declaration returned by this provider.
+ * @param request - exact Revision, kind, analyzer identity, provenance, and JSON result.
+ * @param signal - optional cancellation before durable publication.
+ * @returns the validated persisted report.
+ */
+abstract putAnalysisReport( project: NovelProjectSnapshot, request: PutNovelAnalysisReportRequest, signal?: AbortSignal, ): Promise<NovelAnalysisReport>
+
+/**
  * Guardedly publish user-authored typed content and retain its exact new Revision.
  * @param project - validated Project declaration returned by this provider.
  * @param request - target, current base Revision, and full typed replacement content.
@@ -339,6 +407,45 @@ Project browser projection consuming the provider-neutral repository service.
  * @returns a browser-safe Revision-bound typed Asset document.
  */
 @Remote('asset') async asset( agent: Agent, assetId: AssetId, revisionId: RevisionId | null, signal: AbortSignal, ): Promise<NovelAssetDocument>
+
+/**
+ * List metadata for every retained Revision of one Asset, newest first.
+ * @param agent - addressed Agent whose Session selects the project root.
+ * @param assetId - stable Asset identity.
+ * @param signal - caller cancellation.
+ * @returns browser-safe Revision summaries without prose bytes.
+ */
+@Remote('revisions') async revisions( agent: Agent, assetId: AssetId, signal: AbortSignal, ): Promise<NovelAssetRevisionDescriptor[]>
+
+/**
+ * List generated reports for one exact retained Revision.
+ * @param agent - addressed Agent whose Session selects the project root.
+ * @param assetId - stable Asset identity.
+ * @param revisionId - exact retained Revision identity.
+ * @param signal - caller cancellation.
+ * @returns browser-safe Revision-bound reports.
+ */
+@Remote('analysisReports') async analysisReports( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal: AbortSignal, ): Promise<NovelAnalysisReportDescriptor[]>
+
+/**
+ * Run the deterministic NOAI scanner over one exact chapter Revision.
+ * @param agent - addressed Agent and report provenance.
+ * @param assetId - exact chapter identity.
+ * @param revisionId - retained Revision to scan.
+ * @param signal - caller cancellation before persistence.
+ * @returns the upserted browser-safe report.
+ */
+@Remote('scanNoAi') async scanNoAi( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal: AbortSignal, ): Promise<NovelAnalysisReportDescriptor>
+
+/**
+ * Run the fixed read-only Subagent reviewer over one exact chapter Revision.
+ * @param agent - addressed root Agent and report provenance.
+ * @param assetId - exact chapter identity.
+ * @param revisionId - retained Revision to review.
+ * @param signal - canonical worker cancellation.
+ * @returns the upserted browser-safe report.
+ */
+@Remote('reviewChapter') async reviewChapter( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal: AbortSignal, ): Promise<NovelAnalysisReportDescriptor>
 
 /**
  * Guardedly save one complete authored typed content value.

@@ -4157,6 +4157,49 @@ importers:
         specifier: workspace:^
         version: link:../../subagent/subagent-spawn-in-process
 
+  packages/experimental/novel-analysis:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-experimental-novel-context':
+        specifier: workspace:^
+        version: link:../novel-context
+      '@deepseek-ai/dsh-experimental-novel-repository':
+        specifier: workspace:^
+        version: link:../novel-repository
+      '@deepseek-ai/dsh-experimental-novel-repository-local':
+        specifier: workspace:^
+        version: link:../novel-repository-local
+      '@deepseek-ai/dsh-fs':
+        specifier: workspace:^
+        version: link:../../fs/fs
+      '@deepseek-ai/dsh-fs-local':
+        specifier: workspace:^
+        version: link:../../fs/fs-local
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-sandbox-policy':
+        specifier: workspace:^
+        version: link:../../sandbox/sandbox-policy
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@deepseek-ai/dsh-subagent':
+        specifier: workspace:^
+        version: link:../../subagent/subagent
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+
   packages/experimental/novel-asset-outline:
     dependencies:
       yaml:
@@ -4316,6 +4359,9 @@ importers:
       '@deepseek-ai/dsh-brand':
         specifier: workspace:^
         version: link:../../util/brand
+      '@deepseek-ai/dsh-experimental-novel-analysis':
+        specifier: workspace:^
+        version: link:../novel-analysis
       '@deepseek-ai/dsh-experimental-novel-context':
         specifier: workspace:^
         version: link:../novel-context
@@ -4337,6 +4383,9 @@ importers:
 
   packages/experimental/novel-studio:
     dependencies:
+      '@deepseek-ai/dsh-experimental-novel-analysis':
+        specifier: workspace:^
+        version: link:../novel-analysis
       '@deepseek-ai/dsh-experimental-novel-asset-outline':
         specifier: workspace:^
         version: link:../novel-asset-outline
@@ -4546,6 +4595,9 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: workspace:^
         version: link:../../core/agent
+      '@deepseek-ai/dsh-experimental-novel-analysis':
+        specifier: workspace:^
+        version: link:../novel-analysis
       '@deepseek-ai/dsh-experimental-novel-context':
         specifier: workspace:^
         version: link:../novel-context

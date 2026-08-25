@@ -15,6 +15,8 @@ This experimental Client Consumer contributes an Agent-native Novel Studio surfa
 - The explorer discovers the active Session's Novel Project, presents a logical Book guidance group plus stable Manuscript and Book Outline → Volume Outline branches (including empty branches), creates the project-singleton Book Brief / Book Style Profile and freeform Book/Volume Outlines, opens exact Revision-bound typed Asset documents, and can collapse independently from the DSH Session sidebar. Hierarchy comes from semantic type and parent ids rather than file paths.
 - `ctx.novelAssetRenderers` owns effect-scoped exact-type editor, selection-description, optional reader-presentation, and Diff contributions. The shared canvas owns guarded save, Context Commit Barrier, Agent reference insertion, and review authority; it refuses an Asset whose renderer is absent instead of presenting a misleading generic editor.
 - The shipped manuscript renderer edits a chapter title and body in one guarded Revision save, captures simple UTF-16 ranges, counts non-whitespace authored characters, and opts into a full-height centered paper surface. The workbench-wide bottom bar and its six coordinated skins/typeface/font-size controls are shared by every Asset renderer; only chapters add character count and the chapter-outline action.
+- The chapter header lists immutable Revisions with their origin and timestamp. Opening a historical Revision keeps the same renderer and analysis controls but makes title/body read-only; saving never rewrites history.
+- Chapter-only review and `NOAI` actions live in the bottom bar. Each opens a right drawer for the exact displayed Revision: NOAI runs a deterministic scan, while review starts the fixed read-only reviewer. One successful report per kind is retained for each Revision, so moving through history also moves through its matching reports.
 - `@deepseek-ai/dsh-experimental-novel-asset-outline` contributes freeform `planning.outline` and `planning.chapter-outline` renderers. Book and Volume Outlines are unrestricted Markdown writing surfaces with exact text selection/Diff. The manuscript status bar places the supplied chapter-plan icon immediately before skin controls; it opens a right drawer bound one-to-one to the current chapter, where authors can freely write, save, or reference a Chapter Outline. The practical emotion/hooks/rhythm/four-beat starter is optional and inserts ordinary editable Markdown.
 - Agent-created Assets return a replayable creation card and refresh the authoritative explorer. Human and Agent creation both use the same typed Remote/Repository path; neither invents a filesystem path.
 - The Novel Agent can call `novel_present` with `open-workbench` or `close-workbench`. Its durable tool-result metadata drives the same browser-local `ctx.layout` selection as the Composer toggle; ordinary Agent prose never controls layout and presentation never mutates an Asset.
@@ -29,7 +31,7 @@ This experimental Client Consumer contributes an Agent-native Novel Studio surfa
 
 #### What the model sees
 
-The Client package itself adds no hidden model content. Explicit mentions and the visible Context Tray workset are resolved by `@deepseek-ai/dsh-experimental-novel-context`, and model proposals are created by `@deepseek-ai/dsh-experimental-tool-novel`.
+The Client package itself adds no hidden model content. Explicit mentions and the visible Context Tray workset are resolved by `@deepseek-ai/dsh-experimental-novel-context`, and model proposals are created by `@deepseek-ai/dsh-experimental-tool-novel`. Clicking chapter review explicitly launches a bounded reviewer Subagent through the Host analysis service; clicking NOAI uses no model.
 
 #### Token effect
 
@@ -43,6 +45,6 @@ Opening assets, editing drafts, reviewing ChangeSets, and toggling panels do not
 
 - **Five shipped renderers** — the canvas installs `manuscript.chapter`; the planning package adds `planning.outline`, `planning.chapter-outline`, `book.brief`, and `book.style-profile`. Characters, ideas, scenes, timelines, relations, and multiple editor tabs are deferred.
 - **No live file events** — the explorer refreshes after in-workbench applies and repository calls reconcile external edits; there is no filesystem watcher or browser invalidation stream.
-- **One active text selection** — exact Asset pins now exist, but pinned selections, multi-selection, block ids, annotations, and old-Revision badges are deferred.
+- **One active text selection** — exact Asset pins and read-only historical Revisions now exist, but pinned selections, multi-selection, block ids, annotations, named snapshots, restore, and Revision deletion are deferred.
 - **Desktop-first layout** — mobile layout, route-level multi-workbench switching, persisted panel geometry, and cross-browser synchronization of the transient open state are deferred.
 - **Basic text editor** — rich Markdown editing, syntax decorations, autosave cadence, import/export, and publishing views are deferred.

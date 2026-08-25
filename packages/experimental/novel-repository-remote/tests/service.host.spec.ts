@@ -9,12 +9,15 @@ import NovelRepository, {
   type AssetSnapshot,
   type AssetSummary,
   type AssetSearchResult,
+  type AssetRevisionSummary,
   type CaptureSelectionRequest,
   type ChangeSet,
   type ChangeSetAuthorization,
   type CreateAssetRequest,
   type NovelProjectSnapshot,
+  type NovelAnalysisReport,
   type NovelSelectionInput,
+  type PutNovelAnalysisReportRequest,
   type ProposeChangeSetRequest,
   type SaveAssetContentRequest,
   type SearchAssetsRequest,
@@ -36,6 +39,8 @@ class StubNovelRepository extends NovelRepository {
   changeSetValue: ChangeSet | undefined
   authorizations: ChangeSetAuthorization[] = []
   creations: CreateAssetRequest[] = []
+  revisions: readonly AssetRevisionSummary[] = []
+  reports: readonly NovelAnalysisReport[] = []
 
   override discoverProject(_root: FsTarget): Promise<NovelProjectSnapshot | undefined> {
     return Promise.resolve(this.project)
@@ -74,6 +79,21 @@ class StubNovelRepository extends NovelRepository {
   override readAsset(): Promise<AssetSnapshot> {
     if (this.snapshot === undefined) throw new Error('snapshot not configured')
     return Promise.resolve(this.snapshot)
+  }
+
+  override listAssetRevisions(): Promise<readonly AssetRevisionSummary[]> {
+    return Promise.resolve(this.revisions)
+  }
+
+  override listAnalysisReports(): Promise<readonly NovelAnalysisReport[]> {
+    return Promise.resolve(this.reports)
+  }
+
+  override putAnalysisReport(
+    project: NovelProjectSnapshot,
+    request: PutNovelAnalysisReportRequest,
+  ): Promise<NovelAnalysisReport> {
+    return Promise.resolve({ projectId: project.id, ...request })
   }
 
   override saveAssetContent(_project: NovelProjectSnapshot, request: SaveAssetContentRequest): Promise<AssetSnapshot> {
@@ -145,6 +165,10 @@ function testContext(): Context {
       workspaceRoot: session?.header.cwd ?? '/deployment-fallback',
       ...(session === undefined ? {} : { sessionId: session.id }),
     }),
+  } as never)
+  ctx.provide('novelAnalysis', {
+    scanChapter: vi.fn(),
+    reviewChapter: vi.fn(),
   } as never)
   return ctx
 }
@@ -277,6 +301,38 @@ describe('NovelRepositoryRemote Host service', () => {
       title: '第一章',
     }]
     repository.searchResults = [{ summary: repository.assets[0]!, excerpt: '旧正文', score: 500 }]
+    repository.revisions = [{
+      id: snapshot.revisionId,
+      projectId: snapshot.asset.projectId,
+      assetId: snapshot.asset.id,
+      contentHash: snapshot.contentHash,
+      origin: 'initial-scan',
+      createdAt: '2026-08-25T08:00:00.000Z',
+    }]
+    const noAiReport: NovelAnalysisReport = {
+      projectId: snapshot.asset.projectId,
+      assetId: snapshot.asset.id,
+      revisionId: snapshot.revisionId,
+      kind: 'noai-scan',
+      analyzerVersion: 'noai-rules/1',
+      generatedAt: '2026-08-25T09:00:00.000Z',
+      data: { riskScore: 42 },
+      sourceSessionId: 'agent-1' as never,
+    }
+    repository.reports = [noAiReport]
+    const analysis = ctx.novelAnalysis as unknown as {
+      scanChapter: ReturnType<typeof vi.fn>
+      reviewChapter: ReturnType<typeof vi.fn>
+    }
+    analysis.scanChapter.mockResolvedValue(noAiReport)
+    const reviewReport: NovelAnalysisReport = {
+      ...noAiReport,
+      kind: 'chapter-review',
+      analyzerVersion: 'chapter-review/1',
+      data: { overallScore: 75 },
+      workerSessionId: 'worker-1' as never,
+    }
+    analysis.reviewChapter.mockResolvedValue(reviewReport)
     const textSelector: TextRangeSelector = {
       kind: 'text-range',
       startUtf16: 0,
@@ -347,6 +403,17 @@ describe('NovelRepositoryRemote Host service', () => {
     disposeContext()
     await expect(ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-1'), null, signal))
       .resolves.toMatchObject({ title: '第一章', content: { kind: 'manuscript', body: '旧正文' } })
+    await expect(ctx.novelRepositoryRemote.revisions(agent, AssetId('chapter-1'), signal))
+      .resolves.toEqual([expect.objectContaining({ id: 'revision-1', origin: 'initial-scan' })])
+    await expect(ctx.novelRepositoryRemote.analysisReports(
+      agent, AssetId('chapter-1'), RevisionId('revision-1'), signal,
+    )).resolves.toEqual([expect.objectContaining({ kind: 'noai-scan', data: { riskScore: 42 } })])
+    await expect(ctx.novelRepositoryRemote.scanNoAi(
+      agent, AssetId('chapter-1'), RevisionId('revision-1'), signal,
+    )).resolves.toMatchObject({ kind: 'noai-scan', sourceSessionId: 'agent-1' })
+    await expect(ctx.novelRepositoryRemote.reviewChapter(
+      agent, AssetId('chapter-1'), RevisionId('revision-1'), signal,
+    )).resolves.toMatchObject({ kind: 'chapter-review', workerSessionId: 'worker-1' })
     await expect(ctx.novelRepositoryRemote.createAsset(agent, {
       type: 'manuscript.chapter',
       title: '第二章',

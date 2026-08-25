@@ -470,6 +470,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'tool-fs executes read/write/edit through ctx.fs; fs-sandbox fences mutations by the shared sandbox mode; fs-observation-policy contributes observed-state checks through the fs/* event gate.',
   },
   {
+    key: 'novelAnalysis',
+    pkg: 'novel-analysis',
+    title: 'Experimental Revision-bound Novel analysis',
+    mode: 'core',
+    consumers: ['novel-repository-remote', 'tool-novel'],
+    note: 'Runs deterministic NOAI scans and a fixed read-only chapter-review Subagent against exact retained chapter Revisions, persists one current report per Revision and kind, and returns bounded candidate warnings to the proposing Agent through the Session log.',
+  },
+  {
     key: 'novelContextResolver',
     pkg: 'novel-context',
     title: 'Experimental exact Novel context resolver',

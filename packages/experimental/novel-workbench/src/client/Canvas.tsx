@@ -8,8 +8,10 @@ import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   CaptureNovelSelectionRequest,
   CreateNovelAssetRequest,
+  NovelAnalysisReportDescriptor,
   NovelAssetDescriptor,
   NovelAssetDocument,
+  NovelAssetRevisionDescriptor,
   NovelSelectionDescriptor,
   SaveNovelAssetRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
@@ -20,7 +22,15 @@ import css from './workbench.module.css'
 
 export interface CanvasInjected {
   renderers: NovelAssetRendererRegistry
-  open: (sessionId: SessionId, assetId: string) => Promise<NovelAssetDocument>
+  open: (sessionId: SessionId, assetId: string, revisionId?: string) => Promise<NovelAssetDocument>
+  revisions: (sessionId: SessionId, assetId: string) => Promise<readonly NovelAssetRevisionDescriptor[]>
+  analysisReports: (
+    sessionId: SessionId,
+    assetId: string,
+    revisionId: string,
+  ) => Promise<readonly NovelAnalysisReportDescriptor[]>
+  scanNoAi: (sessionId: SessionId, assetId: string, revisionId: string) => Promise<NovelAnalysisReportDescriptor>
+  reviewChapter: (sessionId: SessionId, assetId: string, revisionId: string) => Promise<NovelAnalysisReportDescriptor>
   create: (sessionId: SessionId, request: CreateNovelAssetRequest) => Promise<NovelAssetDocument>
   save: (sessionId: SessionId, request: SaveNovelAssetRequest) => Promise<NovelAssetDocument>
   capture: (sessionId: SessionId, request: CaptureNovelSelectionRequest) => Promise<NovelSelectionDescriptor>
@@ -71,14 +81,21 @@ const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 
 /** One exact-revision typed Asset editor with an optional chapter-local planning surface. */
 export function Canvas({
-  useSessions, useStore, actions, renderers, open, create, save, capture, appendReference,
+  useSessions, useStore, actions, renderers, open, revisions, analysisReports, scanNoAi, reviewChapter,
+  create, save, capture, appendReference,
   reportContextFocus = ignoreContextFocus, t,
 }: CanvasProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
   const state = useStore(value => value)
   const [busy, setBusy] = useState(false)
   const [chapterOutlineOpen, setChapterOutlineOpen] = useState(false)
+  const [revisionItems, setRevisionItems] = useState<readonly NovelAssetRevisionDescriptor[]>([])
+  const [analysisMode, setAnalysisMode] = useState<'chapter-review' | 'noai-scan'>()
+  const [reports, setReports] = useState<readonly NovelAnalysisReportDescriptor[]>([])
+  const [analysisBusy, setAnalysisBusy] = useState(false)
+  const [analysisError, setAnalysisError] = useState<string>()
   const [statusHost, setStatusHost] = useState<Element | null>(null)
+  const analysisEpoch = useRef(0)
 
   useEffect(() => { setStatusHost(document.querySelector('[data-novel-status-host]')) }, [])
 
@@ -100,9 +117,36 @@ export function Canvas({
     if (state.document?.type !== 'manuscript.chapter') setChapterOutlineOpen(false)
   }, [state.document?.id, state.document?.type])
 
+  useEffect(() => {
+    if (sessionId === undefined || state.document === undefined) { setRevisionItems([]); return }
+    let live = true
+    void revisions(sessionId, state.document.id).then((items) => {
+      if (live) setRevisionItems(items)
+    }).catch((cause: unknown) => { if (live) actions.fail(errorMessage(cause)) })
+    return () => { live = false }
+  }, [actions, revisions, sessionId, state.document?.id, state.document?.revisionId])
+
+  useEffect(() => {
+    if (analysisMode === undefined || sessionId === undefined || state.document === undefined) return
+    const epoch = ++analysisEpoch.current
+    let live = true
+    void analysisReports(sessionId, state.document.id, state.document.revisionId).then((items) => {
+      if (live && analysisEpoch.current === epoch) setReports(items)
+    }).catch((cause: unknown) => {
+      if (live && analysisEpoch.current === epoch) setAnalysisError(errorMessage(cause))
+    })
+    return () => { live = false }
+  }, [analysisMode, analysisReports, sessionId, state.document?.id, state.document?.revisionId])
+
+  const currentRevisionId = state.assets.find(asset => asset.id === state.document?.id)?.revisionId
+  const historical = state.document !== undefined
+    && currentRevisionId !== undefined
+    && currentRevisionId !== state.document.revisionId
+
   const persist = async (): Promise<NovelAssetDocument | undefined> => {
     if (sessionId === undefined || state.document === undefined || state.draft === undefined) return undefined
     if (!state.dirty) return state.document
+    if (historical) { actions.fail(t('historicalReadOnly')); return undefined }
     setBusy(true)
     try {
       const saved = await save(sessionId, {
@@ -133,6 +177,56 @@ export function Canvas({
     finally { setBusy(false) }
   }
 
+  const openRevision = async (revisionId: string) => {
+    if (sessionId === undefined || state.document === undefined || busy) return
+    const current = await persist()
+    if (current === undefined) return
+    setBusy(true)
+    try {
+      const selected = await open(sessionId, current.id, revisionId === currentRevisionId ? undefined : revisionId)
+      actions.open(selected)
+      setAnalysisMode(undefined)
+      setReports([])
+      setAnalysisError(undefined)
+    } catch (cause: unknown) { actions.fail(errorMessage(cause)) }
+    finally { setBusy(false) }
+  }
+
+  const runAnalysis = async (kind: 'chapter-review' | 'noai-scan') => {
+    if (sessionId === undefined || state.document === undefined || state.document.type !== 'manuscript.chapter') return
+    setAnalysisMode(kind)
+    setAnalysisError(undefined)
+    setAnalysisBusy(true)
+    try {
+      const document = await persist()
+      if (document === undefined) return
+      const report = kind === 'noai-scan'
+        ? await scanNoAi(sessionId, document.id, document.revisionId)
+        : await reviewChapter(sessionId, document.id, document.revisionId)
+      analysisEpoch.current += 1
+      setReports(previous => [...previous.filter(item => item.kind !== kind), report])
+    } catch (cause: unknown) { setAnalysisError(errorMessage(cause)) }
+    finally { setAnalysisBusy(false) }
+  }
+
+  const openChapterReview = async () => {
+    if (sessionId === undefined || state.document === undefined || state.document.type !== 'manuscript.chapter') return
+    setAnalysisMode('chapter-review')
+    setAnalysisError(undefined)
+    setAnalysisBusy(true)
+    try {
+      const document = await persist()
+      if (document === undefined) return
+      const existing = await analysisReports(sessionId, document.id, document.revisionId)
+      analysisEpoch.current += 1
+      setReports(existing)
+      if (existing.some(report => report.kind === 'chapter-review')) return
+      const report = await reviewChapter(sessionId, document.id, document.revisionId)
+      setReports(previous => [...previous.filter(item => item.kind !== 'chapter-review'), report])
+    } catch (cause: unknown) { setAnalysisError(errorMessage(cause)) }
+    finally { setAnalysisBusy(false) }
+  }
+
   if (state.document === undefined || state.draft === undefined) {
     return <div className={css.empty}>{state.error ?? t('noChapter')}</div>
   }
@@ -147,18 +241,29 @@ export function Canvas({
     activeSkin={state.readerSkin} activeFont={state.readerFont} fontSize={state.readerFontSize}
     characterCount={characterCount} chapterOutlineAvailable={state.document.type === 'manuscript.chapter'}
     chapterOutlineOpen={chapterOutlineOpen}
+    analysisMode={analysisMode} analysisBusy={analysisBusy}
     openChapterOutline={() => { setChapterOutlineOpen(true) }}
+    runNoAi={() => { void runAnalysis('noai-scan') }}
+    runReview={() => { void openChapterReview() }}
     setSkin={actions.setReaderSkin} setFont={actions.setReaderFont} setFontSize={actions.setReaderFontSize} t={t}
   />
   return <div className={css.editorShell} data-reader-shell="">
     <header className={css.editorHeader} data-novel-chrome="header">
       <nav className={css.breadcrumb} aria-label={t('location')}>
         <strong>{state.project?.title ?? t('studio')}</strong><span aria-hidden="true">/</span><span>{title}</span>
+        {revisionItems.length > 0 && <select className={css.revisionSelect} aria-label={t('revisionHistory')}
+          value={state.document.revisionId} disabled={busy}
+          onChange={(event) => { void openRevision(event.target.value) }}>
+          {revisionItems.map((revision, index) => <option key={revision.id} value={revision.id}>
+            {revisionLabel(revision, index === 0, t)}
+          </option>)}
+        </select>}
+        {historical && <span className={css.historicalBadge}>{t('historicalReadOnly')}</span>}
       </nav>
       <div className={css.editorActions}>
         {state.error === undefined ? <span>{busy ? t('saving') : state.dirty ? '' : t('saved')}</span>
           : <span className={css.error} role="alert">{state.error}</span>}
-        <button type="button" disabled={!state.dirty || busy} onClick={() => { void persist() }}>{t('save')}</button>
+        <button type="button" disabled={!state.dirty || busy || historical} onClick={() => { void persist() }}>{t('save')}</button>
         <button type="button" disabled={state.selection === undefined || busy} onClick={() => { void referenceSelection() }}>{t('reference')}</button>
       </div>
     </header>
@@ -171,13 +276,15 @@ export function Canvas({
     >
       {reader === undefined ? renderer.renderEditor({
         document: state.document, content: state.draft, title, ariaLabel: `${title} · ${editorLabel}`,
+        readOnly: historical,
         onContentChange: actions.edit, onTitleChange: actions.editTitle, onSelectionChange: actions.select,
       }) : <div className={css.editorScroll}>
         <article className={css.editorPaper}>
           <header className={css.documentTitle}><input className={css.documentTitleInput} aria-label={t('chapterTitle')}
-            value={title} onChange={(event) => { actions.editTitle(event.target.value) }} /></header>
+            value={title} readOnly={historical} onChange={(event) => { actions.editTitle(event.target.value) }} /></header>
           {renderer.renderEditor({
             document: state.document, content: state.draft, title, ariaLabel: `${title} · ${editorLabel}`,
+            readOnly: historical,
             onContentChange: actions.edit, onTitleChange: actions.editTitle, onSelectionChange: actions.select,
           })}
         </article>
@@ -197,6 +304,16 @@ export function Canvas({
       appendReference={appendReference}
       onCreated={actions.assetCreated}
       close={() => { setChapterOutlineOpen(false) }}
+      t={t}
+    />}
+    {analysisMode !== undefined && state.document.type === 'manuscript.chapter' && <AnalysisDrawer
+      kind={analysisMode}
+      revisionId={state.document.revisionId}
+      report={reports.find(item => item.kind === analysisMode)}
+      busy={analysisBusy}
+      error={analysisError}
+      rerun={() => { void runAnalysis(analysisMode) }}
+      close={() => { setAnalysisMode(undefined); setAnalysisError(undefined) }}
       t={t}
     />}
   </div>
@@ -304,9 +421,99 @@ function ChapterOutlineDrawer({
   </div>
 }
 
+function AnalysisDrawer({ kind, revisionId, report, busy, error, rerun, close, t }: {
+  readonly kind: 'chapter-review' | 'noai-scan'
+  readonly revisionId: string
+  readonly report: NovelAnalysisReportDescriptor | undefined
+  readonly busy: boolean
+  readonly error: string | undefined
+  readonly rerun: () => void
+  readonly close: () => void
+  readonly t: CanvasProps['t']
+}) {
+  return <div className={css.chapterOutlineBackdrop} onMouseDown={close}>
+    <aside className={css.analysisDrawer} role="dialog" aria-modal="true"
+      aria-label={t(kind === 'chapter-review' ? 'chapterReview' : 'noAiScan')}
+      onMouseDown={(event) => { event.stopPropagation() }}>
+      <header className={css.analysisHeader}>
+        <div><strong>{t(kind === 'chapter-review' ? 'chapterReview' : 'noAiScan')}</strong>
+          <small>{t('boundRevision')} · {shortRevisionId(revisionId)}</small></div>
+        <div><button type="button" disabled={busy} onClick={rerun}>{busy ? t('analyzing') : t('rerunAnalysis')}</button>
+          <button type="button" onClick={close}>{t('collapseChapterOutline')} ›</button></div>
+      </header>
+      {error !== undefined && <p className={css.chapterOutlineError} role="alert">{error}</p>}
+      <div className={css.analysisBody}>
+        {busy && report === undefined && <p className={css.analysisEmpty}>{t('analyzing')}</p>}
+        {!busy && report === undefined && error === undefined && <p className={css.analysisEmpty}>{t('noAnalysisReport')}</p>}
+        {report !== undefined && <>
+          <div className={css.analysisMeta}><span>{new Date(report.generatedAt).toLocaleString()}</span>
+            <span>{report.analyzerVersion}</span></div>
+          <AnalysisReportBody report={report} t={t} />
+        </>}
+      </div>
+    </aside>
+  </div>
+}
+
+function AnalysisReportBody({ report, t }: {
+  readonly report: NovelAnalysisReportDescriptor
+  readonly t: CanvasProps['t']
+}) {
+  const data = wireRecord(report.data)
+  if (report.kind === 'noai-scan') {
+    const findings = wireRecords(data?.['findings'])
+    return <>
+      <section className={css.analysisScore}>
+        <div><strong>{wireNumber(data?.['riskScore']) ?? 0}</strong><span>/ 100</span><small>{t('noAiRisk')}</small></div>
+        <p>{sampleLabel(data?.['sampleLevel'], t)} · {wireNumber(data?.['characterCount']) ?? 0} {t('characters')}</p>
+      </section>
+      <ReportFindings findings={findings} t={t} mode="noai" />
+    </>
+  }
+  const findings = wireRecords(data?.['findings'])
+  const dimensions = wireRecords(data?.['dimensions'])
+  const priorities = wireStrings(data?.['priorities'])
+  return <>
+    <section className={css.analysisScore}>
+      <div><strong>{wireNumber(data?.['overallScore']) ?? 0}</strong><span>/ 100</span><small>{t('reviewScore')}</small></div>
+      <p>{wireString(data?.['verdict']) ?? t('noAnalysisReport')}</p>
+    </section>
+    {dimensions.length > 0 && <section className={css.dimensionGrid}>{dimensions.map((dimension, index) => <article key={`${wireString(dimension['id']) ?? 'dimension'}-${index}`}>
+      <header><strong>{reviewDimensionLabel(wireString(dimension['id']), t)}</strong><span>{wireNumber(dimension['score']) ?? 0}</span></header>
+      <p>{wireString(dimension['summary']) ?? ''}</p>
+    </article>)}</section>}
+    {priorities.length > 0 && <section className={css.analysisPriorities}><h3>{t('reviewPriorities')}</h3><ol>
+      {priorities.map((priority, index) => <li key={`${priority}-${index}`}>{priority}</li>)}</ol></section>}
+    <ReportFindings findings={findings} t={t} mode="review" />
+  </>
+}
+
+function ReportFindings({ findings, mode, t }: {
+  readonly findings: readonly Record<string, unknown>[]
+  readonly mode: 'review' | 'noai'
+  readonly t: CanvasProps['t']
+}) {
+  if (findings.length === 0) return <p className={css.analysisEmpty}>{t('noFindings')}</p>
+  return <section className={css.findingList}><h3>{t('analysisFindings')} · {findings.length}</h3>
+    {findings.map((finding, index) => {
+      const severity = wireString(finding['severity']) ?? 'low'
+      const title = mode === 'noai' ? wireString(finding['label']) : wireString(finding['category'])
+      const evidence = mode === 'noai' ? wireString(finding['evidence']) : wireString(finding['quote'])
+      const diagnosis = mode === 'noai' ? undefined : wireString(finding['diagnosis'])
+      const advice = mode === 'noai' ? wireString(finding['advice']) : wireString(finding['suggestion'])
+      return <article key={`${title ?? 'finding'}-${index}`} data-severity={severity}>
+        <header><strong>{title ?? t('analysisFinding')}</strong><span>{severityLabel(severity, t)}</span></header>
+        {evidence !== undefined && evidence !== '' && <blockquote>{evidence}</blockquote>}
+        {diagnosis !== undefined && <p>{diagnosis}</p>}
+        {advice !== undefined && <p className={css.findingAdvice}>{advice}</p>}
+      </article>
+    })}
+  </section>
+}
+
 function ReaderControls({
   activeSkin, activeFont, fontSize, characterCount, chapterOutlineAvailable, chapterOutlineOpen,
-  openChapterOutline, setSkin, setFont, setFontSize, t,
+  analysisMode, analysisBusy, openChapterOutline, runNoAi, runReview, setSkin, setFont, setFontSize, t,
 }: {
   readonly activeSkin: NovelReaderSkin
   readonly activeFont: NovelReaderFont
@@ -314,7 +521,11 @@ function ReaderControls({
   readonly characterCount: number | undefined
   readonly chapterOutlineAvailable: boolean
   readonly chapterOutlineOpen: boolean
+  readonly analysisMode: 'chapter-review' | 'noai-scan' | undefined
+  readonly analysisBusy: boolean
   readonly openChapterOutline: () => void
+  readonly runNoAi: () => void
+  readonly runReview: () => void
   readonly setSkin: (skin: NovelReaderSkin) => void
   readonly setFont: (font: NovelReaderFont) => void
   readonly setFontSize: (size: number) => void
@@ -351,6 +562,12 @@ function ReaderControls({
     <div className={css.readerDock}>
       {chapterOutlineAvailable && <><button type="button" className={css.chapterOutlineTrigger} aria-label={t('chapterOutline')}
         aria-expanded={chapterOutlineOpen} onClick={openChapterOutline}><ChapterOutlineIcon /></button>
+      <button type="button" className={css.reviewTrigger} aria-label={t('chapterReview')}
+        aria-expanded={analysisMode === 'chapter-review'} disabled={analysisBusy}
+        onClick={runReview}><ReviewIcon /></button>
+      <button type="button" className={css.noAiTrigger} aria-label={t('noAiScan')}
+        aria-expanded={analysisMode === 'noai-scan'} disabled={analysisBusy}
+        onClick={runNoAi}>NOAI</button>
       <span className={css.dockDivider} aria-hidden="true" /></>}
       <button type="button" className={css.skinTrigger} data-skin={activeSkin} aria-label={t('skinSettings')}
         aria-expanded={panel === 'skin'} onClick={() => { setPanel(current => current === 'skin' ? undefined : 'skin') }}><span aria-hidden="true" /></button>
@@ -363,6 +580,11 @@ function ReaderControls({
 
 function ChapterOutlineIcon() {
   return <svg viewBox="0 0 1024 1024" aria-hidden="true"><path fill="currentColor" d="M550.357333 588.8h-153.6a38.4 38.4 0 1 0 0 76.8h153.6a38.4 38.4 0 1 0 0-76.8z m153.6-384h-45.312A115.2 115.2 0 0 0 550.357333 128h-76.8A115.2 115.2 0 0 0 365.226667 204.8H319.957333a115.2 115.2 0 0 0-115.2 115.2v460.8a115.2 115.2 0 0 0 115.2 115.2h384a115.2 115.2 0 0 0 115.2-115.2V320a115.2 115.2 0 0 0-115.2-115.2z m-268.8 38.4a38.4 38.4 0 0 1 38.4-38.4h76.8a38.4 38.4 0 0 1 38.4 38.4v38.4h-153.6v-38.4z m307.2 537.6a38.4 38.4 0 0 1-38.4 38.4h-384a38.4 38.4 0 0 1-38.4-38.4V320a38.4 38.4 0 0 1 38.4-38.4h38.4v38.4a38.4 38.4 0 0 0 38.4 38.4h230.4a38.4 38.4 0 0 0 38.4-38.4v-38.4h38.4a38.4 38.4 0 0 1 38.4 38.4v460.8z m-115.2-345.6h-230.4a38.4 38.4 0 1 0 0 76.8h230.4a38.4 38.4 0 1 0 0-76.8z" /></svg>
+}
+
+function ReviewIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.8"
+    strokeLinecap="round" strokeLinejoin="round" d="M8 4.5h8M9 3h6v3H9zM6 5.5H5a2 2 0 0 0-2 2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7.5a2 2 0 0 0-2-2h-1M7 11l2 2 4-4m-6 9h10" /></svg>
 }
 
 function chapterOutlineBody(document: NovelAssetDocument): string {
@@ -379,6 +601,52 @@ export function shortReferenceLabel(preview: string): string {
   const characters = Array.from(preview.replace(/\s+/gu, ' ').trim())
   const visible = characters.slice(0, 10).join('')
   return `[${visible}${characters.length > 10 ? '…' : ''}]`
+}
+
+function revisionLabel(revision: NovelAssetRevisionDescriptor, current: boolean, t: CanvasProps['t']): string {
+  const date = new Date(revision.createdAt)
+  const when = Number.isNaN(date.getTime()) ? revision.createdAt : date.toLocaleString()
+  const origin = t(revision.origin === 'initial-scan' ? 'revisionInitial'
+    : revision.origin === 'user-edit' ? 'revisionUser'
+      : revision.origin === 'agent-apply' ? 'revisionAgent' : 'revisionExternal')
+  return `${current ? `${t('currentRevision')} · ` : ''}${when} · ${origin}`
+}
+
+function shortRevisionId(revisionId: string): string {
+  return revisionId.length <= 14 ? revisionId : `${revisionId.slice(0, 12)}…`
+}
+
+function wireRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+}
+
+function wireRecords(value: unknown): readonly Record<string, unknown>[] {
+  return Array.isArray(value) ? value.map(wireRecord).filter((item): item is Record<string, unknown> => item !== undefined) : []
+}
+
+function wireStrings(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+}
+
+function wireString(value: unknown): string | undefined { return typeof value === 'string' ? value : undefined }
+function wireNumber(value: unknown): number | undefined { return typeof value === 'number' && Number.isFinite(value) ? value : undefined }
+
+function sampleLabel(value: unknown, t: CanvasProps['t']): string {
+  return t(value === 'strong' ? 'sampleStrong' : value === 'usable' ? 'sampleUsable' : 'sampleInsufficient')
+}
+
+function severityLabel(value: string, t: CanvasProps['t']): string {
+  return t(value === 'high' ? 'severityHigh' : value === 'medium' ? 'severityMedium' : 'severityLow')
+}
+
+function reviewDimensionLabel(value: string | undefined, t: CanvasProps['t']): string {
+  if (value === 'plot') return t('dimensionPlot')
+  if (value === 'causality') return t('dimensionCausality')
+  if (value === 'character') return t('dimensionCharacter')
+  if (value === 'pacing') return t('dimensionPacing')
+  if (value === 'hook') return t('dimensionHook')
+  if (value === 'style') return t('dimensionStyle')
+  return value ?? t('analysisFinding')
 }
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error) }

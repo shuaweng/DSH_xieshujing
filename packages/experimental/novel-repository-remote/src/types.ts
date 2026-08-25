@@ -83,6 +83,30 @@ export interface NovelAssetDocument extends NovelAssetDescriptor {
   readonly content: NovelWireValue
 }
 
+/** Metadata-only browser projection of one immutable retained Revision. */
+export interface NovelAssetRevisionDescriptor {
+  readonly id: RevisionId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly parentRevisionId?: RevisionId
+  readonly contentHash: string
+  readonly origin: 'initial-scan' | 'user-edit' | 'agent-apply' | 'external-edit'
+  readonly createdAt: string
+}
+
+/** One generated analysis result bound to the exact Revision on screen. */
+export interface NovelAnalysisReportDescriptor {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly kind: 'chapter-review' | 'noai-scan'
+  readonly analyzerVersion: string
+  readonly generatedAt: string
+  readonly data: NovelWireValue
+  readonly sourceSessionId?: string
+  readonly workerSessionId?: string
+}
+
 /** Guarded browser save of one complete typed Asset content value. */
 export interface SaveNovelAssetRequest {
   readonly assetId: AssetId

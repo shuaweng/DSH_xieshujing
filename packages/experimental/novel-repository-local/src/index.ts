@@ -19,6 +19,7 @@ import NovelRepository, {
   SelectionRefId,
   type Asset,
   type AssetRevision,
+  type AssetRevisionSummary,
   type AssetSnapshot,
   type AssetSearchResult,
   type AssetSummary,
@@ -27,9 +28,11 @@ import NovelRepository, {
   type ChangeSetAuthorization,
   type CreateAssetRequest,
   type NovelProjectSnapshot,
+  type NovelAnalysisReport,
   type NovelSelectionInput,
   type ProjectId,
   type ProposeChangeSetRequest,
+  type PutNovelAnalysisReportRequest,
   type RevisionId as RevisionIdValue,
   type RevisionOrigin,
   type SaveAssetContentRequest,
@@ -55,6 +58,7 @@ const DEFAULT_SCAN_MAX_DEPTH = 64
 const DEFAULT_BUSY_TIMEOUT_MS = 5_000
 const DEFAULT_SELECTION_CONTEXT_CHARS = 32
 const DEFAULT_SELECTION_PREVIEW_CHARS = 160
+const DEFAULT_ANALYSIS_REPORT_MAX_BYTES = 1024 * 1024
 const MAX_SEARCH_QUERY_CHARS = 200
 const DEFAULT_SEARCH_LIMIT = 20
 const MAX_SEARCH_LIMIT = 50
@@ -77,6 +81,8 @@ export interface Config {
   selectionContextChars?: number
   /** Maximum UTF-16 units retained in selection preview; defaults to 160. */
   selectionPreviewChars?: number
+  /** Inclusive JSON byte limit for one generated analysis report; defaults to 1 MiB. */
+  analysisReportMaxBytes?: number
 }
 
 interface ResolvedConfig {
@@ -87,6 +93,7 @@ interface ResolvedConfig {
   busyTimeoutMs: number
   selectionContextChars: number
   selectionPreviewChars: number
+  analysisReportMaxBytes: number
 }
 
 interface ObservedAsset {
@@ -124,6 +131,7 @@ export class LocalNovelRepository extends NovelRepository {
     busyTimeoutMs: z.number().default(DEFAULT_BUSY_TIMEOUT_MS),
     selectionContextChars: z.number().default(DEFAULT_SELECTION_CONTEXT_CHARS),
     selectionPreviewChars: z.number().default(DEFAULT_SELECTION_PREVIEW_CHARS),
+    analysisReportMaxBytes: z.number().default(DEFAULT_ANALYSIS_REPORT_MAX_BYTES),
   })
 
   /** Validated provider bounds. */
@@ -307,6 +315,71 @@ export class LocalNovelRepository extends NovelRepository {
         return cloneSnapshot(asset.snapshot)
       }
       return this.snapshotFromHistory(project, state, assetId, revisionId)
+    })
+  }
+
+  override async listAssetRevisions(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    signal?: AbortSignal,
+  ): Promise<readonly AssetRevisionSummary[]> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const revisions = state.history.revisions(project.id, assetId)
+      if (revisions.length === 0) throw assetNotFound(assetId)
+      return revisions.map(revision => ({ ...revision }))
+    })
+  }
+
+  override async listAnalysisReports(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    revisionId: RevisionIdValue,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelAnalysisReport[]> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      this.snapshotFromHistory(project, state, assetId, revisionId)
+      return state.history.analysisReports(project.id, assetId, revisionId)
+        .map(report => structuredClone(report))
+    })
+  }
+
+  override async putAnalysisReport(
+    project: NovelProjectSnapshot,
+    request: PutNovelAnalysisReportRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelAnalysisReport> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      this.snapshotFromHistory(project, state, request.assetId, request.revisionId)
+      const analyzerVersion = request.analyzerVersion.trim()
+      if (analyzerVersion.length === 0 || analyzerVersion.length > 100 || analyzerVersion !== request.analyzerVersion) {
+        throw new NovelRepositoryError('novel repository: analysis analyzer version is invalid', 'NOVEL_ASSET_INVALID')
+      }
+      if (!Number.isFinite(Date.parse(request.generatedAt))) {
+        throw new NovelRepositoryError('novel repository: analysis generation time is invalid', 'NOVEL_ASSET_INVALID')
+      }
+      const dataText = JSON.stringify(request.data)
+      if (new TextEncoder().encode(dataText).byteLength > this.config.analysisReportMaxBytes) {
+        throw new NovelRepositoryError(
+          `novel repository: analysis report exceeds ${this.config.analysisReportMaxBytes} bytes`,
+          'NOVEL_ASSET_TOO_LARGE',
+        )
+      }
+      const report: NovelAnalysisReport = {
+        projectId: project.id,
+        assetId: request.assetId,
+        revisionId: request.revisionId,
+        kind: request.kind,
+        analyzerVersion,
+        generatedAt: request.generatedAt,
+        data: structuredClone(request.data),
+        ...(request.sourceSessionId === undefined ? {} : { sourceSessionId: request.sourceSessionId }),
+        ...(request.workerSessionId === undefined ? {} : { workerSessionId: request.workerSessionId }),
+      }
+      state.history.putAnalysisReport(report)
+      return structuredClone(report)
     })
   }
 
@@ -969,9 +1042,10 @@ function resolveConfig(config: Config): ResolvedConfig {
     busyTimeoutMs: config.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS,
     selectionContextChars: config.selectionContextChars ?? DEFAULT_SELECTION_CONTEXT_CHARS,
     selectionPreviewChars: config.selectionPreviewChars ?? DEFAULT_SELECTION_PREVIEW_CHARS,
+    analysisReportMaxBytes: config.analysisReportMaxBytes ?? DEFAULT_ANALYSIS_REPORT_MAX_BYTES,
   }
   for (const [name, value] of Object.entries(resolved)) {
-    const upper = name === 'manifestMaxBytes' || name === 'assetMaxBytes'
+    const upper = name === 'manifestMaxBytes' || name === 'assetMaxBytes' || name === 'analysisReportMaxBytes'
       ? MAX_BUFFER_BYTES
       : Number.MAX_SAFE_INTEGER
     if (!Number.isSafeInteger(value) || value < 1 || value > upper) {

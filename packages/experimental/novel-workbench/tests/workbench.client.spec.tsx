@@ -16,6 +16,7 @@ import type {
   NovelChangeSetDescriptor,
   NovelAssetDocument,
   NovelAssetSearchResult,
+  NovelAnalysisReportDescriptor,
   NovelContextWorksetDescriptor,
   NovelSelectionDescriptor,
   CreateNovelAssetRequest,
@@ -75,6 +76,12 @@ const renderers = { get: () => manuscriptChapterRenderer } as never
 
 async function openStub(): Promise<NovelAssetDocument> { return chapter() }
 async function createStub(): Promise<NovelAssetDocument> { return chapter() }
+const canvasAnalysisStubs = {
+  revisions: async () => [],
+  analysisReports: async () => [],
+  scanNoAi: async () => analysisReport('noai-scan'),
+  reviewChapter: async () => analysisReport('chapter-review'),
+}
 
 function chapter(overrides: Partial<NovelAssetDocument> = {}): NovelAssetDocument {
   return {
@@ -119,6 +126,25 @@ function selection(overrides: Partial<NovelSelectionDescriptor> = {}): NovelSele
     preview: '新句',
     mention: 'dsh-novel:eyJ2IjoxfQ',
     ...overrides,
+  }
+}
+
+function analysisReport(kind: NovelAnalysisReportDescriptor['kind']): NovelAnalysisReportDescriptor {
+  return {
+    projectId: 'project-1' as never,
+    assetId: 'asset-chapter-1' as never,
+    revisionId: 'revision-1' as never,
+    kind,
+    analyzerVersion: kind === 'noai-scan' ? 'noai-rules/1' : 'chapter-review/1',
+    generatedAt: '2026-08-25T08:00:00.000Z',
+    data: kind === 'noai-scan'
+      ? { version: 1, characterCount: 800, sampleLevel: 'usable', riskScore: 56,
+        counts: { high: 1, medium: 0, low: 0 }, findings: [{ ruleId: 'not-but', label: '否定转折模板',
+          severity: 'high', startUtf16: 0, endUtf16: 4, evidence: '不是…而是', advice: '直接写结果。' }] }
+      : { version: 1, sampleLevel: 'usable', overallScore: 72, verdict: '推进清楚，但章末钩子偏弱。',
+        dimensions: [{ id: 'hook', score: 58, summary: '新期待不足。' }],
+        findings: [{ severity: 'medium', category: '章末钩子', quote: '他回家了。',
+          diagnosis: '局面闭合。', suggestion: '追加真实的新行动。' }], priorities: ['先强化章末局面变化。'] },
   }
 }
 
@@ -311,6 +337,7 @@ describe('Canvas', () => {
     const appendReference = vi.fn(() => { order.push('reference') })
 
     const view = render(<Canvas
+      {...canvasAnalysisStubs}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never}
       actions={store.actions}
@@ -342,6 +369,7 @@ describe('Canvas', () => {
   it('saves manually and renders the empty canvas without a chapter', async () => {
     const store = createNovelWorkbenchStore().create()
     const empty = render(<Canvas
+      {...canvasAnalysisStubs}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} t={t}
@@ -362,6 +390,7 @@ describe('Canvas', () => {
       revisionId: 'revision-2' as NovelAssetDocument['revisionId'],
     }))
     const view = render(<Canvas
+      {...canvasAnalysisStubs}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={save} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
@@ -390,6 +419,7 @@ describe('Canvas', () => {
     const capture = vi.fn()
     const appendReference = vi.fn()
     const view = render(<Canvas
+      {...canvasAnalysisStubs}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={async () => { throw new Error('workspace write denied') }} capture={capture} appendReference={appendReference}
@@ -417,6 +447,7 @@ describe('Canvas', () => {
       store.actions.select({ kind: 'text-range', startUtf16: 0, endUtf16: 2 })
     })
     const view = render(<Canvas
+      {...canvasAnalysisStubs}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={vi.fn()} capture={capture} appendReference={appendReference} renderers={renderers} t={t}
@@ -436,6 +467,7 @@ describe('Canvas', () => {
     view.unmount()
 
     const noSession = render(<Canvas
+      {...canvasAnalysisStubs}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions}
       useSessions={((select: (state: SessionListState) => unknown) => select({
@@ -452,6 +484,7 @@ describe('Canvas', () => {
     const store = createNovelWorkbenchStore().create()
     act(() => { store.actions.open(chapter()) })
     const view = render(<Canvas
+      {...canvasAnalysisStubs}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
@@ -485,6 +518,7 @@ describe('Canvas', () => {
     const capture = vi.fn(async () => frozen)
     const appendReference = vi.fn()
     const view = render(<Canvas
+      {...canvasAnalysisStubs}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       open={vi.fn(async () => created)} create={create} save={save} capture={capture} appendReference={appendReference}
       renderers={renderers} t={t}
@@ -514,6 +548,104 @@ describe('Canvas', () => {
     await waitFor(() => { expect(save).toHaveBeenCalled() })
     await waitFor(() => { expect(capture).toHaveBeenCalledWith(SID, expect.objectContaining({ assetId: created.id })) })
     expect(appendReference).toHaveBeenCalledWith(SID, frozen, '[情绪目标]')
+  })
+
+  it('opens retained Revisions from the header and keeps historical prose read-only', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const current = chapter({ revisionId: 'revision-2' as never, content: { kind: 'manuscript', body: '当前正文' } })
+    const historical = chapter({ revisionId: 'revision-1' as never, content: { kind: 'manuscript', body: '历史正文' } })
+    act(() => {
+      store.actions.loaded({ title: '白港' } as never, [{ ...current, content: undefined }] as never)
+      store.actions.open(current)
+    })
+    const open = vi.fn(async (_sessionId: SessionId, _assetId: string, revisionId?: string) => (
+      revisionId === historical.revisionId ? historical : current
+    ))
+    const revisions = vi.fn(async () => [
+      { id: current.revisionId, projectId: current.projectId, assetId: current.id, contentHash: current.contentHash,
+        origin: 'user-edit' as const, createdAt: '2026-08-25T09:00:00.000Z', parentRevisionId: historical.revisionId },
+      { id: historical.revisionId, projectId: historical.projectId, assetId: historical.id, contentHash: historical.contentHash,
+        origin: 'initial-scan' as const, createdAt: '2026-08-25T08:00:00.000Z' },
+    ])
+    const save = vi.fn()
+    const view = render(<Canvas
+      {...canvasAnalysisStubs}
+      revisions={revisions} open={open} create={createStub}
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      save={save} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
+    />)
+
+    await waitFor(() => { expect(view.getByLabelText(zh.revisionHistory)).toBeTruthy() })
+    fireEvent.change(view.getByLabelText(zh.revisionHistory), { target: { value: historical.revisionId } })
+    await waitFor(() => { expect((view.getByLabelText(/第一章/u) as HTMLTextAreaElement).value).toBe('历史正文') })
+    expect((view.getByLabelText(/第一章/u) as HTMLTextAreaElement).readOnly).toBe(true)
+    expect((view.getByLabelText(zh.chapterTitle) as HTMLInputElement).readOnly).toBe(true)
+    expect(view.getByText(zh.historicalReadOnly)).toBeTruthy()
+    expect(save).not.toHaveBeenCalled()
+
+    fireEvent.change(view.getByLabelText(zh.revisionHistory), { target: { value: current.revisionId } })
+    await waitFor(() => { expect((view.getByLabelText(/第一章/u) as HTMLTextAreaElement).value).toBe('当前正文') })
+    expect((view.getByLabelText(/第一章/u) as HTMLTextAreaElement).readOnly).toBe(false)
+  })
+
+  it('flushes dirty prose before Revision-bound NOAI and review reports', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const current = chapter()
+    act(() => {
+      store.actions.loaded({ title: '白港' } as never, [{ ...current, content: undefined }] as never)
+      store.actions.open(current)
+      store.actions.edit({ kind: 'manuscript', body: '不是普通变化，而是真正改变命运。' })
+    })
+    const saved = chapter({ revisionId: 'revision-2' as never, content: { kind: 'manuscript', body: '不是普通变化，而是真正改变命运。' } })
+    const save = vi.fn(async () => saved)
+    const scanNoAi = vi.fn(async () => ({ ...analysisReport('noai-scan'), revisionId: saved.revisionId }))
+    const reviewChapter = vi.fn(async () => ({ ...analysisReport('chapter-review'), revisionId: saved.revisionId }))
+    const view = render(<Canvas
+      {...canvasAnalysisStubs}
+      revisions={async () => [{ id: saved.revisionId, projectId: saved.projectId, assetId: saved.id,
+        contentHash: saved.contentHash, origin: 'user-edit', createdAt: '2026-08-25T09:00:00.000Z' }]}
+      analysisReports={async () => []} scanNoAi={scanNoAi} reviewChapter={reviewChapter}
+      open={openStub} create={createStub}
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      save={save} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
+    />)
+
+    fireEvent.click(view.getByRole('button', { name: zh.noAiScan }))
+    await waitFor(() => { expect(scanNoAi).toHaveBeenCalledWith(SID, saved.id, saved.revisionId) })
+    expect(save.mock.invocationCallOrder[0]).toBeLessThan(scanNoAi.mock.invocationCallOrder[0]!)
+    const noAi = view.getByRole('dialog', { name: zh.noAiScan })
+    expect(within(noAi).getByText('56')).toBeTruthy()
+    expect(within(noAi).getByText('否定转折模板')).toBeTruthy()
+    fireEvent.click(within(noAi).getByText(`${zh.collapseChapterOutline} ›`))
+
+    fireEvent.click(view.getByRole('button', { name: zh.chapterReview }))
+    await waitFor(() => { expect(reviewChapter).toHaveBeenCalledWith(SID, saved.id, saved.revisionId) })
+    const review = view.getByRole('dialog', { name: zh.chapterReview })
+    expect(within(review).getByText('72')).toBeTruthy()
+    expect(within(review).getByText('推进清楚，但章末钩子偏弱。')).toBeTruthy()
+  })
+
+  it('opens an existing Revision review without starting a replacement run', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const current = chapter()
+    act(() => {
+      store.actions.loaded({ title: '白港' } as never, [{ ...current, content: undefined }] as never)
+      store.actions.open(current)
+    })
+    const reviewChapter = vi.fn(async () => analysisReport('chapter-review'))
+    const view = render(<Canvas
+      {...canvasAnalysisStubs}
+      analysisReports={async () => [analysisReport('chapter-review')]}
+      reviewChapter={reviewChapter}
+      open={openStub} create={createStub}
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
+    />)
+
+    fireEvent.click(view.getByRole('button', { name: zh.chapterReview }))
+    const review = await view.findByRole('dialog', { name: zh.chapterReview })
+    await waitFor(() => { expect(within(review).getByText('72')).toBeTruthy() })
+    expect(reviewChapter).not.toHaveBeenCalled()
   })
 })
 

@@ -11,6 +11,7 @@ import { NovelRepositoryError } from './error.ts'
 import type {
   AssetId,
   AssetSnapshot,
+  AssetRevisionSummary,
   AssetSummary,
   AssetSearchResult,
   CaptureSelectionRequest,
@@ -19,7 +20,9 @@ import type {
   ChangeSetAuthorization,
   ChangeSetId,
   NovelProjectSnapshot,
+  NovelAnalysisReport,
   NovelSelectionInput,
+  PutNovelAnalysisReportRequest,
   ProposeChangeSetRequest,
   RevisionId,
   SaveAssetContentRequest,
@@ -38,6 +41,7 @@ export { NovelRepositoryError }
 export type {
   Asset,
   AssetRevision,
+  AssetRevisionSummary,
   AssetSnapshot,
   AssetSummary,
   AssetSearchResult,
@@ -50,6 +54,8 @@ export type {
   NovelAssetContent,
   NovelAssetType,
   NovelAssetTypeMap,
+  NovelAnalysisReport,
+  NovelAnalysisReportKind,
   NovelOperation,
   NovelSelectionInput,
   NovelSelector,
@@ -57,6 +63,7 @@ export type {
   NovelProjectSnapshot,
   NovelRepositoryErrorCode,
   ProposeChangeSetRequest,
+  PutNovelAnalysisReportRequest,
   ReplaceTextOperation,
   RevisionOrigin,
   SaveAssetContentRequest,
@@ -147,6 +154,47 @@ export abstract class NovelRepository extends Service {
     signal?: AbortSignal,
     sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<AssetSnapshot>
+
+  /**
+   * List metadata for every retained Revision of one Asset, newest first.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable authored Asset identity.
+   * @param signal - optional cancellation before history access.
+   * @returns exact immutable Revision summaries without serialized prose bytes.
+   */
+  abstract listAssetRevisions(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    signal?: AbortSignal,
+  ): Promise<readonly AssetRevisionSummary[]>
+
+  /**
+   * List generated reports attached to one exact retained Revision.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable authored Asset identity.
+   * @param revisionId - exact retained Revision identity.
+   * @param signal - optional cancellation before history access.
+   * @returns reports in stable report-kind order.
+   */
+  abstract listAnalysisReports(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelAnalysisReport[]>
+
+  /**
+   * Atomically replace the successful report for one Revision and report kind.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - exact Revision, kind, analyzer identity, provenance, and JSON result.
+   * @param signal - optional cancellation before durable publication.
+   * @returns the validated persisted report.
+   */
+  abstract putAnalysisReport(
+    project: NovelProjectSnapshot,
+    request: PutNovelAnalysisReportRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelAnalysisReport>
 
   /**
    * Guardedly publish user-authored typed content and retain its exact new Revision.

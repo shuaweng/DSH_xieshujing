@@ -1078,6 +1078,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'novelAnalysis',
+    summary: 'Host coordinator for exact-Revision scans and read-only chapter review.',
+    description: 'Host coordinator for exact-Revision scans and read-only chapter review.',
+    methods: [
+      {
+        signature: 'async scanChapter( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal?: AbortSignal, ): Promise<NovelAnalysisReport>',
+        description: 'Deterministically scan and persist one exact chapter Revision.',
+        parameters: [{ name: 'agent', description: 'owning Session used to locate and authorize the Novel Project.' }, { name: 'assetId', description: 'exact manuscript chapter identity.' }, { name: 'revisionId', description: 'retained Revision to scan.' }, { name: 'signal', description: 'optional caller cancellation before persistence.' }],
+        returns: 'the upserted exact-Revision report.',
+      },
+      {
+        signature: 'async reviewChapter( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal: AbortSignal, ): Promise<NovelAnalysisReport>',
+        description: 'Run the fixed read-only chapter reviewer and persist valid structured output.',
+        parameters: [{ name: 'agent', description: 'owning root Agent and review provenance.' }, { name: 'assetId', description: 'exact manuscript chapter identity.' }, { name: 'revisionId', description: 'retained Revision to review.' }, { name: 'signal', description: 'canonical cancellation for worker startup and execution.' }],
+        returns: 'the upserted exact-Revision review.',
+      },
+      {
+        signature: 'candidateWarning( base: AssetSnapshot, operations: readonly NovelOperation[], ): NovelCandidateAnalysisWarning | undefined',
+        description: 'Scan one proposal candidate and render bounded deferred model feedback.',
+        parameters: [{ name: 'base', description: 'exact ChangeSet base snapshot.' }, { name: 'operations', description: 'type-validated operations already accepted for proposal.' }],
+        returns: 'material warning, or `undefined` for non-chapters, small samples, or low risk.',
+      },
+    ],
+  },
+  {
     key: 'novelAssetTypes',
     summary: 'Effect-scoped Host registry of exact authored Asset type definitions.',
     description: 'Effect-scoped Host registry of exact authored Asset type definitions.',
@@ -1166,6 +1191,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         throws: ['{NovelRepositoryError} when the asset or Revision is absent or invalid.'],
       },
       {
+        signature: 'abstract listAssetRevisions( project: NovelProjectSnapshot, assetId: AssetId, signal?: AbortSignal, ): Promise<readonly AssetRevisionSummary[]>',
+        description: 'List metadata for every retained Revision of one Asset, newest first.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'assetId', description: 'stable authored Asset identity.' }, { name: 'signal', description: 'optional cancellation before history access.' }],
+        returns: 'exact immutable Revision summaries without serialized prose bytes.',
+      },
+      {
+        signature: 'abstract listAnalysisReports( project: NovelProjectSnapshot, assetId: AssetId, revisionId: RevisionId, signal?: AbortSignal, ): Promise<readonly NovelAnalysisReport[]>',
+        description: 'List generated reports attached to one exact retained Revision.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'assetId', description: 'stable authored Asset identity.' }, { name: 'revisionId', description: 'exact retained Revision identity.' }, { name: 'signal', description: 'optional cancellation before history access.' }],
+        returns: 'reports in stable report-kind order.',
+      },
+      {
+        signature: 'abstract putAnalysisReport( project: NovelProjectSnapshot, request: PutNovelAnalysisReportRequest, signal?: AbortSignal, ): Promise<NovelAnalysisReport>',
+        description: 'Atomically replace the successful report for one Revision and report kind.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'exact Revision, kind, analyzer identity, provenance, and JSON result.' }, { name: 'signal', description: 'optional cancellation before durable publication.' }],
+        returns: 'the validated persisted report.',
+      },
+      {
         signature: 'abstract saveAssetContent( project: NovelProjectSnapshot, request: SaveAssetContentRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>',
         description: 'Guardedly publish user-authored typed content and retain its exact new Revision.',
         parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'target, current base Revision, and full typed replacement content.' }, { name: 'signal', description: 'optional cancellation before filesystem publication.' }, { name: 'sandboxPolicy', description: 'optional per-call policy governing authored-file publication and recovery.' }],
@@ -1245,6 +1288,30 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read one current or retained typed Asset document.',
         parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'assetId', description: 'stable Asset identity.' }, { name: 'revisionId', description: 'exact retained Revision, or `null` for current.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'a browser-safe Revision-bound typed Asset document.',
+      },
+      {
+        signature: '@Remote(\'revisions\') async revisions( agent: Agent, assetId: AssetId, signal: AbortSignal, ): Promise<NovelAssetRevisionDescriptor[]>',
+        description: 'List metadata for every retained Revision of one Asset, newest first.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'assetId', description: 'stable Asset identity.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'browser-safe Revision summaries without prose bytes.',
+      },
+      {
+        signature: '@Remote(\'analysisReports\') async analysisReports( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal: AbortSignal, ): Promise<NovelAnalysisReportDescriptor[]>',
+        description: 'List generated reports for one exact retained Revision.',
+        parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'assetId', description: 'stable Asset identity.' }, { name: 'revisionId', description: 'exact retained Revision identity.' }, { name: 'signal', description: 'caller cancellation.' }],
+        returns: 'browser-safe Revision-bound reports.',
+      },
+      {
+        signature: '@Remote(\'scanNoAi\') async scanNoAi( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal: AbortSignal, ): Promise<NovelAnalysisReportDescriptor>',
+        description: 'Run the deterministic NOAI scanner over one exact chapter Revision.',
+        parameters: [{ name: 'agent', description: 'addressed Agent and report provenance.' }, { name: 'assetId', description: 'exact chapter identity.' }, { name: 'revisionId', description: 'retained Revision to scan.' }, { name: 'signal', description: 'caller cancellation before persistence.' }],
+        returns: 'the upserted browser-safe report.',
+      },
+      {
+        signature: '@Remote(\'reviewChapter\') async reviewChapter( agent: Agent, assetId: AssetId, revisionId: RevisionId, signal: AbortSignal, ): Promise<NovelAnalysisReportDescriptor>',
+        description: 'Run the fixed read-only Subagent reviewer over one exact chapter Revision.',
+        parameters: [{ name: 'agent', description: 'addressed root Agent and report provenance.' }, { name: 'assetId', description: 'exact chapter identity.' }, { name: 'revisionId', description: 'retained Revision to review.' }, { name: 'signal', description: 'canonical worker cancellation.' }],
+        returns: 'the upserted browser-safe report.',
       },
       {
         signature: '@Remote(\'saveAsset\') async saveAsset( agent: Agent, request: SaveNovelAssetRequest, signal: AbortSignal, ): Promise<NovelAssetDocument>',
@@ -3159,6 +3226,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AssetId = Branded<\'NovelAssetId\'>;',
   },
   {
+    name: 'AssetRevisionSummary',
+    declaration: 'export interface AssetRevisionSummary {\n    readonly id: RevisionId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly parentRevisionId?: RevisionId;\n    readonly contentHash: ContentHash;\n    readonly origin: RevisionOrigin;\n    readonly createdAt: string;\n}',
+  },
+  {
     name: 'AssetSearchResult',
     declaration: 'export interface AssetSearchResult {\n    readonly summary: AssetSummary;\n    readonly excerpt: string;\n    readonly score: number;\n}',
   },
@@ -4071,6 +4142,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ModelModalityMap {\n    text: \'text\';\n    image: \'image\';\n}',
   },
   {
+    name: 'NoAiFinding',
+    declaration: 'export interface NoAiFinding {\n    readonly ruleId: string;\n    readonly label: string;\n    readonly severity: NoAiSeverity;\n    readonly startUtf16: number;\n    readonly endUtf16: number;\n    readonly evidence: string;\n    readonly advice: string;\n}',
+  },
+  {
+    name: 'NoAiScanReport',
+    declaration: 'export interface NoAiScanReport {\n    readonly version: 1;\n    readonly characterCount: number;\n    readonly sampleLevel: \'insufficient\' | \'usable\' | \'strong\';\n    readonly riskScore: number;\n    readonly counts: Readonly<Record<NoAiSeverity, number>>;\n    readonly findings: readonly NoAiFinding[];\n}',
+  },
+  {
+    name: 'NoAiSeverity',
+    declaration: 'export type NoAiSeverity = \'high\' | \'medium\' | \'low\';',
+  },
+  {
+    name: 'NovelAnalysisReport',
+    declaration: 'export interface NovelAnalysisReport {\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly kind: NovelAnalysisReportKind;\n    readonly analyzerVersion: string;\n    readonly generatedAt: string;\n    readonly data: JsonValue;\n    readonly sourceSessionId?: SessionId;\n    readonly workerSessionId?: SessionId;\n}',
+  },
+  {
+    name: 'NovelAnalysisReportDescriptor',
+    declaration: 'export interface NovelAnalysisReportDescriptor {\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly kind: \'chapter-review\' | \'noai-scan\';\n    readonly analyzerVersion: string;\n    readonly generatedAt: string;\n    readonly data: NovelWireValue;\n    readonly sourceSessionId?: string;\n    readonly workerSessionId?: string;\n}',
+  },
+  {
+    name: 'NovelAnalysisReportKind',
+    declaration: 'export type NovelAnalysisReportKind = \'chapter-review\' | \'noai-scan\';',
+  },
+  {
     name: 'NovelAssetContent',
     declaration: 'export type NovelAssetContent = NovelAssetTypeMap[NovelAssetType][\'content\'];',
   },
@@ -4087,6 +4182,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface NovelAssetMaterialization {\n    readonly serializedUtf8: Uint8Array;\n    readonly parsed: ParsedNovelAsset;\n}',
   },
   {
+    name: 'NovelAssetRevisionDescriptor',
+    declaration: 'export interface NovelAssetRevisionDescriptor {\n    readonly id: RevisionId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly parentRevisionId?: RevisionId;\n    readonly contentHash: string;\n    readonly origin: \'initial-scan\' | \'user-edit\' | \'agent-apply\' | \'external-edit\';\n    readonly createdAt: string;\n}',
+  },
+  {
     name: 'NovelAssetSearchResult',
     declaration: 'export interface NovelAssetSearchResult extends NovelAssetDescriptor {\n    readonly excerpt: string;\n    readonly score: number;\n}',
   },
@@ -4101,6 +4200,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'NovelAssetTypeMap',
     declaration: 'export interface NovelAssetTypeMap {\n    \'manuscript.chapter\': {\n        readonly content: ManuscriptChapterContent;\n        readonly selectionInput: TextRangeSelectionInput;\n        readonly selector: TextRangeSelector;\n        readonly operation: ReplaceTextOperation;\n    };\n}',
+  },
+  {
+    name: 'NovelCandidateAnalysisWarning',
+    declaration: 'export interface NovelCandidateAnalysisWarning {\n    readonly report: NoAiScanReport;\n    readonly text: string;\n}',
   },
   {
     name: 'NovelChangeSetDescriptor',
@@ -4283,6 +4386,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface PruneResult {\n    readonly pruned: readonly PrunedEntry[];\n    readonly charsRemoved: number;\n}',
   },
   {
+    name: 'PutNovelAnalysisReportRequest',
+    declaration: 'export interface PutNovelAnalysisReportRequest {\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly kind: NovelAnalysisReportKind;\n    readonly analyzerVersion: string;\n    readonly generatedAt: string;\n    readonly data: JsonValue;\n    readonly sourceSessionId?: SessionId;\n    readonly workerSessionId?: SessionId;\n}',
+  },
+  {
     name: 'ReadFileLine',
     declaration: 'export interface ReadFileLine {\n    number: number;\n    text: string;\n}',
   },
@@ -4373,6 +4480,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'RevisionId',
     declaration: 'export type RevisionId = Branded<\'NovelRevisionId\'>;',
+  },
+  {
+    name: 'RevisionOrigin',
+    declaration: 'export type RevisionOrigin = \'initial-scan\' | \'user-edit\' | \'agent-apply\' | \'external-edit\';',
   },
   {
     name: 'RpcError',

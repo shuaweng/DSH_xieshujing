@@ -9,14 +9,17 @@ import NovelRepository, {
   RevisionId,
   SelectionRefId,
   type AssetSnapshot,
+  type AssetRevisionSummary,
   type AssetSummary,
   type CaptureSelectionRequest,
   type ChangeSet,
   type ChangeSetAuthorization,
   type CreateAssetRequest,
   type NovelProjectSnapshot,
+  type NovelAnalysisReport,
   type NovelSelectionInput,
   type ProposeChangeSetRequest,
+  type PutNovelAnalysisReportRequest,
   type SaveAssetContentRequest,
   type SearchAssetsRequest,
   type AssetSearchResult,
@@ -48,6 +51,21 @@ class StubNovelRepository extends NovelRepository {
   }
 
   override readAsset(): Promise<AssetSnapshot> {
+    return Promise.reject(new Error('not configured'))
+  }
+
+  override listAssetRevisions(): Promise<readonly AssetRevisionSummary[]> {
+    return Promise.resolve([])
+  }
+
+  override listAnalysisReports(): Promise<readonly NovelAnalysisReport[]> {
+    return Promise.resolve([])
+  }
+
+  override putAnalysisReport(
+    _project: NovelProjectSnapshot,
+    _request: PutNovelAnalysisReportRequest,
+  ): Promise<NovelAnalysisReport> {
     return Promise.reject(new Error('not configured'))
   }
 

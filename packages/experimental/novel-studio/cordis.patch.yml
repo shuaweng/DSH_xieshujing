@@ -28,6 +28,9 @@
     - id: novel-context
       name: '@deepseek-ai/dsh-experimental-novel-context'
 
+    - id: novel-analysis
+      name: '@deepseek-ai/dsh-experimental-novel-analysis'
+
     - id: novel-repository-remote
       name: '@deepseek-ai/dsh-experimental-novel-repository-remote'
 

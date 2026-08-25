@@ -26,6 +26,9 @@
   - navigation "Current novel location":
     - strong: 白港
     - text: White Harbor Story Outline
+    - combobox "Manuscript versions":
+      - option "Current · 8/26/2026, {{clock}} · Author save" [selected]
+      - option "8/26/2026, {{clock}} · Initial import"
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent"
@@ -35,3 +38,5 @@
     - textbox "Freeform planning content":
       - /placeholder: Write freely. Use headings, lists, tables, or any method that fits this book…
       - text: "# Act One Opening: Open with hunger, rain, and an uncertain arrival."
+  - button "Change reader skin"
+  - button "Typeface and size": A

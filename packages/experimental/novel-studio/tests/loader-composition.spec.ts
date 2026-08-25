@@ -100,6 +100,7 @@ describe('Novel Studio real composition', () => {
 
     const ctx = new Context()
     context = ctx
+    ctx.provide('novelAnalysis', {} as never)
     ctx.baseUrl = pathToFileURL(configPath).href
     await ctx.plugin(Loader)
     ctx.loader.builtins.include = Include

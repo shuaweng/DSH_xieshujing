@@ -1,6 +1,7 @@
 /** Public Novel Project repository values. */
 
 import type { FsTarget } from '@deepseek-ai/dsh-fs'
+import type { JsonValue } from '@deepseek-ai/dsh-session'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {
   AssetId,
@@ -182,6 +183,45 @@ export interface AssetRevision {
   readonly contentHash: ContentHash
   readonly origin: RevisionOrigin
   readonly createdAt: string
+}
+
+/** Metadata-only view of one immutable retained Revision. */
+export interface AssetRevisionSummary {
+  readonly id: RevisionId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly parentRevisionId?: RevisionId
+  readonly contentHash: ContentHash
+  readonly origin: RevisionOrigin
+  readonly createdAt: string
+}
+
+/** First durable analysis products attached to exact chapter bytes. */
+export type NovelAnalysisReportKind = 'chapter-review' | 'noai-scan'
+
+/** One generated analysis result bound to an immutable retained Revision. */
+export interface NovelAnalysisReport {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly kind: NovelAnalysisReportKind
+  readonly analyzerVersion: string
+  readonly generatedAt: string
+  readonly data: JsonValue
+  readonly sourceSessionId?: SessionId
+  readonly workerSessionId?: SessionId
+}
+
+/** Successful generated analysis to upsert for one exact Revision and kind. */
+export interface PutNovelAnalysisReportRequest {
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly kind: NovelAnalysisReportKind
+  readonly analyzerVersion: string
+  readonly generatedAt: string
+  readonly data: JsonValue
+  readonly sourceSessionId?: SessionId
+  readonly workerSessionId?: SessionId
 }
 
 /** Frozen semantic selection suitable for durable prompt references. */

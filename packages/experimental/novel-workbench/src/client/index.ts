@@ -7,7 +7,7 @@ import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigge
 import type {} from '@deepseek-ai/dsh-experimental-novel-repository-client/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { AssetId, ChangeSetId } from '@deepseek-ai/dsh-experimental-novel-repository/types'
+import type { AssetId, ChangeSetId, RevisionId } from '@deepseek-ai/dsh-experimental-novel-repository/types'
 import type { CreateNovelAssetRequest } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-agent-preset/client'
@@ -181,9 +181,25 @@ export function apply(ctx: Context): void {
     store,
     inject: (): CanvasInjected => ({
       renderers,
-      open: async (sessionId, assetId) => await unwrapRemote(
-        remote.asset(sessionId, assetId as AssetId, null),
+      open: async (sessionId, assetId, revisionId) => await unwrapRemote(
+        remote.asset(sessionId, assetId as AssetId, revisionId === undefined ? null : revisionId as RevisionId),
         'open Novel Asset',
+      ),
+      revisions: async (sessionId, assetId) => await unwrapRemote(
+        remote.revisions(sessionId, assetId as AssetId),
+        'list Novel Asset Revisions',
+      ),
+      analysisReports: async (sessionId, assetId, revisionId) => await unwrapRemote(
+        remote.analysisReports(sessionId, assetId as AssetId, revisionId as RevisionId),
+        'list Novel analysis reports',
+      ),
+      scanNoAi: async (sessionId, assetId, revisionId) => await unwrapRemote(
+        remote.scanNoAi(sessionId, assetId as AssetId, revisionId as RevisionId),
+        'scan chapter for AI-style patterns',
+      ),
+      reviewChapter: async (sessionId, assetId, revisionId) => await unwrapRemote(
+        remote.reviewChapter(sessionId, assetId as AssetId, revisionId as RevisionId),
+        'review chapter',
       ),
       create: async (sessionId, request) => await unwrapRemote(
         remote.createAsset(sessionId, request),

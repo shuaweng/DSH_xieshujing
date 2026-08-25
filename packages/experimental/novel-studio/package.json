@@ -38,6 +38,7 @@
     }
   },
   "dependencies": {
+    "@deepseek-ai/dsh-experimental-novel-analysis": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-asset-outline": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-repository": "workspace:^",
     "@deepseek-ai/dsh-experimental-novel-context": "workspace:^",

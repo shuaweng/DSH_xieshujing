@@ -13,6 +13,7 @@ This experimental Consumer gives a Novel Agent typed discovery/creation, exact-r
 - `novel_create` accepts one registered type, title, optional semantic parent, and type-owned JSON content. The Repository generates the stable id and safe path, validates hierarchy rules, publishes the new authored file, and returns its exact first Revision. Creation results carry replayable `novel-asset-created` presentation metadata.
 - `novel_get` accepts canonical references, reads only retained Revisions, and returns the Asset type plus its registered proposal instructions and exact model projection.
 - `novel_propose_changes` accepts one exact Asset, base Revision, type-defined operation envelope, and summary. The registered Host definition validates and enriches those operations before the Repository durably creates a single-asset `ChangeSet`; it never applies the proposal.
+- After a chapter proposal is durable, the Novel analysis service materializes its candidate in memory and runs the deterministic NOAI rules. Material findings are returned as bounded deferred model context, so the Agent must acknowledge likely template-language hotspots before replying; the feedback is logged with the turn and never creates or applies a second proposal.
 - `novel_present` accepts only `open-workbench` or `close-workbench`. It changes browser presentation through replayable `novel-presentation` metadata and never reads, creates, or mutates an Asset.
 - Proposal results carry JSON-serializable `novel-change-set` presentation metadata so the browser can restore a review card from Session replay.
 - The package adds a short system-prompt section explaining Revision authority and proposal-only semantics. It registers no shell, SQL, generic read, or generic write tools.
@@ -24,11 +25,11 @@ This experimental Consumer gives a Novel Agent typed discovery/creation, exact-r
 
 #### What the model sees
 
-The model sees the `novel_list`, `novel_search`, `novel_create`, `novel_get`, `novel_propose_changes`, and `novel_present` schemas plus a concise Novel-workbench tool section. Tool results distinguish discovery, durable creation, exact reads, proposal-only changes, and presentation-only frame actions; a proposal never claims that an existing file changed.
+The model sees the `novel_list`, `novel_search`, `novel_create`, `novel_get`, `novel_propose_changes`, and `novel_present` schemas plus a concise Novel-workbench tool section. Tool results distinguish discovery, durable creation, exact reads, proposal-only changes, and presentation-only frame actions; a proposal never claims that an existing file changed. A materially risky chapter candidate adds a short logged NOAI notice after the tool result.
 
 #### Token effect
 
-The fixed tool section and six schemas add a stable prompt cost. `novel_list` returns compact catalog metadata and creation instructions, `novel_search` returns bounded excerpts, `novel_get` result size follows the referenced text budget plus one numeric length, and creation/proposal/presentation results contain compact ids or status fields.
+The fixed tool section and six schemas add a stable prompt cost. `novel_list` returns compact catalog metadata and creation instructions, `novel_search` returns bounded excerpts, `novel_get` result size follows the referenced text budget plus one numeric length, and creation/proposal/presentation results contain compact ids or status fields. Only a material chapter warning adds up to five deterministic findings.
 
 #### KV Cache effect
 

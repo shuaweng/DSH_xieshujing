@@ -8,6 +8,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
+import type {} from '@deepseek-ai/dsh-experimental-novel-analysis'
 import {
   ChangeSetId,
   NovelRepositoryError,
@@ -33,6 +34,8 @@ import type {
   NovelAssetDescriptor,
   NovelChangeSetDescriptor,
   NovelAssetDocument,
+  NovelAssetRevisionDescriptor,
+  NovelAnalysisReportDescriptor,
   NovelProjectDescriptor,
   NovelAssetSearchResult,
   NovelContextWorksetDescriptor,
@@ -48,6 +51,8 @@ export type {
   NovelAssetDescriptor,
   NovelChangeSetDescriptor,
   NovelAssetDocument,
+  NovelAssetRevisionDescriptor,
+  NovelAnalysisReportDescriptor,
   NovelProjectDescriptor,
   NovelAssetSearchResult,
   NovelContextWorksetDescriptor,
@@ -77,7 +82,7 @@ declare module '@deepseek-ai/cordis' {
 
 /** Project browser projection consuming the provider-neutral repository service. */
 export class NovelRepositoryRemote extends TypertRemoteService {
-  static inject = ['novelRepository', 'fs', 'sandboxPolicy']
+  static inject = ['novelRepository', 'novelAnalysis', 'fs', 'sandboxPolicy']
   static Config: z<Config> = z.object({
     descriptorMaxBytes: z.number().default(DEFAULT_DESCRIPTOR_MAX_BYTES),
     responseMaxBytes: z.number().default(DEFAULT_RESPONSE_MAX_BYTES),
@@ -261,6 +266,91 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     const result = assetDocument(snapshot)
     assertResponseBytes(result, this.responseMaxBytes, 'Asset document')
     return result
+  }
+
+  /**
+   * List metadata for every retained Revision of one Asset, newest first.
+   * @param agent - addressed Agent whose Session selects the project root.
+   * @param assetId - stable Asset identity.
+   * @param signal - caller cancellation.
+   * @returns browser-safe Revision summaries without prose bytes.
+   */
+  @Remote('revisions')
+  async revisions(
+    agent: Agent,
+    assetId: AssetId,
+    signal: AbortSignal,
+  ): Promise<NovelAssetRevisionDescriptor[]> {
+    const project = await this.requireProject(agent, signal)
+    await this.ctx.novelRepository.listAssets(
+      project, signal, this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
+    const revisions = (await this.ctx.novelRepository.listAssetRevisions(project, assetId, signal))
+      .map(value => ({ ...value }))
+    assertResponseBytes(revisions, this.responseMaxBytes, 'Asset Revisions')
+    return revisions
+  }
+
+  /**
+   * List generated reports for one exact retained Revision.
+   * @param agent - addressed Agent whose Session selects the project root.
+   * @param assetId - stable Asset identity.
+   * @param revisionId - exact retained Revision identity.
+   * @param signal - caller cancellation.
+   * @returns browser-safe Revision-bound reports.
+   */
+  @Remote('analysisReports')
+  async analysisReports(
+    agent: Agent,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    signal: AbortSignal,
+  ): Promise<NovelAnalysisReportDescriptor[]> {
+    const project = await this.requireProject(agent, signal)
+    const reports = (await this.ctx.novelRepository.listAnalysisReports(project, assetId, revisionId, signal))
+      .map(analysisReportDescriptor)
+    assertResponseBytes(reports, this.responseMaxBytes, 'analysis reports')
+    return reports
+  }
+
+  /**
+   * Run the deterministic NOAI scanner over one exact chapter Revision.
+   * @param agent - addressed Agent and report provenance.
+   * @param assetId - exact chapter identity.
+   * @param revisionId - retained Revision to scan.
+   * @param signal - caller cancellation before persistence.
+   * @returns the upserted browser-safe report.
+   */
+  @Remote('scanNoAi')
+  async scanNoAi(
+    agent: Agent,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    signal: AbortSignal,
+  ): Promise<NovelAnalysisReportDescriptor> {
+    const report = analysisReportDescriptor(await this.ctx.novelAnalysis.scanChapter(agent, assetId, revisionId, signal))
+    assertResponseBytes(report, this.responseMaxBytes, 'NOAI report')
+    return report
+  }
+
+  /**
+   * Run the fixed read-only Subagent reviewer over one exact chapter Revision.
+   * @param agent - addressed root Agent and report provenance.
+   * @param assetId - exact chapter identity.
+   * @param revisionId - retained Revision to review.
+   * @param signal - canonical worker cancellation.
+   * @returns the upserted browser-safe report.
+   */
+  @Remote('reviewChapter')
+  async reviewChapter(
+    agent: Agent,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    signal: AbortSignal,
+  ): Promise<NovelAnalysisReportDescriptor> {
+    const report = analysisReportDescriptor(await this.ctx.novelAnalysis.reviewChapter(agent, assetId, revisionId, signal))
+    assertResponseBytes(report, this.responseMaxBytes, 'chapter review')
+    return report
   }
 
   /**
@@ -463,6 +553,22 @@ function changeSetDescriptor(value: ChangeSet): NovelChangeSetDescriptor {
     status: value.status,
     ...(value.resultRevisionId === undefined ? {} : { resultRevisionId: value.resultRevisionId }),
     operations: value.operations.map(operation => wireValue(operation, 'ChangeSet operation')),
+  }
+}
+
+function analysisReportDescriptor(
+  value: Awaited<ReturnType<Context['novelRepository']['putAnalysisReport']>>,
+): NovelAnalysisReportDescriptor {
+  return {
+    projectId: value.projectId,
+    assetId: value.assetId,
+    revisionId: value.revisionId,
+    kind: value.kind,
+    analyzerVersion: value.analyzerVersion,
+    generatedAt: value.generatedAt,
+    data: wireValue(value.data, 'analysis report data'),
+    ...(value.sourceSessionId === undefined ? {} : { sourceSessionId: value.sourceSessionId }),
+    ...(value.workerSessionId === undefined ? {} : { workerSessionId: value.workerSessionId }),
   }
 }
 

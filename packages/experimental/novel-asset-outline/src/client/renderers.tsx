@@ -73,7 +73,7 @@ function freeformRenderer(
 }
 
 function FreeformEditor({
-  body, title, ariaLabel, onContentChange, onTitleChange, onSelectionChange, contentOf, placeholder, t,
+  body, title, ariaLabel, readOnly, onContentChange, onTitleChange, onSelectionChange, contentOf, placeholder, t,
 }: NovelAssetEditorProps & {
   readonly body: string
   readonly contentOf: (body: string) => NovelWireValue
@@ -94,13 +94,14 @@ function FreeformEditor({
   return <section className={css.shell} aria-label={ariaLabel}>
     <label className={css.titleField}>
       <span>{t('outlineTitle')}</span>
-      <input value={title} onChange={(event) => { onTitleChange(event.target.value) }} />
+      <input value={title} readOnly={readOnly} onChange={(event) => { onTitleChange(event.target.value) }} />
     </label>
     <textarea
       ref={editor}
       className={css.editor}
       aria-label={t('freeformBody')}
       value={body}
+      readOnly={readOnly}
       placeholder={placeholder}
       spellCheck
       onChange={(event) => { onContentChange(contentOf(event.target.value)) }}

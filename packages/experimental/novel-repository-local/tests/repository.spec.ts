@@ -497,6 +497,60 @@ describe('LocalNovelRepository', () => {
     expect(Buffer.from(retained.serializedUtf8).toString('utf8')).toBe(before)
   })
 
+  it('lists immutable Revisions and upserts one generated report kind per exact Revision', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await writeFile(join(dir, 'novel.yaml'), manifest())
+    await writeFile(join(dir, 'manuscript', 'chapter.md'), chapter('chapter-one', '第一章', '初稿'))
+    const ctx = await boot(dir)
+    const novel = await project(ctx)
+    const [initial] = await ctx.novelRepository.listAssets(novel)
+    const saved = await ctx.novelRepository.saveAssetContent(novel, {
+      assetId: initial!.asset.id,
+      baseRevisionId: initial!.revisionId,
+      content: { kind: 'manuscript', body: '第二稿' },
+    })
+
+    await expect(ctx.novelRepository.listAssetRevisions(novel, initial!.asset.id))
+      .resolves.toMatchObject([
+        { id: saved.revisionId, parentRevisionId: initial!.revisionId, origin: 'user-edit' },
+        { id: initial!.revisionId, origin: 'initial-scan' },
+      ])
+    await ctx.novelRepository.putAnalysisReport(novel, {
+      assetId: initial!.asset.id,
+      revisionId: initial!.revisionId,
+      kind: 'noai-scan',
+      analyzerVersion: 'rules/1',
+      generatedAt: '2026-08-25T01:00:00.000Z',
+      data: { riskScore: 45 },
+      sourceSessionId: SessionId('session-one'),
+    })
+    await ctx.novelRepository.putAnalysisReport(novel, {
+      assetId: initial!.asset.id,
+      revisionId: initial!.revisionId,
+      kind: 'noai-scan',
+      analyzerVersion: 'rules/2',
+      generatedAt: '2026-08-25T02:00:00.000Z',
+      data: { riskScore: 20 },
+      sourceSessionId: SessionId('session-two'),
+    })
+    await expect(ctx.novelRepository.listAnalysisReports(novel, initial!.asset.id, initial!.revisionId))
+      .resolves.toEqual([expect.objectContaining({
+        kind: 'noai-scan', analyzerVersion: 'rules/2', data: { riskScore: 20 },
+        sourceSessionId: 'session-two',
+      })])
+    await expect(ctx.novelRepository.listAnalysisReports(novel, initial!.asset.id, saved.revisionId))
+      .resolves.toEqual([])
+    await expect(ctx.novelRepository.putAnalysisReport(novel, {
+      assetId: AssetId('other-asset'),
+      revisionId: initial!.revisionId,
+      kind: 'chapter-review',
+      analyzerVersion: 'review/1',
+      generatedAt: '2026-08-25T03:00:00.000Z',
+      data: {},
+    })).rejects.toMatchObject({ code: 'NOVEL_REVISION_NOT_FOUND' })
+  })
+
   it('rejects malformed assets and duplicate stable ids without rewriting authored files', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))
@@ -1021,7 +1075,7 @@ describe('LocalNovelRepository', () => {
     },
   )
 
-  it('migrates an identified version-one history database to typed ChangeSet schema three', async () => {
+  it('migrates an identified version-one history database to Revision analysis schema four', async () => {
     const dir = await tempDir()
     const path = join(dir, 'history.sqlite')
     const { DatabaseSync } = await import('node:sqlite')
@@ -1032,15 +1086,15 @@ describe('LocalNovelRepository', () => {
     const history = await openHistory(path, 100, decodeHistoryOperations)
     history.close()
     const migrated = new DatabaseSync(path)
-    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(3)
+    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(4)
     expect((migrated.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>).map(row => row.name))
       .toContain('asset_type')
     const tables = migrated.prepare(`
       SELECT name FROM sqlite_master
-      WHERE type = 'table' AND name IN ('change_sets', 'apply_journal')
+      WHERE type = 'table' AND name IN ('change_sets', 'apply_journal', 'analysis_reports')
       ORDER BY name
     `).all() as Array<{ name: string }>
-    expect(tables.map(row => row.name)).toEqual(['apply_journal', 'change_sets'])
+    expect(tables.map(row => row.name)).toEqual(['analysis_reports', 'apply_journal', 'change_sets'])
     migrated.close()
   })
 

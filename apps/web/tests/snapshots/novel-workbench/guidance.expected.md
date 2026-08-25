@@ -26,6 +26,9 @@
   - navigation "Current novel location":
     - strong: 白港
     - text: White Harbor Style
+    - combobox "Manuscript versions":
+      - option "Current · 8/26/2026, {{clock}} · Author save" [selected]
+      - option "8/26/2026, {{clock}} · Initial import"
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent"
@@ -35,3 +38,5 @@
     - textbox "Freeform planning content":
       - /placeholder: Freely record narrative voice, sentence rhythm, dialogue, information release, serial pacing, hooks, positive references, and explicit avoidances…
       - text: "## Voice Restrained, concrete, and character-specific."
+  - button "Change reader skin"
+  - button "Typeface and size": A

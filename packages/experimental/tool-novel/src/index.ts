@@ -1,6 +1,7 @@
 /** Safe Novel tools: discovery, typed creation, exact reads, and proposal-only mutations. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import {
@@ -11,6 +12,7 @@ import {
   type NovelAssetType,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type {} from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
+import type {} from '@deepseek-ai/dsh-experimental-novel-analysis'
 import {
   decodeNovelReferenceUri,
   encodeNovelReferenceUri,
@@ -18,7 +20,7 @@ import {
 } from '@deepseek-ai/dsh-experimental-novel-context'
 
 export const name = 'tool-novel'
-export const inject = ['tools', 'systemPrompt', 'novelContextResolver', 'novelRepository', 'novelAssetTypes', 'fs', 'sandboxPolicy']
+export const inject = ['tools', 'systemPrompt', 'novelContextResolver', 'novelRepository', 'novelAssetTypes', 'novelAnalysis', 'fs', 'sandboxPolicy']
 
 const PROMPT = `## Novel workbench tools
 
@@ -362,6 +364,18 @@ export function apply(ctx: Context): void {
         actor: { kind: 'agent', sessionId: exec.agent.id },
         summary: args.summary,
       }, exec.signal)
+      const warning = ctx.novelAnalysis.candidateWarning(resolvedReference.snapshot, operations)
+      if (warning !== undefined) {
+        exec.deferContext(createUserMessage({
+          content: [{ type: 'text', text: warning.text }],
+          source: {
+            kind: 'plugin',
+            plugin: 'novel-analysis',
+            form: 'notice',
+            summary: `NOAI candidate risk ${warning.report.riskScore}/100`,
+          },
+        }))
+      }
       return {
         changeSetId: changeSet.id,
         projectId: changeSet.projectId,

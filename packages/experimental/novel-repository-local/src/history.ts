@@ -11,15 +11,18 @@ import {
   ProjectId,
   RevisionId,
   type AssetRevision,
+  type AssetRevisionSummary,
   type ChangeSet,
   type ContentHash,
   type NovelAssetType,
+  type NovelAnalysisReport,
+  type NovelAnalysisReportKind,
   type NovelOperation,
   type RevisionOrigin,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 
 /** Physical schema containing revisions, proposals, and recoverable apply intent. */
-export const NOVEL_HISTORY_SCHEMA_VERSION = 3
+export const NOVEL_HISTORY_SCHEMA_VERSION = 4
 /** SQLite application id reserved for DSH Novel history. */
 export const NOVEL_HISTORY_APPLICATION_ID = 0x44534E48
 
@@ -62,6 +65,18 @@ interface ApplyJournalRow {
   after_utf8: Uint8Array
   result_revision_id: string
   created_at: string
+}
+
+interface AnalysisReportRow {
+  project_id: string
+  asset_id: string
+  revision_id: string
+  kind: string
+  analyzer_version: string
+  generated_at: string
+  data_json: string
+  source_session_id: string | null
+  worker_session_id: string | null
 }
 
 /** Exact durable intent needed to finish or reject an interrupted publication. */
@@ -135,7 +150,8 @@ function configure(db: DatabaseSync, path: string): void {
       'NOVEL_HISTORY_CORRUPT',
     )
   }
-  if (version !== 0 && version !== 1 && version !== 2 && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== 2 && version !== 3
+    && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
     throw new NovelRepositoryError(
       `novel repository: history database "${path}" uses unsupported schema ${version}`,
       'NOVEL_HISTORY_SCHEMA_UNSUPPORTED',
@@ -195,6 +211,20 @@ function configure(db: DatabaseSync, path: string): void {
         result_revision_id    TEXT NOT NULL,
         created_at            TEXT NOT NULL
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS analysis_reports (
+        project_id       TEXT NOT NULL,
+        asset_id         TEXT NOT NULL,
+        revision_id      TEXT NOT NULL REFERENCES revisions(id),
+        kind             TEXT NOT NULL CHECK(kind IN ('chapter-review', 'noai-scan')),
+        analyzer_version TEXT NOT NULL,
+        generated_at     TEXT NOT NULL,
+        data_json        TEXT NOT NULL,
+        source_session_id TEXT,
+        worker_session_id TEXT,
+        PRIMARY KEY(project_id, asset_id, revision_id, kind)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS analysis_reports_revision
+        ON analysis_reports(project_id, asset_id, revision_id, kind);
     `)
     const changeSetColumns = db.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>
     if (version > 0 && version < 3 && !changeSetColumns.some(column => column.name === 'asset_type')) {
@@ -259,6 +289,88 @@ export class NovelHistory {
       },
       projectRelativePath: row.project_relative_path,
     }
+  }
+
+  /**
+   * List immutable Revision metadata for one Asset, newest first.
+   * @param projectId - stable Novel Project identity.
+   * @param assetId - stable authored Asset identity.
+   * @returns metadata-only retained Revision rows.
+   */
+  revisions(projectId: ProjectId, assetId: AssetId): readonly AssetRevisionSummary[] {
+    const rows = this.db.prepare(`
+      SELECT revisions.id, revisions.project_id, revisions.asset_id,
+             revisions.parent_revision_id, revisions.project_relative_path,
+             revisions.serialized_utf8, revisions.content_hash, revisions.origin,
+             revisions.created_at
+      FROM revisions
+      LEFT JOIN asset_heads
+        ON asset_heads.project_id = revisions.project_id
+       AND asset_heads.asset_id = revisions.asset_id
+      WHERE revisions.project_id = ? AND revisions.asset_id = ?
+      ORDER BY CASE WHEN revisions.id = asset_heads.revision_id THEN 0 ELSE 1 END,
+               revisions.created_at DESC, revisions.id DESC
+    `).all(projectId, assetId) as unknown as RevisionRow[]
+    return rows.map(row => ({
+      id: RevisionId(row.id),
+      projectId: ProjectId(row.project_id),
+      assetId: AssetId(row.asset_id),
+      ...(row.parent_revision_id === null ? {} : { parentRevisionId: RevisionId(row.parent_revision_id) }),
+      contentHash: row.content_hash as ContentHash,
+      origin: revisionOrigin(row.origin),
+      createdAt: row.created_at,
+    }))
+  }
+
+  /**
+   * List generated reports for one retained Revision in stable kind order.
+   * @param projectId - stable Novel Project identity.
+   * @param assetId - stable authored Asset identity.
+   * @param revisionId - exact retained Revision identity.
+   * @returns validated generated reports.
+   */
+  analysisReports(
+    projectId: ProjectId,
+    assetId: AssetId,
+    revisionId: RevisionId,
+  ): readonly NovelAnalysisReport[] {
+    const rows = this.db.prepare(`
+      SELECT project_id, asset_id, revision_id, kind, analyzer_version,
+             generated_at, data_json, source_session_id, worker_session_id
+      FROM analysis_reports
+      WHERE project_id = ? AND asset_id = ? AND revision_id = ?
+      ORDER BY kind
+    `).all(projectId, assetId, revisionId) as unknown as AnalysisReportRow[]
+    return rows.map(analysisReportFromRow)
+  }
+
+  /**
+   * Atomically replace the successful generated report for one Revision and kind.
+   * @param report - validated exact-Revision report to retain.
+   */
+  putAnalysisReport(report: NovelAnalysisReport): void {
+    this.db.prepare(`
+      INSERT INTO analysis_reports (
+        project_id, asset_id, revision_id, kind, analyzer_version,
+        generated_at, data_json, source_session_id, worker_session_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id, asset_id, revision_id, kind) DO UPDATE SET
+        analyzer_version = excluded.analyzer_version,
+        generated_at = excluded.generated_at,
+        data_json = excluded.data_json,
+        source_session_id = excluded.source_session_id,
+        worker_session_id = excluded.worker_session_id
+    `).run(
+      report.projectId,
+      report.assetId,
+      report.revisionId,
+      report.kind,
+      report.analyzerVersion,
+      report.generatedAt,
+      JSON.stringify(report.data),
+      report.sourceSessionId ?? null,
+      report.workerSessionId ?? null,
+    )
   }
 
   /**
@@ -528,4 +640,56 @@ function changeSetFromRow(
     status: row.status as ChangeSet['status'],
     ...(row.result_revision_id === null ? {} : { resultRevisionId: RevisionId(row.result_revision_id) }),
   }
+}
+
+function revisionOrigin(value: string): RevisionOrigin {
+  if (!['initial-scan', 'user-edit', 'agent-apply', 'external-edit'].includes(value)) {
+    throw corrupt(`Revision origin ${JSON.stringify(value)} is invalid`)
+  }
+  return value as RevisionOrigin
+}
+
+function analysisReportKind(value: string): NovelAnalysisReportKind {
+  if (value !== 'chapter-review' && value !== 'noai-scan') {
+    throw corrupt(`analysis report kind ${JSON.stringify(value)} is invalid`)
+  }
+  return value
+}
+
+function analysisReportFromRow(row: AnalysisReportRow): NovelAnalysisReport {
+  const data = parseJson(row.data_json, 'analysis report data')
+  if (!isJsonValue(data)) throw corrupt('analysis report data is not lossless JSON')
+  if (row.analyzer_version.length === 0 || row.analyzer_version.length > 100
+    || row.analyzer_version !== row.analyzer_version.trim()) {
+    throw corrupt('analysis report analyzer version is invalid')
+  }
+  if (!Number.isFinite(Date.parse(row.generated_at))) throw corrupt('analysis report generated time is invalid')
+  for (const [name, value] of [
+    ['source Session id', row.source_session_id],
+    ['worker Session id', row.worker_session_id],
+  ] as const) {
+    if (value !== null && (value.length === 0 || value.length > 200 || value !== value.trim())) {
+      throw corrupt(`analysis report ${name} is invalid`)
+    }
+  }
+  return {
+    projectId: ProjectId(row.project_id),
+    assetId: AssetId(row.asset_id),
+    revisionId: RevisionId(row.revision_id),
+    kind: analysisReportKind(row.kind),
+    analyzerVersion: row.analyzer_version,
+    generatedAt: row.generated_at,
+    data: data as NovelAnalysisReport['data'],
+    ...(row.source_session_id === null ? {} : { sourceSessionId: row.source_session_id as SessionId }),
+    ...(row.worker_session_id === null ? {} : { workerSessionId: row.worker_session_id as SessionId }),
+  }
+}
+
+function isJsonValue(value: unknown, depth = 0): boolean {
+  if (depth > 64) return false
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value) && !Object.is(value, -0)
+  if (Array.isArray(value)) return value.every(item => isJsonValue(item, depth + 1))
+  if (!isRecord(value) || Object.getPrototypeOf(value) !== Object.prototype) return false
+  return Object.values(value).every(item => isJsonValue(item, depth + 1))
 }

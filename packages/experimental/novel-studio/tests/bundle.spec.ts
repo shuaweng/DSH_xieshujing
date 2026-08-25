@@ -20,6 +20,7 @@ const installAnchor = resolve(packageRoot, 'package.json')
 const temporaryHomes: string[] = []
 const workbenchSkillNames = [
   'chapter-execution',
+  'chapter-review',
   'dialogue-diagnostics',
   'outline-beat-design',
   'rewrite-to-style',
@@ -94,7 +95,7 @@ describe('experimental Novel Studio bundle', () => {
       expect(body).not.toMatch(/PROJECT\.md|STYLE\.md|\.lingtai|references\//)
       expect(body).not.toMatch(/`(?:read|write|edit|grep|glob|bash)`/)
     }
-    for (const name of ['style-audit', 'dialogue-diagnostics']) {
+    for (const name of ['style-audit', 'dialogue-diagnostics', 'chapter-review']) {
       const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
       expect(body).toContain('不创建 ChangeSet')
     }
@@ -156,12 +157,14 @@ describe('experimental Novel Studio bundle', () => {
       { id: 'novel-asset-outline', name: '@deepseek-ai/dsh-experimental-novel-asset-outline' },
       { id: 'novel-repository-local', name: '@deepseek-ai/dsh-experimental-novel-repository-local' },
       { id: 'novel-context', name: '@deepseek-ai/dsh-experimental-novel-context' },
+      { id: 'novel-analysis', name: '@deepseek-ai/dsh-experimental-novel-analysis' },
       { id: 'novel-repository-remote', name: '@deepseek-ai/dsh-experimental-novel-repository-remote' },
       { id: 'novel-repository-client', name: '@deepseek-ai/dsh-experimental-novel-repository-client' },
       { id: 'novel-workbench', name: '@deepseek-ai/dsh-experimental-novel-workbench' },
       { id: 'novel-studio-paths', name: '@deepseek-ai/dsh-experimental-novel-studio' },
     ])
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-context')
+    expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-analysis')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-asset-outline')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-novel-repository-client')
@@ -183,11 +186,13 @@ describe('experimental Novel Studio bundle', () => {
     const novel = profileRows('novel-studio-test', novelBundles)
 
     expect(web.some(row => row.id === 'novel-repository-local')).toBe(false)
+    expect(web.some(row => row.id === 'novel-analysis')).toBe(false)
     expect(web.some(row => row.id === 'novel-asset-outline')).toBe(false)
     expect(web.some(row => row.id === 'novel-repository-remote')).toBe(false)
     expect(web.some(row => row.id === 'novel-repository-client')).toBe(false)
     expect(web.some(row => row.id === 'novel-workbench')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-local')).toBe(false)
+    expect(headless.some(row => row.id === 'novel-analysis')).toBe(false)
     expect(headless.some(row => row.id === 'novel-asset-outline')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-remote')).toBe(false)
     expect(headless.some(row => row.id === 'novel-repository-client')).toBe(false)
@@ -197,6 +202,7 @@ describe('experimental Novel Studio bundle', () => {
     expect(novel.filter(row => row.id === 'novel-repository-remote')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-repository-client')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-context')).toHaveLength(1)
+    expect(novel.filter(row => row.id === 'novel-analysis')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'novel-workbench')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'ui-layout')).toHaveLength(1)
     expect(novel.find(row => row.id === 'web-runtime')?.inject).toEqual(['webStartup', 'novelStudioPaths'])

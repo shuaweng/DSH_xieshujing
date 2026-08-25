@@ -20,6 +20,8 @@ export interface NovelAssetEditorProps {
   readonly content: NovelWireValue
   readonly title: string
   readonly ariaLabel: string
+  /** Historical Revisions render through the same typed surface without exposing mutations. */
+  readonly readOnly: boolean
   readonly onContentChange: (content: NovelWireValue) => void
   readonly onTitleChange: (title: string) => void
   readonly onSelectionChange: (selection?: NovelWireValue) => void
@@ -99,11 +101,12 @@ export const manuscriptChapterRenderer: NovelAssetRendererDefinition = {
       return Array.from(manuscriptContent(content).body.replace(/\s/gu, '')).length
     },
   },
-  renderEditor({ content, ariaLabel, onContentChange, onSelectionChange }) {
+  renderEditor({ content, ariaLabel, readOnly, onContentChange, onSelectionChange }) {
     const chapter = manuscriptContent(content)
     return <ManuscriptEditor
       body={chapter.body}
       ariaLabel={ariaLabel}
+      readOnly={readOnly}
       onContentChange={onContentChange}
       onSelectionChange={onSelectionChange}
     />
@@ -131,12 +134,13 @@ export const manuscriptChapterRenderer: NovelAssetRendererDefinition = {
 interface ManuscriptEditorProps {
   readonly body: string
   readonly ariaLabel: string
+  readonly readOnly: boolean
   readonly onContentChange: NovelAssetEditorProps['onContentChange']
   readonly onSelectionChange: NovelAssetEditorProps['onSelectionChange']
 }
 
 /** Grow with the manuscript so the workbench viewport owns scrolling instead of the paper textarea. */
-function ManuscriptEditor({ body, ariaLabel, onContentChange, onSelectionChange }: ManuscriptEditorProps) {
+function ManuscriptEditor({ body, ariaLabel, readOnly, onContentChange, onSelectionChange }: ManuscriptEditorProps) {
   const editor = useRef<HTMLTextAreaElement>(null)
   useLayoutEffect(() => {
     if (editor.current === null) return
@@ -149,6 +153,7 @@ function ManuscriptEditor({ body, ariaLabel, onContentChange, onSelectionChange 
       className={css.editor}
       aria-label={ariaLabel}
       value={body}
+      readOnly={readOnly}
       spellCheck
       onChange={(event) => {
         onContentChange({ kind: 'manuscript', body: event.target.value })

@@ -37,17 +37,24 @@ const PROPOSED_EXPECTED = join(SNAPSHOT_DIR, 'proposed.expected.md')
 const APPLIED_EXPECTED = join(SNAPSHOT_DIR, 'applied-and-context.expected.md')
 const GUIDANCE_EXPECTED = join(SNAPSHOT_DIR, 'guidance.expected.md')
 const OUTLINE_EXPECTED = join(SNAPSHOT_DIR, 'outline.expected.md')
+const REVIEW_EXPECTED = join(SNAPSHOT_DIR, 'review.expected.md')
+const NOAI_EXPECTED = join(SNAPSHOT_DIR, 'noai.expected.md')
+const HISTORICAL_EXPECTED = join(SNAPSHOT_DIR, 'historical.expected.md')
 const NOVEL_OVERLAY = fileURLToPath(new URL('../../../packages/experimental/novel-studio/cordis.patch.yml', import.meta.url))
 const NOVEL_PRESETS = fileURLToPath(new URL('../../../packages/experimental/novel-studio/presets', import.meta.url))
 const NOVEL_INSTALL_ANCHOR = fileURLToPath(new URL('../../../packages/experimental/novel-studio/package.json', import.meta.url))
 const MODE = webSnapshotMode()
 const SESSION_ID = SessionId('novel-workbench-web-e2e')
 const CALL_ID = CallId('novel-proposal-call')
+let baseRevisionId = ''
 
 /** Capture the semantic workbench while masking the opaque revision-bearing URI payload. */
 async function captureNovelWorkbench(page: Page, workspaceCwd: string): Promise<string> {
   const snapshot = await captureStableAria(page, '[data-novel-workbench]', workspaceCwd)
-  return snapshot.replace(/dsh-novel:[A-Za-z0-9_-]+/gu, 'dsh-novel:{{reference}}')
+  return snapshot
+    .replace(/dsh-novel:[A-Za-z0-9_-]+/gu, 'dsh-novel:{{reference}}')
+    .replace(/\b\d{1,2}\/\d{1,2}\/\d{4}, \d{1,2}:\d{2}:\d{2}\s(?:AM|PM)\b/gu, '{{timestamp}}')
+    .replace(/Bound Revision · [^\n]+/gu, 'Bound Revision · {{revision}}')
 }
 
 /** Resolve the visible theme surfaces to browser-computed colors in stable DOM order. */
@@ -198,6 +205,34 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     )
     if (project === undefined) throw new Error('Novel Project fixture was not discovered')
     const chapter = await scaffold.ctx.novelRepository.readAsset(project, 'chapter-white-harbor-1' as never)
+    baseRevisionId = chapter.revisionId
+    await scaffold.ctx.novelRepository.putAnalysisReport(project, {
+      assetId: chapter.asset.id,
+      revisionId: chapter.revisionId,
+      kind: 'chapter-review',
+      analyzerVersion: 'chapter-review/1',
+      generatedAt: '2026-08-25T00:00:00.000Z',
+      sourceSessionId: SESSION_ID,
+      workerSessionId: SessionId('novel-workbench-reviewer'),
+      data: {
+        version: 1,
+        sampleLevel: 'usable',
+        overallScore: 78,
+        verdict: '开场克制，但人物行动目标和章末追读钩子还不够明确。',
+        dimensions: [
+          { id: 'plot', score: 76, summary: '情境成立，目标信息偏少。' },
+          { id: 'hook', score: 68, summary: '章末缺少下一步行动。' },
+        ],
+        findings: [{
+          severity: 'medium',
+          category: '追读钩子',
+          quote: '雨还在下。',
+          diagnosis: '氛围收束，但没有形成可期待的下一步。',
+          suggestion: '补入人物即将采取的具体行动。',
+        }],
+        priorities: ['明确人物本章目标', '补强章末行动钩子'],
+      },
+    })
     const frozen = await scaffold.ctx.novelRepository.captureSelection(project, {
       assetId: chapter.asset.id,
       revisionId: chapter.revisionId,
@@ -247,10 +282,32 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       MODE,
     )
 
+    await page.getByRole('button', { name: 'Chapter review' }).click()
+    const reviewDrawer = page.getByRole('dialog', { name: 'Chapter review' })
+    await reviewDrawer.getByText('78', { exact: true }).waitFor()
+    await compareOrRefreshGolden(REVIEW_EXPECTED, await captureNovelWorkbench(page, scaffold.workspaceCwd), MODE)
+    await reviewDrawer.getByRole('button', { name: /Collapse/u }).click()
+
+    await page.getByRole('button', { name: 'NOAI scan' }).click()
+    const noAiDrawer = page.getByRole('dialog', { name: 'NOAI scan' })
+    await noAiDrawer.waitFor()
+    await expect.poll(() => noAiDrawer.innerText()).toContain('AI-style risk')
+    await compareOrRefreshGolden(NOAI_EXPECTED, await captureNovelWorkbench(page, scaffold.workspaceCwd), MODE)
+    await noAiDrawer.getByRole('button', { name: /Collapse/u }).click()
+
     await page.getByRole('button', { name: 'Accept change' }).click()
     await page.getByText('Applied', { exact: true }).waitFor({ timeout: 15_000 })
     const editor = page.getByRole('textbox', { name: '第一章 · Chapter manuscript' })
     await expect.poll(() => editor.inputValue()).toBe('她沉默片刻没有再解释。雨还在下。')
+
+    const versions = page.getByRole('combobox', { name: 'Manuscript versions' })
+    await expect.poll(() => versions.locator('option').count()).toBe(2)
+    await versions.selectOption(baseRevisionId)
+    await page.getByText('Historical Revision · read-only', { exact: true }).waitFor()
+    await expect.poll(() => page.getByRole('textbox', { name: '第一章 · Chapter manuscript' }).isEditable()).toBe(false)
+    await compareOrRefreshGolden(HISTORICAL_EXPECTED, await captureNovelWorkbench(page, scaffold.workspaceCwd), MODE)
+    await versions.selectOption({ index: 0 })
+    await expect.poll(() => page.getByRole('textbox', { name: '第一章 · Chapter manuscript' }).isEditable()).toBe(true)
 
     const authored = '她只看着窗外。雨还在下。'
     await page.getByRole('textbox', { name: 'Chapter title' }).fill('雨夜归人')
@@ -351,8 +408,11 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'applied-and-context.expected.md',
       'guidance.expected.md',
+      'historical.expected.md',
+      'noai.expected.md',
       'outline.expected.md',
       'proposed.expected.md',
+      'review.expected.md',
     ])
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])

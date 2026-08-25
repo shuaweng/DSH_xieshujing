@@ -26,6 +26,10 @@
   - navigation "Current novel location":
     - strong: 白港
     - text: 雨夜归人
+    - combobox "Manuscript versions":
+      - option "Current · 8/26/2026, {{clock}} · Author save" [selected]
+      - option "8/26/2026, {{clock}} · Accepted Agent change"
+      - option "8/26/2026, {{clock}} · Initial import"
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent"
@@ -44,5 +48,7 @@
     - status: 19px
     - button "Increase font size": ＋
   - button "Chapter plan"
+  - button "Chapter review"
+  - button "NOAI scan": NOAI
   - button "Change reader skin"
   - button "Typeface and size" [expanded]: A
