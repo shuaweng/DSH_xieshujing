@@ -60,7 +60,6 @@ export {
 
 export const inject = [
   'slots', 'sessions', 'remote', 'remote.novelRepository', 'theme', 'locale', 'inputTriggers', 'layout',
-  'agentPresetSelection',
 ]
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -116,21 +115,29 @@ export function apply(ctx: Context): void {
     },
   }, NovelFrame))
 
-  ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
-    name: 'conversation.input.left',
-    id: 'novel-workbench-toggle',
-    order: -20,
-    locale: NS,
-    inject: (): WorkbenchToggleInjected => ({
-      hooks: {
-        workbench: ctx.layout.workbench,
-        agentPresetSelection: ctx.agentPresetSelection,
-      },
-      toggleWorkbench: () => {
-        ctx.layout.toggleWorkbench(NOVEL_WORKBENCH_ID, NOVEL_WORKBENCH_PRESET)
-      },
-    }),
-  }, WorkbenchToggle))
+  // The staged preset face lives in the conversation/preset child scope, not
+  // at the application root. Requiring it in this plugin's top-level inject
+  // list leaves the *entire* Novel workbench pending forever: repository UI,
+  // context tray, and toggle all disappear without a useful page-level error.
+  // Only the one control that reads the staged choice follows that scoped
+  // service; the rest of the workbench remains rooted and can activate.
+  ctx.inject(['agentPresetSelection'], (scope: Context) => {
+    scope.slots.inject('conversation.input.left', () => scope.slots.register({
+      name: 'conversation.input.left',
+      id: 'novel-workbench-toggle',
+      order: -20,
+      locale: NS,
+      inject: (): WorkbenchToggleInjected => ({
+        hooks: {
+          workbench: scope.layout.workbench,
+          agentPresetSelection: scope.agentPresetSelection,
+        },
+        toggleWorkbench: () => {
+          scope.layout.toggleWorkbench(NOVEL_WORKBENCH_ID, NOVEL_WORKBENCH_PRESET)
+        },
+      }),
+    }, WorkbenchToggle))
+  })
 
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock',

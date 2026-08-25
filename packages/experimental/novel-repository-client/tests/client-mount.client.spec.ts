@@ -2,13 +2,20 @@ import { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-gateway/client'
 import type { TypertClientRemote, TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { describe, expect, it, vi } from 'vitest'
-import { apply as applyNode } from '../src/index.ts'
+import NovelRepositoryClientReady from '../src/index.ts'
 import { inject, mountNovelRepositoryRemote, name } from '../src/client/mount.ts'
 
 describe('Novel Repository Client adapter', () => {
-  it('keeps the Node loader entry as an intentional no-op', () => {
-    applyNode()
-    expect(true).toBe(true)
+  it('publishes its Host readiness marker only after the Novel Remote exists', async () => {
+    const ctx = new Context()
+    const fiber = ctx.plugin(NovelRepositoryClientReady)
+    expect(ctx.get('novelRepositoryClientReady')).toBeUndefined()
+    const disposeRemote = ctx.provide('novelRepositoryRemote', {} as never)
+    await fiber.await()
+    expect(ctx.novelRepositoryClientReady).toBeInstanceOf(NovelRepositoryClientReady)
+    await fiber.dispose()
+    expect(ctx.get('novelRepositoryClientReady')).toBeUndefined()
+    disposeRemote()
   })
 
   it('mounts a supplied contribution and withdraws it with the plugin fiber', async () => {

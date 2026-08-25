@@ -121,6 +121,7 @@ describe('experimental Novel Studio bundle', () => {
 
   it('provides the package-owned preset root as a scoped runtime service', async () => {
     const ctx = new Context()
+    ctx.provide('novelWorkbenchReady', {} as never)
     const fiber = ctx.plugin(NovelStudioPaths)
     await fiber.await()
     expect(ctx.novelStudioPaths.presetRoot).toBe(resolve(packageRoot, 'presets'))
@@ -147,6 +148,9 @@ describe('experimental Novel Studio bundle', () => {
     expect(parsed.find(row => row.id === 'ui-layout')).toBeUndefined()
     expect(parsed.find(row => row.id === 'web-runtime')).toMatchObject({
       inject: ['webStartup', 'novelStudioPaths'],
+    })
+    expect(parsed.find(row => row.id === 'modules')).toMatchObject({
+      inject: ['novelStudioPaths'],
     })
     expect(parsed.find(row => row.id === 'agent-presets')).toMatchObject({
       inject: ['novelStudioPaths'],
@@ -206,6 +210,7 @@ describe('experimental Novel Studio bundle', () => {
     expect(novel.filter(row => row.id === 'novel-workbench')).toHaveLength(1)
     expect(novel.filter(row => row.id === 'ui-layout')).toHaveLength(1)
     expect(novel.find(row => row.id === 'web-runtime')?.inject).toEqual(['webStartup', 'novelStudioPaths'])
+    expect(novel.find(row => row.id === 'modules')?.inject).toEqual(['novelStudioPaths'])
     expect(novel.find(row => row.id === 'ui-layout')?.config).toEqual(web.find(row => row.id === 'ui-layout')?.config)
     const presets = novel.find(row => row.id === 'agent-presets')
     expect(presets?.inject).toContain('novelStudioPaths')

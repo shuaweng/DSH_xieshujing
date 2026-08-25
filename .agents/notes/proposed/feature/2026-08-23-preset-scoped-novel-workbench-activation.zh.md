@@ -28,6 +28,8 @@ Agent／工作台分隔条按动画帧频率预览一个经过边界限制的 CS
 
 通用 `web` Profile 保持不变。Novel Studio 等待既有 `ui-layout` 服务与只读 Agent preset 选择 face，再通过通用 `shell.workbench` chain 贡献自己的 frame。小说包只导入公开服务与布局类型，既不跨插件导入 React 实现，也不注册第二个根或布局服务。这样遵循 Client Slot 所有权，并把布局组合留在原生外壳内部。
 
+源码工作区的启动入口是已初始化的 `novel-studio` Profile，而不是 `web --patch packages/experimental/novel-studio/cordis.patch.yml`。Loader patch 可以增加 Host 配置行，却不能把声明客户端模块的包加入所选 Profile 的依赖闭包，因此后一种启动方式会让浏览器模块清单漏掉小说 Bundle。`client-modules` 和 Web 启动项都等待 `novelStudioPaths`，其就绪链最终到达 Novel Workbench 客户端贡献。Workbench 客户端插件本身保持在根 scope，只有 Composer 开关注册进入拥有 `agentPresetSelection` 的子 scope。
+
 ## Alternatives considered
 
 **Novel Studio Profile 运行时始终显示工作台。** 这是当前行为，会让无关 preset 也像小说 Agent。
@@ -48,6 +50,7 @@ Agent／工作台分隔条按动画帧频率预览一个经过边界限制的 CS
 - 切换离开符合条件的 Session/preset 时关闭工作台，不把状态泄漏给下一个 Session。
 - `novel_present` 能通过持久工具结果 metadata 打开或关闭工作台，并且只通过小说 preset 组合提供。
 - 默认 `web` 与 `headless` 组合保持不变。
+- 启动已初始化的 `novel-studio` Profile 时，启动清单必须包含小说浏览器 Bundle；不支持在 `web` 上单独叠加 patch 作为启动入口。
 - 聚焦 Client、工具、组合、类型、lint、文档与无 key 浏览器检查覆盖普通／工作台两种外壳模式、资格门控、手动开关和 Agent 展示动作。
 
 ## Risks

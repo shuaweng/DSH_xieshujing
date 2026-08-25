@@ -37,7 +37,7 @@ import {
   manuscriptChapterRenderer,
   NovelAssetRendererRegistry,
 } from '../src/client/renderers.tsx'
-import { apply as applyHost } from '../src/index.ts'
+import NovelWorkbenchReady from '../src/index.ts'
 import * as invariant from '../src/invariant.ts'
 
 beforeEach(() => {
@@ -1417,8 +1417,17 @@ describe('Novel workbench stores and browser assembly', () => {
     declareTool()
   })
 
-  it('keeps the Host half empty and registers its invariant companion', async () => {
-    applyHost()
+  it('publishes its Host readiness marker after the repository client and registers its invariant companion', async () => {
+    const host = new Context()
+    const fiber = host.plugin(NovelWorkbenchReady)
+    expect(host.get('novelWorkbenchReady')).toBeUndefined()
+    const disposeClient = host.provide('novelRepositoryClientReady', {} as never)
+    await fiber.await()
+    expect(host.novelWorkbenchReady).toBeInstanceOf(NovelWorkbenchReady)
+    await fiber.dispose()
+    expect(host.get('novelWorkbenchReady')).toBeUndefined()
+    disposeClient()
+
     const register = vi.fn().mockReturnValue(() => {})
     const dispose = await invariant.apply({ invariants: { register } } as never)
     expect(invariant.name).toBe('novel-workbench-invariant')

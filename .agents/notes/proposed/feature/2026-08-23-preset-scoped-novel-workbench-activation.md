@@ -28,6 +28,8 @@ Add `novel_present` to the Novel preset. The first version accepts only `open-wo
 
 The generic `web` Profile remains unchanged. Novel Studio waits for the existing `ui-layout` service and the read-only Agent-preset selection face, then contributes its frame through the generic `shell.workbench` chain. The Novel package imports only public service and layout types; it neither imports another plugin's React implementation nor registers a second root or layout service. This follows Client slot ownership and keeps layout composition inside the shipped shell.
 
+The source-checkout launch path is the initialized `novel-studio` Profile, not `web --patch packages/experimental/novel-studio/cordis.patch.yml`. A Loader patch can add Host configuration rows but cannot add client-declaring packages to the selected Profile's dependency closure, so the browser module roster would omit the Novel bundles. The `client-modules` and Web startup entries wait for `novelStudioPaths`, whose readiness chain ends at the Novel Workbench client contribution. The Workbench client plugin itself remains root-scoped; only its Composer toggle registration enters the child scope that owns `agentPresetSelection`.
+
 ## Alternatives considered
 
 **Show the workbench whenever the Novel Studio Profile is running.** This is the current behavior and makes unrelated presets feel like Novel Agents.
@@ -48,6 +50,7 @@ The generic `web` Profile remains unchanged. Novel Studio waits for the existing
 - Switching away from the eligible Session/preset closes the workbench rather than leaking it into the next Session.
 - `novel_present` can open or close the workbench through durable tool-result metadata, and is available only through the Novel preset composition.
 - The default `web` and `headless` compositions remain unchanged.
+- Starting the initialized `novel-studio` Profile includes the Novel browser bundles in the startup manifest; a standalone patch over `web` is not a supported launch path.
 - Focused client, tool, composition, type, lint, docs, and keyless browser checks cover the ordinary and workbench shell modes, the eligibility gate, manual toggling, and Agent presentation.
 
 ## Risks

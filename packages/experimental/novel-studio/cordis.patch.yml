@@ -1,10 +1,13 @@
 # Explicit Profile layer: default Web remains untouched; Novel Studio adds a
 # selector-routed workbench surface, a safe proposal-only preset, and Novel services.
-# The web runtime freezes the browser module roster when it activates. Novel
-# rows are an overlay appended after the Web bundle, so make that freeze wait
-# for the final Novel Studio marker instead of publishing an incomplete page.
+# Novel rows are an overlay appended after the Web bundle. The client-modules
+# service snapshots Loader entries when it activates, so make both the roster
+# builder and the Web readiness signal wait for the final Novel Studio marker.
 - id: web-runtime
   inject: [webStartup, novelStudioPaths]
+
+- id: modules
+  inject: [novelStudioPaths]
 
 - id: agent-presets
   inject: [novelStudioPaths]
@@ -40,7 +43,8 @@
     - id: novel-workbench
       name: '@deepseek-ai/dsh-experimental-novel-workbench'
 
-    # Final marker: web-runtime and agent-presets wait for this provider, so
-    # every Novel client manifest above is visible before HTML boot is frozen.
+    # Final marker: modules, web-runtime, and agent-presets wait for this
+    # provider, so every Novel client row exists before the browser roster is
+    # first composed.
     - id: novel-studio-paths
       name: '@deepseek-ai/dsh-experimental-novel-studio'
