@@ -248,7 +248,7 @@ describe('preset-scoped workbench activation', () => {
     const eligible = render(<WorkbenchToggle
       {...sessionKit}
       sessionId={SID} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      session={{ blank: false } as never} input={{} as never}
+      session={{ blank: false, nodes: [{}] } as never} input={{} as never}
       useWorkbench={hookOf(layout.workbench)}
       useAgentPresetSelection={hookOf(presetSelection)}
       toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
@@ -267,7 +267,7 @@ describe('preset-scoped workbench activation', () => {
     eligible.rerender(<WorkbenchToggle
       {...sessionKit}
       sessionId={'stale-composer-seat' as SessionId} useSessions={staleSeatSessions} useWorkspaces={vi.fn() as never}
-      session={{ blank: false } as never} input={{} as never}
+      session={{ blank: false, nodes: [{}] } as never} input={{} as never}
       useWorkbench={hookOf(layout.workbench)}
       useAgentPresetSelection={hookOf(presetSelection)}
       toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
@@ -277,7 +277,54 @@ describe('preset-scoped workbench activation', () => {
     eligible.rerender(<WorkbenchToggle
       {...sessionKit}
       sessionId={'blank-composer-seat' as SessionId} useSessions={staleSeatSessions} useWorkspaces={vi.fn() as never}
-      session={{ blank: true } as never} input={{} as never}
+      session={{ blank: true, nodes: [] } as never} input={{} as never}
+      useWorkbench={hookOf(layout.workbench)}
+      useAgentPresetSelection={hookOf(presetSelection)}
+      toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
+    />)
+    expect(eligible.getByRole('button', { name: zh.closeWorkbench })).toBeTruthy()
+
+    const reusedHeroSessions = <T,>(select: (state: SessionListState) => T): T => select({
+      ids: [SID],
+      byId: { [SID]: { id: SID, displayTitle: 'Reused', running: false, blank: false, updatedAt: 1 } },
+      current: SID, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    })
+    eligible.rerender(<WorkbenchToggle
+      {...sessionKit}
+      sessionId={SID} useSessions={reusedHeroSessions} useWorkspaces={vi.fn() as never}
+      session={{ blank: false, nodes: [] } as never} input={{} as never}
+      useWorkbench={hookOf(layout.workbench)}
+      useAgentPresetSelection={hookOf(presetSelection)}
+      toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
+    />)
+    expect(eligible.getByRole('button', { name: zh.closeWorkbench })).toBeTruthy()
+
+    const noSessionYet = <T,>(select: (state: SessionListState) => T): T => select({
+      ids: [], byId: {}, current: undefined, phase: 'ready',
+      subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    })
+    eligible.rerender(<WorkbenchToggle
+      {...sessionKit}
+      sessionId={'new-session-composer' as SessionId} useSessions={noSessionYet} useWorkspaces={vi.fn() as never}
+      session={{ blank: false, nodes: [{}] } as never} input={{} as never}
+      useWorkbench={hookOf(layout.workbench)}
+      useAgentPresetSelection={hookOf(presetSelection)}
+      toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
+    />)
+    expect(eligible.getByRole('button', { name: zh.closeWorkbench })).toBeTruthy()
+
+    // Cold restoration can hydrate the authoritative list row as blank before
+    // the conversation snapshot catches up. The staged default still governs
+    // this not-yet-started Session, so the entry must remain available.
+    const restoredBlankSessions = <T,>(select: (state: SessionListState) => T): T => select({
+      ids: [SID],
+      byId: { [SID]: { id: SID, displayTitle: 'Blank', running: false, blank: true, updatedAt: 1 } },
+      current: SID, phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    })
+    eligible.rerender(<WorkbenchToggle
+      {...sessionKit}
+      sessionId={SID} useSessions={restoredBlankSessions} useWorkspaces={vi.fn() as never}
+      session={{ blank: false, nodes: [{}] } as never} input={{} as never}
       useWorkbench={hookOf(layout.workbench)}
       useAgentPresetSelection={hookOf(presetSelection)}
       toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
@@ -286,6 +333,7 @@ describe('preset-scoped workbench activation', () => {
 
     act(() => { presetSelection.set({ current: 'standard' }) })
     expect(eligible.queryByRole('button')).toBeNull()
+    expect(layout.workbench.getSnapshot().id).toBeNull()
 
     const standardSessions = <T,>(select: (state: SessionListState) => T): T => select({
       ids: [SID],
@@ -295,13 +343,14 @@ describe('preset-scoped workbench activation', () => {
     eligible.rerender(<WorkbenchToggle
       {...sessionKit}
       sessionId={SID} useSessions={standardSessions} useWorkspaces={vi.fn() as never}
-      session={{ blank: false } as never} input={{} as never}
+      session={{ blank: false, nodes: [{}] } as never} input={{} as never}
       useWorkbench={hookOf(layout.workbench)}
       useAgentPresetSelection={hookOf(presetSelection)}
       toggleWorkbench={() => { layout.toggleWorkbench('novel', 'novel-workbench') }} t={t}
     />)
     expect(eligible.queryByRole('button')).toBeNull()
 
+    eligible.unmount()
     act(() => { layout.closeWorkbench() })
     render(<NovelPresentationCard
       {...sessionKit}

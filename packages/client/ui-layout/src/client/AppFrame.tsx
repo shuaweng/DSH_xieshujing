@@ -130,7 +130,18 @@ export function AppFrame({
 
   useEffect(() => {
     if (workbench.id === null) return
-    if (currentSession?.agentPreset !== workbench.agentPreset) closeWorkbench()
+    // The no-Session hero can deliberately open a preset-gated workbench
+    // before its first prompt creates a Session. The owning toggle closes it
+    // if the staged preset moves away, so the generic shell must not race that
+    // hand-off merely because no committed row exists yet.
+    if (currentSession === undefined) return
+    // The preset-gated owner decides whether an uncommitted/legacy row may
+    // open and also closes when its staged choice moves away. The shell only
+    // vetoes a workbench once the Session names a different committed preset;
+    // treating an absent value as a mismatch races the before-first-prompt
+    // hand-off and makes a valid entry appear to do nothing.
+    if (currentSession.agentPreset === undefined) return
+    if (currentSession.agentPreset !== workbench.agentPreset) closeWorkbench()
   }, [closeWorkbench, currentSession?.agentPreset, workbench.agentPreset, workbench.id])
 
   // Track the frame's own box (not the window): rAF-throttled ResizeObserver.

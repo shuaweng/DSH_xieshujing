@@ -25,7 +25,7 @@ import type {
 // Session selection controls for the SessionProvider and useSessions stubs.
 const selectedSession = { current: 's-test' as SessionId | undefined }
 const selectedSessionBlank = { current: false }
-const selectedAgentPreset = { current: 'standard' }
+const selectedAgentPreset = { current: 'standard' as string | undefined }
 const baselinesReady = { current: true }
 const workbenchState = {
   current: { id: null, agentPreset: null, agentWidth: 410 } as WorkbenchViewState,
@@ -198,6 +198,13 @@ describe('AppFrame', () => {
     expect(closeWorkbench).toHaveBeenCalledOnce()
   })
 
+  it('keeps an opened workbench while a Session row is waiting for its preset hand-off', () => {
+    workbenchState.current = { id: 'novel', agentPreset: 'novel-workbench', agentWidth: 410 }
+    selectedAgentPreset.current = undefined
+    mountFrame()
+    expect(closeWorkbench).not.toHaveBeenCalled()
+  })
+
   it('keeps the conversation slot mounted while no session is current', () => {
     // No current session: the session-maybe conversation shell owns the New
     // Session view itself — the center column renders it unconditionally.
@@ -205,6 +212,13 @@ describe('AppFrame', () => {
     const { slotCalls, getByTestId } = mountFrame()
     expect(getByTestId('center-content')).toBeTruthy()
     expect(slotCalls.map(c => c.key)).toContain('conversation')
+  })
+
+  it('keeps a deliberately opened workbench on the no-Session hero', () => {
+    selectedSession.current = undefined
+    workbenchState.current = { id: 'novel', agentPreset: 'novel-workbench', agentWidth: 410 }
+    mountFrame()
+    expect(closeWorkbench).not.toHaveBeenCalled()
   })
 
   it('renders both column occupants before baselines settle (no loading gate)', () => {
