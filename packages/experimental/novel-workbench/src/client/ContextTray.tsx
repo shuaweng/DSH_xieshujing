@@ -114,10 +114,10 @@ export function ContextTray({
     <span className={css.title}>{t('context')}</span>
     <span className={css.follow} data-active={currentFollow !== undefined || undefined}
       title={currentFollow === undefined ? t('followCurrent') : `${currentFollow.label} · ${contextCoordinate(currentFollow)}`}>
-      <span aria-hidden="true">◎</span>{currentFollow === undefined ? t('followCurrent') : contextCoordinate(currentFollow)}
+      <span aria-hidden="true">◎</span>{currentFollow === undefined ? t('followCurrent') : humanContextLabel(currentFollow.label)}
     </span>
     {pinned.map(item => <span className={css.chip} key={`${item.assetId}:${item.revisionId}`}>
-      <span title={`${item.label} · ${contextCoordinate(item)}`}>{contextCoordinate(item)}</span>
+      <span title={`${item.label} · ${contextCoordinate(item)}`}>{humanContextLabel(item.label)}</span>
       <button type="button" aria-label={`${t('removeContext')} ${item.label}`} disabled={busy}
         onClick={() => { void commit([
           ...(currentFollow === undefined ? [] : [currentFollow]),
@@ -149,4 +149,9 @@ function errorMessage(error: unknown): string { return error instanceof Error ? 
 /** Compact human coordinate; the model manifest also carries the canonical dsh-novel URI. */
 export function contextCoordinate(item: NovelContextWorksetDescriptor['items'][number]): string {
   return `novel://${item.projectId}/${item.assetId}@${item.revisionId}`
+}
+
+/** Keep the tray readable while the exact coordinate remains available to the model and tooltip. */
+export function humanContextLabel(label: string): string {
+  return label.replace(/^(第[^\s·：:]+章)[\s·：:]+(.+)$/u, '$1：$2')
 }

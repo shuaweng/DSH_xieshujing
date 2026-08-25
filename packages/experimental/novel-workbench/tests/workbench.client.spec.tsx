@@ -25,7 +25,7 @@ import { WorkbenchToggle } from '../src/client/WorkbenchToggle.tsx'
 import { NovelPresentationCard } from '../src/client/NovelPresentationCard.tsx'
 import { Explorer } from '../src/client/Explorer.tsx'
 import { Canvas, shortReferenceLabel } from '../src/client/Canvas.tsx'
-import { ContextTray } from '../src/client/ContextTray.tsx'
+import { ContextTray, humanContextLabel } from '../src/client/ContextTray.tsx'
 import { NovelContextFocusController } from '../src/client/context-controller.ts'
 import { ChangeSetCard, type NovelChangeReview } from '../src/client/ChangeSetCard.tsx'
 import { createNovelWorkbenchStore } from '../src/client/store.ts'
@@ -522,6 +522,11 @@ describe('ContextTray', () => {
     schema: 1, id: 'project-1', title: '白港', rootDisplayPath: '/story',
     manifestDisplayPath: '/story/novel.yaml', contentRootDisplayPaths: { manuscript: '/story/manuscript' },
   } as never
+
+  it('shows compact human labels while keeping coordinates out of visible tray text', () => {
+    expect(humanContextLabel('第一章 觉醒老爷爷')).toBe('第一章：觉醒老爷爷')
+    expect(humanContextLabel('白港 · 全书大纲')).toBe('白港 · 全书大纲')
+  })
 
   it('is preset-scoped and replaces exact follow and searched pinned worksets', async () => {
     const focus = new NovelContextFocusController()
