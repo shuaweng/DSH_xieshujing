@@ -4,17 +4,18 @@
 
 ## 用途
 
-这个实验性 Asset 类型包为小说工作台贡献自由写作的策划表面。它刻意把语义身份、层级与写作方法分开：Repository 只约束“大纲 → 卷纲”和“章节 → 章纲”的关系，作者与 Agent 可以在每个正文中自行选择任意 Markdown 结构。
+这个实验性 Asset 类型包为小说工作台贡献自由写作的策划与全书指导表面。它刻意把语义身份、层级与写作方法分开：Repository 只约束“大纲 → 卷纲”“章节 → 章纲”和项目级指导资产唯一性，作者与 Agent 可以在每个正文中自行选择任意 Markdown 结构。
 
 ## 行为
 
 - `planning.outline` 是声明的 `planning` 内容根下的 UTF-8 Markdown Asset。Frontmatter 保存 schema、稳定 id、类型、标题与 `level: book | volume`；Markdown 正文完全自由。
 - 大纲没有父级。卷纲必须通过 `novel.parent` 指向大纲。继续嵌套、跨类型父级、父级缺失与循环关系都会失败关闭。
 - `planning.chapter-outline` 是自由 Markdown，其 `novel.parent` 必须指向一个 `manuscript.chapter`。每章最多只能拥有一个章纲。
+- `book.brief` 与 `book.style-profile` 是放在已声明 `planning` 内容根下、没有父级的自由 Markdown Asset。每种类型在项目中最多一份。概述保存作者确认的作品定位与全书事实边界；风格资产保存作者确认的文气与连载节奏要求。
 - 情绪目标、场面钥匙、钩子分布、15/35/35/15 节奏和起承转合只是工作台提供的可选引导。它们不是持久化字段，也不是校验要求。
 - 人类保存可以修改标题和完整正文。冻结选区复用精确 UTF-16 文本范围 selector，并通过 quote hash 绑定到一个已保留 Revision。
-- 两种类型都通过 ChangeSet 接受一个精确 `replace-text` 操作。类型定义会在物化前校验 offset 与 quote hash，并保留身份、父级和无关 Frontmatter。
-- Client contribution 把两种类型渲染为不受模板限制的写作表面，并展示精确文本 Diff。共享 Explorer 提供两层大纲导航；正文 Canvas 提供章节本地章纲侧栏。
+- 四种类型都通过 ChangeSet 接受一个精确 `replace-text` 操作。类型定义会在物化前校验 offset 与 quote hash，并保留身份、父级和无关 Frontmatter。
+- Client contribution 把四种类型渲染为不受模板限制的写作表面，并展示精确文本 Diff。共享 Explorer 为两个项目级唯一指导 Asset 提供“本书”分组，并提供两层大纲导航；正文 Canvas 提供章节本地章纲侧栏。
 
 ```markdown
 ---
@@ -58,13 +59,27 @@ novel:
 本章只写雨夜抵达，以无人应答的敲门声收尾。
 ```
 
+```markdown
+---
+novel:
+  schema: 1
+  id: book-style
+  type: book.style-profile
+  title: 本书风格
+---
+
+# 叙事声音
+
+克制、具体，先写动作与后果，再补当前场景必需的解释。
+```
+
 ## 模型体验
 
 ### 自由策划上下文与操作
 
 #### 模型看到什么
 
-`novel_list` 暴露两种类型的创建契约与规范精确 Revision 引用。`novel_create` 可以创建大纲、卷纲或绑定章节的章纲；`novel_get` 返回精确自由正文；`novel_propose_changes` 创建可审阅的精确文本替换，而不会直接应用。
+`novel_list` 暴露全部创建契约与规范精确 Revision 引用。`novel_create` 可以创建大纲、卷纲、绑定章节的章纲或尚未存在的项目级唯一指导 Asset；`novel_get` 返回精确自由正文；`novel_propose_changes` 创建可审阅的精确文本替换，而不会直接应用。工作台 persona 与相关 Skill 会按任务显式发现并读取当前 `book.brief` 或 `book.style-profile` Revision；它们不是隐藏的常驻 prompt 注入。
 
 #### Token 影响
 
@@ -80,4 +95,5 @@ novel:
 - **单次精确替换**：多范围提案、自动 rebase 和结构合并尚未实现。
 - **只约束两层大纲**：幕、阶段或自定义层级暂时应写在自由 Markdown 内，等出现有证据的语义需求再升级。
 - **每章一个章纲**：备选方案与分支章纲尚未实现。
-- **仅词法发现**：策划 Asset 已参与提供方无关的标题/模型文本检索；语义检索与关系范围检索尚未实现。
+- **尚无定稿偏好学习**：指导资产的变更仍是普通人类保存或可审阅 ChangeSet。“标记为定稿”、根据草稿/终稿差异学习并提升长期偏好都暂缓。
+- **仅词法发现**：策划与指导 Asset 已参与提供方无关的标题/模型文本检索；语义检索与关系范围检索尚未实现。

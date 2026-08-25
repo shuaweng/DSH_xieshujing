@@ -20,7 +20,7 @@ Status: proposed
 
 现有 `novel` Agent Preset 继续作为 Session 级写作能力，并提供 persona 和 skill 行为，但不拥有工作台领域。MVP 增加独立的包内 `novel-workbench` Preset，它使用 Novel 工具，并从正式资产根目录的能力中移除原始修改工具；研究和开发 Preset 可以保留通用文件系统与 shell 工具，但不会因此取得提交 Novel ChangeSet 的权限。
 
-PR1、PR2、PR3 MVP、PR4 Asset 类型内核、PR5 Registry 验证、PR6 展示切片、PR7 上下文工作集与 PR8 创作 Skill 切片已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照和编排能力。
+PR1、PR2、PR3 MVP、PR4 Asset 类型内核、PR5 Registry 验证、PR6 展示切片、PR7 上下文工作集、PR8 创作 Skill 切片与 PR9 全书指导 Asset 切片已在功能栈中实现。本 Note 仍保持 proposed，因为其验收条件有意覆盖 MVP 延后的更多资产类型、失效事件、重启快照、定稿/学习和编排能力。
 
 本提案扩展现有 Profile、文件系统、Session 历史、Remote 和客户端展示决策，不取代其中任何一项。
 
@@ -56,7 +56,7 @@ PR3 不添加文件 watcher 或浏览器失效事件流。Repository 调用会�
 
 PR4 用两个随 effect 生命周期管理的 Registry，替换分散在本地 Repository、上下文解析器、Remote 投影和浏览器画布中的章节专用分派。Host `ctx.novelAssetTypes` 拥有名称唯一的资产定义；Client `ctx.novelAssetRenderers` 拥有名称唯一的编辑器与 Diff Renderer。重复注册在加载时失败，dispose 会移除精确贡献；作者资产缺少所需 Host 或 Client 贡献时明确失败，不回退到通用 JSON 或文本编辑器。
 
-每个 Host 定义声明 Frontmatter 类型、可接受的内容根与扩展名、解析后的内容值、模型投影、选区校验、作者保存物化、持久操作解码和完整 ChangeSet 物化。Repository 继续拥有文件 containment、字节上限、Revision 父链、带守卫发布、ChangeSet 授权与崩溃恢复；类型定义绝不执行文件系统或 SQLite I/O。历史 Schema 版本三随每个 ChangeSet 记录目标资产类型，因此重放会通过同一个已注册定义校验持久操作，而不是根据可变当前文件猜测。
+每个 Host 定义声明 Frontmatter 类型、可接受的内容根与扩展名、解析后的内容值、模型投影、选区校验、作者保存物化、持久操作解码和完整 ChangeSet 物化。定义还可以声明通用语义父级规则或 `projectSingleton`；Repository 会在作者文件扫描和类型化创建时校验这些 cardinality，而不按具体类型名称分支。Repository 继续拥有文件 containment、字节上限、Revision 父链、带守卫发布、ChangeSet 授权与崩溃恢复；类型定义绝不执行文件系统或 SQLite I/O。历史 Schema 版本三随每个 ChangeSet 记录目标资产类型，因此重放会通过同一个已注册定义校验持久操作，而不是根据可变当前文件猜测。
 
 浏览器 Remote 为 Asset 内容、保存请求、selector 和 ChangeSet operation 暴露同一个有边界、无损的 JSON 信封。Host 与 Client 注册表拥有精确类型语义，因此新增类型不会扩展生成的 Remote 方法集合。根工作台按文档声明类型选择 Renderer，并把保存、Context Commit Barrier、Agent 引用插入与审阅授权保留在共享画布中。首个 `manuscript.chapter` Host 定义和 Client Renderer 保持 PR3 的文本编辑器、UTF-16 选区与 `replace-text` 行为。后续资产包可以增加 Host 定义与 Client Renderer，无需修改本地 Repository、通用 Novel 工具、Remote Gateway 或工作台根布局。
 
@@ -81,6 +81,16 @@ PR4 不增加另一种作者资产。最初的 `planning.outline` 实现验证�
 工作台 Skill 只描述创作方法、路由和产品词汇，不授予权限，也不增加资产专用修改工具。每个方法都优先从冻结的当前选区与上下文工作集开始，在缺少目标时使用 `novel_search` 或 `novel_list` 发现资产，用 `novel_get` 读取精确 Revision，并通过 `novel_create` 或 `novel_propose_changes` 提交持久创建或修改。诊断类方法只返回带依据的聊天报告。修改类方法必须区分聊天草稿、新 Asset 与待审 ChangeSet，绝不能把 proposal 描述为已应用。
 
 这六个文件全部自包含，因为安全 Workbench Preset 有意不暴露通用 `read` 工具来加载外部参考文件。其规划方法继续遵守自由规划决策：书纲、卷纲与章纲检查项是方法，不是固定 payload 或必填字段 Schema。标准 Skill 运行时会把目录与每次加载的 Skill 正文记录进 Session 历史，在不扩大稳定 system prompt 的前提下保持可重建性。默认项目、用户与 bundled Skill 根仍可发现，但 Skill 无法授予不存在的 shell 或文件系统工具，也不能绕过 Repository 授权。
+
+## PR9 项目级全书指导切片
+
+规划 Asset contribution 额外注册两种自由 Markdown 类型：`book.brief` 与 `book.style-profile`。两者都没有父级，物理存放在已声明的 `planning` 内容根，并声明通用 `projectSingleton` 契约。概述记录作者确认的作品定位、读者承诺、主角、核心冲突、世界/Canon 边界与长线方向；风格资产记录作者确认的叙事声音、句式节奏、对白、信息释放、连载节奏、钩子、正向范例与明确禁忌。两类正文都没有必填字段或模板 Schema。
+
+Explorer 把两种类型投影到一个“本书”分组，只在对应精确 singleton 缺失时提供人类创建入口，并通过已注册自由正文 Renderer 处理标题/正文保存、精确选区与文本 Diff。`novel_list` 会自动披露两种创建契约，`novel_create` 继续使用普通 Repository 安全路径，`novel_get` 返回精确保留正文与 Revision，`novel_propose_changes` 仍然只创建提案。没有新增模型工具 Schema 或 Remote 方法。
+
+全书指导按任务使用，不是隐藏环境 prompt。Preset persona 与相关 PR8 Skill 先检查普通 `novel_list` 目录，再对匹配的大纲、落稿、改写、对白、场景或审查任务，通过当前规范 Revision 显式 `novel_get` 已存在的概述或风格资产。因此工具调用/结果可从 Session 历史重建；缺少指导资产时继续遵循用户本轮要求，而不是虚构项目规则。一次草稿观察绝不会自动写回长期指导。
+
+PR9 不定义定稿或自进化。后续切片可以让作者显式把某个 Revision 标记为最终稿，并比较其草稿祖先与 prompt 依据；但只有这种显式定稿才可授权学习候选。梗/范本库与 AI 味脚本也不在本切片内。
 
 ## PR4 工作台展示切片
 
@@ -282,7 +292,8 @@ ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客
 
 ## 推迟工作
 
-- 除已交付章节、自由书纲/卷纲和章纲之外的更多资产类型，包括人物、灵感、场景、时间线、关系和视图定义。
+- 除已交付章节、自由书纲/卷纲、章纲、本书概述和本书风格之外的更多资产类型，包括人物、灵感、场景、时间线、关系和视图定义。
+- 显式 Revision 定稿、草稿/终稿学习候选、偏好提升、梗/范本库与确定性 AI 味分析。
 - 除显式章节父级之外的大纲到正文派生、可选结构化规划类型，以及多 Asset ChangeSet。
 - 持久可丢弃搜索索引、全文搜索、语义搜索、推断提及和反向关系。`novel_list` 只是有边界的目录发现，不满足这些搜索能力。
 - 文件监听、远程文件系统一致性、多个并发 Host 写入者、协作和 CRDT 位置。
@@ -325,7 +336,7 @@ ChangeSet id 和目标概述存入可 JSON 序列化的工具 `meta`。Novel 客
 
 - 提议的实现包含完整 `ctx.novelRepository` 能力 seam，具有可独立测试的 Service Definition、本地 Service Provider 与 Consumer；每项注册在 HMR 和插件卸载时都能正确 dispose。
 - 真实 Profile 组合测试证明 `web` 与 `headless` 不加载 Novel Repository、Remote、工作台 UI 或 Novel 工具，而 `novel-studio` 加载预期精确 roster，且不替换现有 Session 级 Preset 约定。
-- 项目扫描能通过精确声明识别 `manuscript.chapter`、`planning.outline` 与 `planning.chapter-outline` Markdown，在重命名后保留身份，拒绝重复 id、非法父级关系、环、cardinality 违规与逃逸路径，报告格式错误的声明且不重写，并从文件重建全部派生目录值。
+- 项目扫描能通过精确声明识别 `manuscript.chapter`、`planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile` Markdown，在重命名后保留身份，拒绝重复 id、非法父级关系、环、每父级或项目级 singleton cardinality 违规与逃逸路径，报告格式错误的声明且不重写，并从文件重建全部派生目录值。
 - 规划测试覆盖自由 Markdown round-trip、精确两层书纲/卷纲关系、每个正文父级至多一个章纲、Revision 绑定 UTF-16 选区、确定性模型投影、guarded 人类保存、类型化 Agent 创建与提案、文本 Diff 渲染，以及不依赖方法字段的陈旧选区拒绝。
 - Revision 测试证明精确 UTF-8 快照保留、父级连续性、内容哈希相等性、显式 schema 迁移或拒绝，以及不会自动重置 `.novel/history.sqlite`。
 - Selection 测试覆盖中文、emoji、CRLF 输入、surrogate pair 边界、脏草稿 flush、旧 Revision 展示、quote hash 不匹配，以及不使用模糊重定位的快速失败陈旧应用。

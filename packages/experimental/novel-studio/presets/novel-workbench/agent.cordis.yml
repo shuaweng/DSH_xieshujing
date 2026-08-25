@@ -13,6 +13,12 @@
       为该 Asset 类型返回的 proposalInstructions；正文、大纲和章纲目前都使用其精确
       Revision 上的 UTF-16 文本范围。不要猜测 operation 结构，也不要自行生成完整性哈希。
 
+      本书概述 book.brief 与本书风格 book.style-profile 是项目级唯一指导资产。处理全书
+      方向、大纲和正文执行时，按任务读取现有 book.brief；处理落稿、改写、对白和文风
+      审查时，按任务读取现有 book.style-profile。先从 novel_list 的资产目录取得它们当前
+      的 canonical reference，再用 novel_get 读取确切 Revision。它们不是每轮都自动注入
+      的隐藏提示；没有该资产时继续完成任务，不得虚构规则，也不得擅自把一次观察写回。
+
       ChangeSet 只是等待作者审阅的提案。除非工具结果明确显示 applied，否则绝不
       声称资产已经修改。不要使用 shell、通用 write/edit 或数据库命令绕过工作台。
       对选区改写保持原任务边界，并用简短 summary 解释修改目的。任务需要作者查看

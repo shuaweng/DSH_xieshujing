@@ -77,6 +77,24 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
       setCreating(false)
     }
   }
+  const createBookGuidance = async (type: 'book.brief' | 'book.style-profile') => {
+    if (sessionId === undefined || creating) return
+    setCreating(true)
+    try {
+      const brief = type === 'book.brief'
+      const document = await create(sessionId, {
+        type,
+        title: brief ? t('newBookBriefTitle') : t('newBookStyleProfileTitle'),
+        content: brief ? { kind: 'book-brief', body: '' } : { kind: 'book-style-profile', body: '' },
+      })
+      actions.assetCreated(document)
+      actions.open(document)
+    } catch (error: unknown) {
+      actions.fail(errorMessage(error))
+    } finally {
+      setCreating(false)
+    }
+  }
 
   let characterCount: number | undefined
   if (state.document !== undefined && state.draft !== undefined) {
@@ -84,10 +102,12 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
     catch { characterCount = undefined }
   }
   const manuscripts = state.assets.filter(asset => asset.type.startsWith('manuscript.'))
+  const guidance = state.assets.filter(asset => asset.type === 'book.brief' || asset.type === 'book.style-profile')
   const outlines = state.assets.filter(asset => asset.type === 'planning.outline')
   const roots = outlines.filter(asset => asset.parentId === undefined)
   const other = state.assets.filter(asset => !asset.type.startsWith('manuscript.')
-    && asset.type !== 'planning.outline' && asset.type !== 'planning.chapter-outline')
+    && asset.type !== 'planning.outline' && asset.type !== 'planning.chapter-outline'
+    && asset.type !== 'book.brief' && asset.type !== 'book.style-profile')
   const titleOf = (asset: NovelAssetDescriptor) => asset.id === state.active ? state.titleDraft ?? asset.title : asset.title
 
   return <div className={css.explorerInner}>
@@ -96,6 +116,18 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
     {state.loading && <p className={css.muted}>{t('loading')}</p>}
     {state.error !== undefined && <p className={css.error}>{state.error}</p>}
     <nav className={css.assetList}>
+      <BookGuidanceGroup
+        assets={guidance}
+        active={state.active}
+        creating={creating}
+        titleOf={titleOf}
+        openAsset={openAsset}
+        createAsset={createBookGuidance}
+        labels={{
+          title: t('bookGuidance'), items: t('assetUnit'), brief: t('bookBrief'), style: t('bookStyleProfile'),
+          addBrief: t('addBookBrief'), addStyle: t('addBookStyleProfile'),
+        }}
+      />
       <AssetGroup title={t('chapters')} assets={manuscripts} active={state.active} unit={t('chapterUnit')}
         titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
       <OutlineGroup
@@ -112,6 +144,39 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
         titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />}
     </nav>
   </div>
+}
+
+function BookGuidanceGroup({ assets, active, creating, titleOf, openAsset, createAsset, labels }: {
+  readonly assets: readonly NovelAssetDescriptor[]
+  readonly active: string | undefined
+  readonly creating: boolean
+  readonly titleOf: (asset: NovelAssetDescriptor) => string
+  readonly openAsset: (assetId: string) => void
+  readonly createAsset: (type: 'book.brief' | 'book.style-profile') => Promise<void>
+  readonly labels: {
+    readonly title: string
+    readonly items: string
+    readonly brief: string
+    readonly style: string
+    readonly addBrief: string
+    readonly addStyle: string
+  }
+}) {
+  const brief = assets.find(asset => asset.type === 'book.brief')
+  const style = assets.find(asset => asset.type === 'book.style-profile')
+  return <details className={css.assetGroup} open>
+    <summary><strong>{labels.title}</strong><small>{assets.length} {labels.items}</small></summary>
+    <div className={css.assetGroupItems}>
+      {brief === undefined
+        ? <button className={css.addGuidance} type="button" disabled={creating}
+          onClick={() => { void createAsset('book.brief') }}>＋ {labels.addBrief}</button>
+        : <AssetButton asset={brief} active={active} title={titleOf(brief)} details={labels.brief} openAsset={openAsset} />}
+      {style === undefined
+        ? <button className={css.addGuidance} type="button" disabled={creating}
+          onClick={() => { void createAsset('book.style-profile') }}>＋ {labels.addStyle}</button>
+        : <AssetButton asset={style} active={active} title={titleOf(style)} details={labels.style} openAsset={openAsset} />}
+    </div>
+  </details>
 }
 
 function OutlineGroup({ roots, all, active, creating, titleOf, openAsset, createOutline, labels }: {

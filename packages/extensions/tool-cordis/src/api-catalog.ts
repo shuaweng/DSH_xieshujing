@@ -1109,6 +1109,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Exact-read Consumer that freezes canonical references before a model step.',
     methods: [
       {
+        signature: 'async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorkset>',
+        description: 'Replace the complete non-prose context workset for one live Session.',
+        parameters: [{ name: 'agent', description: 'owning Agent whose Session records the whole value.' }, { name: 'workset', description: 'exact retained references selected by the browser.' }, { name: 'signal', description: 'optional cancellation before validation and append.' }],
+        returns: 'the detached normalized value now in force.',
+      },
+      {
         signature: 'async resolveReferences( agent: Agent, references: readonly NovelReferenceInput[], signal?: AbortSignal, ): Promise<ResolvedNovelReferences>',
         description: 'Resolve exact retained Revisions for Novel tools and prompt preparation.',
         parameters: [{ name: 'agent', description: 'owning Agent whose Session and working directory bound the request.' }, { name: 'references', description: 'canonical exact Asset Revision references to resolve.' }, { name: 'signal', description: 'optional cancellation for repository and filesystem work.' }],
@@ -1139,6 +1145,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Rebuild the current authored catalog and reconcile exact file bytes into immutable Revisions.',
         parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'signal', description: 'optional cancellation for filesystem and history work.' }, { name: 'sandboxPolicy', description: 'optional per-call write policy used if reconciliation must recover an apply journal.' }],
         returns: 'current typed Asset rows in deterministic project-path order.',
+      },
+      {
+        signature: 'abstract searchAssets( project: NovelProjectSnapshot, request: SearchAssetsRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSearchResult[]>',
+        description: 'Search current typed Assets without exposing paths as identity.',
+        parameters: [{ name: 'project', description: 'validated Project declaration returned by this provider.' }, { name: 'request', description: 'bounded text query, optional type allowlist, and result cap.' }, { name: 'signal', description: 'optional cancellation for scan and typed model-text extraction.' }, { name: 'sandboxPolicy', description: 'optional write policy if catalog reconciliation must recover a journal.' }],
+        returns: 'deterministically ranked exact current Revision results.',
       },
       {
         signature: 'abstract createAsset( project: NovelProjectSnapshot, request: CreateAssetRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<AssetSnapshot>',
@@ -1209,6 +1221,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'List the reconciled Asset catalog for the addressed Session project.',
         parameters: [{ name: 'agent', description: 'addressed Agent whose Session selects the project root.' }, { name: 'signal', description: 'caller cancellation.' }],
         returns: 'browser-safe current Asset descriptors.',
+      },
+      {
+        signature: '@Remote(\'search\') async search( agent: Agent, request: SearchNovelAssetsRequest, signal: AbortSignal, ): Promise<NovelAssetSearchResult[]>',
+        description: 'Search current typed Assets and return exact current Revision references.',
+        parameters: [{ name: 'agent', description: 'Addressed Agent whose Session selects the Novel Project.' }, { name: 'request', description: 'Bounded lexical query, optional exact types, and optional result limit.' }, { name: 'signal', description: 'Caller cancellation while reconciling and searching the catalog.' }],
+        returns: 'Browser-safe matches bound to current exact Revisions.',
+      },
+      {
+        signature: '@Remote(\'replaceContextWorkset\') async replaceContextWorkset( agent: Agent, workset: NovelContextWorksetDescriptor, signal: AbortSignal, ): Promise<NovelContextWorksetDescriptor>',
+        description: 'Replace the Session-owned non-prose Novel context workset.',
+        parameters: [{ name: 'agent', description: 'Addressed Agent whose Session owns the workset event.' }, { name: 'workset', description: 'Complete next follow-and-pinned reference value.' }, { name: 'signal', description: 'Caller cancellation while validating and appending the update.' }],
+        returns: 'The validated whole workset retained by the Session.',
       },
       {
         signature: '@Remote(\'createAsset\') async createAsset( agent: Agent, request: CreateNovelAssetRequest, signal: AbortSignal, ): Promise<NovelAssetDocument>',
@@ -3135,6 +3159,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AssetId = Branded<\'NovelAssetId\'>;',
   },
   {
+    name: 'AssetSearchResult',
+    declaration: 'export interface AssetSearchResult {\n    readonly summary: AssetSummary;\n    readonly excerpt: string;\n    readonly score: number;\n}',
+  },
+  {
     name: 'AssetSnapshot',
     declaration: 'export interface AssetSnapshot {\n    readonly asset: Asset;\n    readonly revisionId: RevisionId;\n    readonly serializedUtf8: Uint8Array;\n    readonly contentHash: ContentHash;\n    readonly frontmatter: Readonly<Record<string, unknown>>;\n    readonly content: NovelAssetContent;\n}',
   },
@@ -4059,12 +4087,16 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface NovelAssetMaterialization {\n    readonly serializedUtf8: Uint8Array;\n    readonly parsed: ParsedNovelAsset;\n}',
   },
   {
+    name: 'NovelAssetSearchResult',
+    declaration: 'export interface NovelAssetSearchResult extends NovelAssetDescriptor {\n    readonly excerpt: string;\n    readonly score: number;\n}',
+  },
+  {
     name: 'NovelAssetType',
     declaration: 'export type NovelAssetType = Extract<keyof NovelAssetTypeMap, string>;',
   },
   {
     name: 'NovelAssetTypeDefinition',
-    declaration: 'export interface NovelAssetTypeDefinition {\n    readonly type: NovelAssetType;\n    readonly contentRoot: string;\n    readonly requiredContentRoot?: boolean;\n    readonly extensions: readonly string[];\n    readonly model: {\n        readonly description: string;\n        readonly creationInstructions?: string;\n        readonly proposalInstructions: string;\n    };\n    readonly parent?: {\n        readonly allowedTypes: readonly NovelAssetType[];\n        readonly required?: boolean;\n        readonly singleton?: boolean;\n        readonly maxDepth?: number;\n    };\n    parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset;\n    create?(request: Pick<CreateAssetRequest, \'title\' | \'parentId\' | \'content\'> & {\n        readonly id: AssetId;\n    }, projectRelativePath: string): NovelAssetMaterialization;\n    serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent, title?: string): NovelAssetMaterialization;\n    captureSelection(snapshot: AssetSnapshot, input: NovelSelectionInput, options: NovelSelectionCaptureOptions): CapturedNovelSelection;\n    modelText(snapshot: AssetSnapshot, selector?: NovelSelector): string;\n    prepareOperations(snapshot: AssetSnapshot, input: unknown): readonly NovelOperation[];\n    decodeOperations(value: unknown): readonly NovelOperation[];\n    materializeOperations(snapshot: AssetSnapshot, operations: readonly NovelOperation[]): NovelAssetMaterialization;\n}',
+    declaration: 'export interface NovelAssetTypeDefinition {\n    readonly type: NovelAssetType;\n    readonly contentRoot: string;\n    readonly requiredContentRoot?: boolean;\n    readonly extensions: readonly string[];\n    readonly model: {\n        readonly description: string;\n        readonly creationInstructions?: string;\n        readonly proposalInstructions: string;\n    };\n    readonly projectSingleton?: boolean;\n    readonly parent?: {\n        readonly allowedTypes: readonly NovelAssetType[];\n        readonly required?: boolean;\n        readonly singleton?: boolean;\n        readonly maxDepth?: number;\n    };\n    parse(serializedUtf8: Uint8Array, projectRelativePath: string): ParsedNovelAsset;\n    create?(request: Pick<CreateAssetRequest, \'title\' | \'parentId\' | \'content\'> & {\n        readonly id: AssetId;\n    }, projectRelativePath: string): NovelAssetMaterialization;\n    serializeContent(snapshot: AssetSnapshot, content: NovelAssetContent, title?: string): NovelAssetMaterialization;\n    captureSelection(snapshot: AssetSnapshot, input: NovelSelectionInput, options: NovelSelectionCaptureOptions): CapturedNovelSelection;\n    modelText(snapshot: AssetSnapshot, selector?: NovelSelector): string;\n    prepareOperations(snapshot: AssetSnapshot, input: unknown): readonly NovelOperation[];\n    decodeOperations(value: unknown): readonly NovelOperation[];\n    materializeOperations(snapshot: AssetSnapshot, operations: readonly NovelOperation[]): NovelAssetMaterialization;\n}',
   },
   {
     name: 'NovelAssetTypeMap',
@@ -4073,6 +4105,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'NovelChangeSetDescriptor',
     declaration: 'export interface NovelChangeSetDescriptor {\n    readonly id: ChangeSetId;\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly assetType: string;\n    readonly baseRevisionId: RevisionId;\n    readonly summary: string;\n    readonly status: \'proposed\' | \'applying\' | \'applied\' | \'rejected\' | \'conflicted\';\n    readonly resultRevisionId?: RevisionId;\n    readonly operations: readonly NovelWireValue[];\n}',
+  },
+  {
+    name: 'NovelContextReferenceMode',
+    declaration: 'export type NovelContextReferenceMode = \'explicit\' | \'follow\' | \'pinned\';',
+  },
+  {
+    name: 'NovelContextReferenceOrigin',
+    declaration: 'export type NovelContextReferenceOrigin = \'message\' | \'selection\' | \'active-asset\' | \'search\';',
+  },
+  {
+    name: 'NovelContextWorkset',
+    declaration: 'export interface NovelContextWorkset {\n    readonly version: 1;\n    readonly projectId: ProjectId;\n    readonly items: readonly NovelContextWorksetItem[];\n}',
+  },
+  {
+    name: 'NovelContextWorksetDescriptor',
+    declaration: 'export interface NovelContextWorksetDescriptor {\n    readonly version: 1;\n    readonly projectId: ProjectId;\n    readonly items: readonly NovelContextWorksetItemDescriptor[];\n}',
+  },
+  {
+    name: 'NovelContextWorksetItem',
+    declaration: 'export interface NovelContextWorksetItem extends Required<Pick<NovelReferenceInput, \'projectId\' | \'assetId\' | \'revisionId\' | \'label\'>>, Pick<NovelReferenceInput, \'selector\'> {\n    readonly mode: Extract<NovelContextReferenceMode, \'follow\' | \'pinned\'>;\n    readonly origin: Extract<NovelContextReferenceOrigin, \'active-asset\' | \'selection\' | \'search\'>;\n}',
+  },
+  {
+    name: 'NovelContextWorksetItemDescriptor',
+    declaration: 'export interface NovelContextWorksetItemDescriptor {\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly label: string;\n    readonly selector?: NovelWireValue;\n    readonly mode: \'follow\' | \'pinned\';\n    readonly origin: \'active-asset\' | \'selection\' | \'search\';\n}',
   },
   {
     name: 'NovelOperation',
@@ -4088,7 +4144,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'NovelReferenceInput',
-    declaration: 'export interface NovelReferenceInput {\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector?: NovelSelector;\n    readonly label?: string;\n}',
+    declaration: 'export interface NovelReferenceInput {\n    readonly projectId: ProjectId;\n    readonly assetId: AssetId;\n    readonly revisionId: RevisionId;\n    readonly selector?: NovelSelector;\n    readonly label?: string;\n    readonly origin?: NovelContextReferenceOrigin;\n    readonly mode?: NovelContextReferenceMode;\n}',
   },
   {
     name: 'NovelSelectionCaptureOptions',
@@ -4288,7 +4344,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ResolvedNovelReference',
-    declaration: 'export interface ResolvedNovelReference {\n    readonly input: Required<Pick<NovelReferenceInput, \'projectId\' | \'assetId\' | \'revisionId\' | \'label\'>> & Pick<NovelReferenceInput, \'selector\'>;\n    readonly snapshot: AssetSnapshot;\n    readonly text: string;\n}',
+    declaration: 'export interface ResolvedNovelReference {\n    readonly input: Required<Pick<NovelReferenceInput, \'projectId\' | \'assetId\' | \'revisionId\' | \'label\' | \'origin\' | \'mode\'>> & Pick<NovelReferenceInput, \'selector\'>;\n    readonly snapshot: AssetSnapshot;\n    readonly text: string;\n}',
   },
   {
     name: 'ResolvedNovelReferences',
@@ -4399,6 +4455,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ScopeKey = object;',
   },
   {
+    name: 'SearchAssetsRequest',
+    declaration: 'export interface SearchAssetsRequest {\n    readonly query: string;\n    readonly types?: readonly NovelAssetType[];\n    readonly limit?: number;\n}',
+  },
+  {
     name: 'SearchFileMatches',
     declaration: 'export interface SearchFileMatches {\n    path: string;\n    matches: SearchLineMatch[];\n}',
   },
@@ -4409,6 +4469,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SearchMatchesResultView',
     declaration: 'export interface SearchMatchesResultView {\n    card: \'search\';\n    shape: \'matches\';\n    title?: string;\n    files: SearchFileMatches[];\n    truncated: boolean;\n    total: number;\n}',
+  },
+  {
+    name: 'SearchNovelAssetsRequest',
+    declaration: 'export interface SearchNovelAssetsRequest {\n    readonly query: string;\n    readonly types?: readonly string[];\n    readonly limit?: number;\n}',
   },
   {
     name: 'SearchPathsResultView',

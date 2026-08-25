@@ -61,6 +61,8 @@ export interface NovelAssetTypeDefinition {
     readonly creationInstructions?: string
     readonly proposalInstructions: string
   }
+  /** Whether the project may contain at most one authored Asset of this exact type. */
+  readonly projectSingleton?: boolean
   /** Optional semantic-parent contract enforced after every scan and before creation. */
   readonly parent?: {
     readonly allowedTypes: readonly NovelAssetType[]
@@ -163,6 +165,9 @@ function validateDefinition(definition: NovelAssetTypeDefinition): void {
   }
   if ((definition.create === undefined) !== (definition.model.creationInstructions === undefined)) {
     throw new Error(`novel asset type ${JSON.stringify(definition.type)} must contribute create() and creationInstructions together`)
+  }
+  if (definition.projectSingleton !== undefined && typeof definition.projectSingleton !== 'boolean') {
+    throw new Error(`novel asset type ${JSON.stringify(definition.type)} has an invalid projectSingleton flag`)
   }
   if (definition.model.creationInstructions !== undefined
     && definition.model.creationInstructions.trim().length === 0) {

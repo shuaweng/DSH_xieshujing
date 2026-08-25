@@ -4,17 +4,18 @@ English | [中文](README.zh.md)
 
 ## Purpose
 
-This experimental Asset-type package contributes freeform planning surfaces to the Novel workbench. It deliberately separates semantic identity and hierarchy from writing method: the repository enforces only Book Outline → Volume Outline and Chapter → Chapter Outline relationships, while authors and Agents may choose any Markdown structure inside each body.
+This experimental Asset-type package contributes freeform planning and project-guidance surfaces to the Novel workbench. It deliberately separates semantic identity and hierarchy from writing method: the repository enforces only Book Outline → Volume Outline, Chapter → Chapter Outline, and project-singleton guidance cardinality, while authors and Agents may choose any Markdown structure inside each body.
 
 ## Behavior
 
 - `planning.outline` is a UTF-8 Markdown Asset under the declared `planning` root. Frontmatter owns schema, stable id, type, title, and `level: book | volume`; the Markdown body is otherwise freeform.
 - A Book Outline has no parent. A Volume Outline requires `novel.parent` pointing to a Book Outline. Further nesting, cross-type parents, missing parents, and cycles fail closed.
 - `planning.chapter-outline` is freeform Markdown with `novel.parent` pointing to exactly one `manuscript.chapter`. A chapter may have at most one Chapter Outline.
+- `book.brief` and `book.style-profile` are parentless, freeform Markdown Assets stored under the declared `planning` root. Each exact type is a project singleton. The brief carries author-confirmed book premise and canon boundaries; the style profile carries author-confirmed prose and serial-rhythm guidance.
 - Emotion targets, key scenes, hook distribution, a 15/35/35/15 rhythm, and four-beat structure are optional guidance exposed by the workbench. They are never persistence fields and never validation requirements.
 - Human saves can edit title and complete body. A frozen selection uses the shared exact UTF-16 text-range selector and binds its quote hash to one retained Revision.
-- Both types accept one exact `replace-text` operation per ChangeSet. The registered definition verifies offsets and quote hash before materialization and preserves identity, parent, and unrelated Frontmatter.
-- The Client contribution renders both types as unconstrained writing surfaces and presents exact text Diffs. The shared explorer supplies the two-level outline navigation; the manuscript canvas supplies the chapter-local drawer.
+- All four types accept one exact `replace-text` operation per ChangeSet. The registered definition verifies offsets and quote hash before materialization and preserves identity, parent, and unrelated Frontmatter.
+- The Client contribution renders all four types as unconstrained writing surfaces and presents exact text Diffs. The shared explorer supplies a Book group for the two singleton guidance Assets and two-level outline navigation; the manuscript canvas supplies the chapter-local drawer.
 
 ```markdown
 ---
@@ -58,13 +59,27 @@ novel:
 本章只写雨夜抵达，以无人应答的敲门声收尾。
 ```
 
+```markdown
+---
+novel:
+  schema: 1
+  id: book-style
+  type: book.style-profile
+  title: 本书风格
+---
+
+# 叙事声音
+
+克制、具体，先写动作与后果，再补当前场景必需的解释。
+```
+
 ## Model Experience
 
 ### Freeform planning context and operations
 
 #### What the model sees
 
-`novel_list` exposes both creation contracts and canonical exact-Revision references. `novel_create` can create a Book Outline, Volume Outline, or chapter-bound Chapter Outline. `novel_get` returns the exact freeform body, and `novel_propose_changes` creates a reviewable exact text replacement without applying it.
+`novel_list` exposes all creation contracts and canonical exact-Revision references. `novel_create` can create a Book Outline, Volume Outline, chapter-bound Chapter Outline, or a missing singleton guidance Asset. `novel_get` returns the exact freeform body, and `novel_propose_changes` creates a reviewable exact text replacement without applying it. The Workbench persona and relevant Skills explicitly discover and read current `book.brief` or `book.style-profile` Revisions for matching tasks; these Assets are not hidden always-on prompt injections.
 
 #### Token effect
 
@@ -80,4 +95,5 @@ Switching between Book, Volume, and Chapter Outline surfaces does not change the
 - **Single exact replacement** — multi-range proposals, automatic rebase, and structural merge are deferred.
 - **Two outline levels only** — nested acts or custom hierarchy levels should be expressed inside freeform Markdown until an evidence-backed semantic need appears.
 - **One Chapter Outline per chapter** — alternatives and branch plans are deferred.
-- **Lexical discovery only** — planning Assets participate in provider-neutral title/model-text search; semantic and relation-scoped search are deferred.
+- **No finalized-preference learning** — guidance changes remain ordinary human edits or reviewable ChangeSets. Marking a Revision final, learning from draft/final diffs, and promoting durable preferences are deferred.
+- **Lexical discovery only** — planning and guidance Assets participate in provider-neutral title/model-text search; semantic and relation-scoped search are deferred.

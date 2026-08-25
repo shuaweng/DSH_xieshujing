@@ -21,12 +21,20 @@ import type {
   ParsedNovelAsset,
 } from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import type {
+  BookBriefContent,
+  BookStyleProfileContent,
   ChapterOutlineContent,
   PlanningOutlineContent,
   PlanningOutlineLevel,
 } from './types.ts'
 
-export type { ChapterOutlineContent, PlanningOutlineContent, PlanningOutlineLevel } from './types.ts'
+export type {
+  BookBriefContent,
+  BookStyleProfileContent,
+  ChapterOutlineContent,
+  PlanningOutlineContent,
+  PlanningOutlineLevel,
+} from './types.ts'
 
 export const name = 'novel-asset-outline'
 export const inject = ['novelAssetTypes']
@@ -46,6 +54,8 @@ interface PlanningSource {
 export function apply(ctx: Context): void {
   ctx.novelAssetTypes.register(planningOutlineTypeDefinition)
   ctx.novelAssetTypes.register(chapterOutlineTypeDefinition)
+  ctx.novelAssetTypes.register(bookBriefTypeDefinition)
+  ctx.novelAssetTypes.register(bookStyleProfileTypeDefinition)
 }
 
 /** Freeform two-level outline Host contribution. */
@@ -76,6 +86,26 @@ export const planningOutlineTypeDefinition = {
   },
   ...freeformBehavior('outline', outlineBody, parseOutline),
 } satisfies NovelAssetTypeDefinition
+
+/** Project-singleton book synopsis and canon guidance. */
+export const bookBriefTypeDefinition = freeformBookDefinition({
+  type: 'book.brief',
+  kind: 'book-brief',
+  description: 'The project-singleton freeform Markdown book brief: premise, reader promise, protagonist, conflict, world boundary, long arc, and other author-chosen global facts.',
+  creationInstructions: 'Before creating, use novel_list or novel_search to confirm the project has no book.brief. Create content {"kind":"book-brief","body":"<free Markdown>"}. Keep the author\'s own structure; suggested sections are optional.',
+  parse: parseBookBrief,
+  content: bookBriefContent,
+})
+
+/** Project-singleton book prose and serial-rhythm guidance. */
+export const bookStyleProfileTypeDefinition = freeformBookDefinition({
+  type: 'book.style-profile',
+  kind: 'book-style-profile',
+  description: 'The project-singleton freeform Markdown style profile: narrative voice, sentence rhythm, dialogue, information release, serial pacing, hooks, positive references, and explicit avoidances.',
+  creationInstructions: 'Before creating, use novel_list or novel_search to confirm the project has no book.style-profile. Create content {"kind":"book-style-profile","body":"<free Markdown>"}. Record only author-confirmed guidance; do not infer durable preferences from one draft.',
+  parse: parseBookStyleProfile,
+  content: bookStyleProfileContent,
+})
 
 /** Freeform chapter-plan Host contribution bound one-to-one to a manuscript chapter. */
 export const chapterOutlineTypeDefinition = {
@@ -150,15 +180,53 @@ export function parseChapterOutline(bytes: Uint8Array, path: string): ParsedNove
   }
 }
 
+/**
+ * Parse the one freeform book brief allowed in a project.
+ * @param bytes Serialized UTF-8 Asset bytes.
+ * @param path Project-relative path used in validation diagnostics.
+ * @returns One validated book-brief Asset.
+ */
+export function parseBookBrief(bytes: Uint8Array, path: string): ParsedNovelAsset {
+  return parseBookGuidance(bytes, path, 'book.brief', 'book-brief')
+}
+
+/**
+ * Parse the one freeform style profile allowed in a project.
+ * @param bytes Serialized UTF-8 Asset bytes.
+ * @param path Project-relative path used in validation diagnostics.
+ * @returns One validated book-style-profile Asset.
+ */
+export function parseBookStyleProfile(bytes: Uint8Array, path: string): ParsedNovelAsset {
+  return parseBookGuidance(bytes, path, 'book.style-profile', 'book-style-profile')
+}
+
+function parseBookGuidance(
+  bytes: Uint8Array,
+  path: string,
+  type: 'book.brief' | 'book.style-profile',
+  kind: 'book-brief' | 'book-style-profile',
+): ParsedNovelAsset {
+  const parsed = parsePlanningFile(bytes, path, type)
+  if (parsed.parentId !== undefined) invalidAsset(path, `${type} must not declare novel.parent`)
+  return {
+    id: parsed.id,
+    type,
+    title: parsed.title,
+    frontmatter: parsed.file.frontmatter,
+    content: { kind, body: parsed.body },
+    source: { bodyStartUtf16: parsed.file.bodyStartUtf16 } satisfies PlanningSource,
+  }
+}
+
 function freeformBehavior(
-  kind: 'outline' | 'chapter-outline',
+  kind: 'outline' | 'chapter-outline' | 'book-brief' | 'book-style-profile',
   bodyOf: (content: unknown) => string,
   parse: (bytes: Uint8Array, path: string) => ParsedNovelAsset,
 ): Pick<NovelAssetTypeDefinition, 'serializeContent' | 'captureSelection' | 'modelText' | 'prepareOperations' | 'decodeOperations' | 'materializeOperations'> {
   return {
     serializeContent(snapshot, content, title) {
       const body = bodyOf(content)
-      if (containsUnpairedSurrogate(body)) invalidAsset(snapshot.asset.projectRelativePath, 'planning body contains an unpaired UTF-16 surrogate')
+      if (containsUnpairedSurrogate(body)) invalidAsset(snapshot.asset.projectRelativePath, 'freeform body contains an unpaired UTF-16 surrogate')
       const base = parse(snapshot.serializedUtf8, snapshot.asset.projectRelativePath)
       const source = planningSource(base)
       const before = new TextDecoder().decode(snapshot.serializedUtf8)
@@ -227,15 +295,18 @@ function freeformBehavior(
       if (contentHash(new TextEncoder().encode(body.slice(range.startUtf16, range.endUtf16))) !== range.quoteHash) {
         invalidChangeSet('replace-text quote hash does not match the retained Revision')
       }
-      const next: NovelAssetContent = kind === 'outline'
-        ? { ...outlineContent(snapshot.content), body: `${body.slice(0, range.startUtf16)}${operation.replacement}${body.slice(range.endUtf16)}` }
-        : { kind: 'chapter-outline', body: `${body.slice(0, range.startUtf16)}${operation.replacement}${body.slice(range.endUtf16)}` }
+      const nextBody = `${body.slice(0, range.startUtf16)}${operation.replacement}${body.slice(range.endUtf16)}`
+      const next: NovelAssetContent = contentWithBody(kind, snapshot.content, nextBody)
       return this.serializeContent(snapshot, next)
     },
   }
 }
 
-function parsePlanningFile(bytes: Uint8Array, path: string, type: 'planning.outline' | 'planning.chapter-outline'): {
+function parsePlanningFile(
+  bytes: Uint8Array,
+  path: string,
+  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile',
+): {
   readonly file: ParsedFrontmatterFile
   readonly id: AssetId
   readonly title: string
@@ -310,7 +381,7 @@ function markdownBodyStart(text: string, start: number): number {
 function createdMaterialization(
   id: AssetId,
   title: string,
-  type: 'planning.outline' | 'planning.chapter-outline',
+  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile',
   parentId: AssetId | undefined,
   extra: Readonly<Record<string, unknown>>,
   body: string,
@@ -318,7 +389,7 @@ function createdMaterialization(
   parse: (bytes: Uint8Array, path: string) => ParsedNovelAsset,
 ): NovelAssetMaterialization {
   const cleanTitle = authoredString(title, 'novel.title', path, 240)
-  if (containsUnpairedSurrogate(body)) invalidAsset(path, 'planning body contains an unpaired UTF-16 surrogate')
+  if (containsUnpairedSurrogate(body)) invalidAsset(path, 'freeform body contains an unpaired UTF-16 surrogate')
   const frontmatter = stringify({
     novel: {
       schema: 1,
@@ -381,8 +452,75 @@ function chapterContent(value: unknown): ChapterOutlineContent {
   return { kind: 'chapter-outline', body: value['body'] }
 }
 
+function bookBriefContent(value: unknown): BookBriefContent {
+  if (!isRecord(value) || value['kind'] !== 'book-brief' || typeof value['body'] !== 'string') {
+    invalidAsset('<asset-content>', 'book brief content is invalid')
+  }
+  return { kind: 'book-brief', body: value['body'] }
+}
+
+function bookStyleProfileContent(value: unknown): BookStyleProfileContent {
+  if (!isRecord(value) || value['kind'] !== 'book-style-profile' || typeof value['body'] !== 'string') {
+    invalidAsset('<asset-content>', 'book style profile content is invalid')
+  }
+  return { kind: 'book-style-profile', body: value['body'] }
+}
+
 function outlineBody(value: unknown): string { return outlineContent(value).body }
 function chapterBody(value: unknown): string { return chapterContent(value).body }
+function bookBriefBody(value: unknown): string { return bookBriefContent(value).body }
+function bookStyleProfileBody(value: unknown): string { return bookStyleProfileContent(value).body }
+
+function contentWithBody(
+  kind: 'outline' | 'chapter-outline' | 'book-brief' | 'book-style-profile',
+  current: unknown,
+  body: string,
+): NovelAssetContent {
+  switch (kind) {
+    case 'outline': return { ...outlineContent(current), body }
+    case 'chapter-outline': return { kind, body }
+    case 'book-brief': return { kind, body }
+    case 'book-style-profile': return { kind, body }
+  }
+}
+
+function freeformBookDefinition(config: {
+  readonly type: 'book.brief' | 'book.style-profile'
+  readonly kind: 'book-brief' | 'book-style-profile'
+  readonly description: string
+  readonly creationInstructions: string
+  readonly parse: (bytes: Uint8Array, path: string) => ParsedNovelAsset
+  readonly content: (value: unknown) => BookBriefContent | BookStyleProfileContent
+}): NovelAssetTypeDefinition {
+  const bodyOf = config.kind === 'book-brief' ? bookBriefBody : bookStyleProfileBody
+  return {
+    type: config.type,
+    contentRoot: 'planning',
+    extensions: ['.md'],
+    projectSingleton: true,
+    model: {
+      description: config.description,
+      creationInstructions: config.creationInstructions,
+      proposalInstructions: 'Use one exact operation [{"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}]. Offsets address the free Markdown body returned by novel_get. Modify only author-requested guidance; do not silently convert observations into durable project rules.',
+    },
+    parse: config.parse,
+    create(request, path) {
+      if (request.parentId !== undefined) invalidAsset(path, `${config.type} must not declare novel.parent`)
+      const content = config.content(request.content)
+      return createdMaterialization(
+        request.id,
+        request.title,
+        config.type,
+        undefined,
+        {},
+        content.body,
+        path,
+        config.parse,
+      )
+    },
+    ...freeformBehavior(config.kind, bodyOf, config.parse),
+  }
+}
 
 function validateOutlineParent(level: PlanningOutlineLevel, parentId: AssetId | undefined, path: string): void {
   if (level === 'book' && parentId !== undefined) invalidAsset(path, 'book outline must not declare novel.parent')
@@ -517,5 +655,5 @@ function invalidChangeSet(detail: string): never {
   throw new NovelRepositoryError(`novel repository: invalid ChangeSet: ${detail}`, 'NOVEL_CHANGESET_INVALID')
 }
 
-/** Cordis plugin that registers freeform outline and chapter-outline asset definitions. */
+/** Cordis plugin that registers freeform planning and project-guidance Asset definitions. */
 export default { name, inject, apply }

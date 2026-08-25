@@ -22,7 +22,7 @@ Schema 版本 1 要求 `kind: novel-project`、整数 `schema: 1`、非空 `id` 
 
 ## Asset 与 Revision 权威
 
-[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) 定义与提供方无关的 `ctx.novelRepository` seam 和 effect 作用域内的 `ctx.novelAssetTypes` 注册表。[`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) 只扫描已安装类型定义认领的根目录和扩展名。章节通过严格 Markdown Frontmatter 成为 Asset；[`@deepseek-ai/dsh-experimental-novel-asset-outline`](../../packages/experimental/novel-asset-outline) 独立贡献严格 YAML `planning.outline` 解析与展示，不向共享 Repository 增加大纲分支。
+[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) 定义与提供方无关的 `ctx.novelRepository` seam 和 effect 作用域内的 `ctx.novelAssetTypes` 注册表。[`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) 只扫描已安装类型定义认领的根目录和扩展名。章节通过严格 Markdown Frontmatter 成为 Asset；[`@deepseek-ai/dsh-experimental-novel-asset-outline`](../../packages/experimental/novel-asset-outline) 独立贡献自由 Markdown 书纲/卷纲、章纲、项目级唯一的本书概述与本书风格，而不向共享 Repository 增加类型分支。
 
 ```markdown
 ---
@@ -36,30 +36,34 @@ novel:
 Authored manuscript body.
 ```
 
-```yaml
+```markdown
+---
 novel:
   schema: 1
   id: outline_main
   type: planning.outline
   title: Main Outline
-nodes:
-  - id: act-one
-    title: Act One
-    summary: The protagonist reaches White Harbor.
-    children: []
+  level: book
+---
+
+# Act One
+
+The protagonist reaches White Harbor.
 ```
+
+`book.brief` 与 `book.style-profile` 使用同样的自由 Markdown 正文和精确文本 operation，没有语义父级，并声明注册表通用的 `projectSingleton` 契约。因此 Repository 扫描与类型化创建都会拒绝同一精确类型的第二份 Asset，而无需硬编码类型名称。它们物理上位于已声明的 `planning` 根，Explorer 则把它们投影到逻辑“本书”分组。
 
 项目文件是当前作者内容的权威。`.novel/history.sqlite` 保存精确的不可变 Revision 字节、Asset head、ChangeSet 与 apply journal；它不会取代文件成为当前真相源。文件改名保留 Asset 身份，外部字节变化在 reconcile 时创建 `external-edit` Revision。每次人类保存都由精确类型定义物化并重新解析，而且要求画面上的 base Revision 与文件系统版本仍然为当前值。
 
 ## 选区与 Session 上下文
 
-第一版可以冻结带 UTF-16 offset 与 quote hash 的非空正文范围，也可以冻结带稳定 node id 与 node hash 的单个大纲节点。每个选区都绑定一个已保留 Revision，绝不静默前移到可变的最新内容。浏览器 context barrier 先保存脏的类型化草稿，再捕获新 Revision 上的精确选区，最后把规范 `dsh-novel:` mention 插入普通 DSH Composer。
+第一版为当前全部自由正文 Asset 类型冻结带 UTF-16 offset 与 quote hash 的非空文本范围。每个选区都绑定一个已保留 Revision，绝不静默前移到可变的最新内容。浏览器 context barrier 先保存脏的类型化草稿，再捕获新 Revision 上的精确选区，最后把规范 `dsh-novel:` mention 插入普通 DSH Composer。
 
 [`@deepseek-ai/dsh-experimental-novel-context`](../../packages/experimental/novel-context) 在 `agent/pre-step` 解析这些 mention。它保留人类可读消息，并附加一个 source kind 为 `novel-context` 的不可变 `user/message`。该消息以确定性、明确不受信任的 JSON 保存精确 Revision，让 Session replay 能重建模型实际看到的内容。引用数量和 UTF-8 总字节数都有上限，而且第一次 Novel context 会把该 Session 绑定到一个 Project。
 
 ## 提案、审阅与恢复
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_create`、`novel_get`、`novel_propose_changes` 和纯展示工具 `novel_present`。目录发现会返回规范精确 Revision 引用与已注册创建契约；精确读取使用各类型的确定性模型投影与提案说明。提案由匹配定义校验精确、归类型所有的文本操作，再持久创建 ChangeSet，但不改作者文件。`novel_present` 只通过类型化工具结果 metadata 打开或关闭整个工作台。模型没有 apply 工具，也不能宣称已经发布修改。
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_search`、`novel_create`、`novel_get`、`novel_propose_changes` 和纯展示工具 `novel_present`。目录发现会返回规范精确 Revision 引用与已注册创建契约；精确读取使用各类型的确定性模型投影与提案说明。相关 Workbench Skill 会显式发现并读取当前 `book.brief` 或 `book.style-profile` Revision；每次调用与结果都保留在 Session 历史中，不会暗中注入可变指导。提案由匹配定义校验精确、归类型所有的文本操作，再持久创建 ChangeSet，但不改作者文件。`novel_present` 只通过类型化工具结果 metadata 打开或关闭整个工作台。模型没有 apply 工具，也不能宣称已经发布修改。
 
 浏览器把 ChangeSet 读成行内 Diff 卡片。接受或拒绝都是显式、归 Session 所有的 Remote 操作。Apply 在接触文件前，把精确前后字节、hash、授权与预期结果 Revision 以 `applying` 状态写入 journal。项目重开时，after hash 会完成提交，before hash 会重试受保护写入，任何第三种 hash 都会变成 `conflicted`，且不覆盖作者文件。
 
@@ -73,7 +77,7 @@ nodes:
 
 ## 当前限制
 
-当前切片支持 `manuscript.chapter` 与 `planning.outline`、一个活动类型化选区，以及单 Asset ChangeSet 中的一项类型化操作。大纲节点创建/删除/重排、持久正文 block id、人物、灵感、搜索、关系、文件监听、自动 rebase、多 Asset 事务、更丰富的视图与多 Agent 编排仍暂缓。Repository 只在调用边界 reconcile，支持的写入模型是单 Host 进程。
+当前切片支持 `manuscript.chapter`、`planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile`、一个活动类型化选区，以及单 Asset ChangeSet 中的一项类型化操作。定稿与草稿/终稿学习、持久正文 block id、人物、灵感、语义搜索、关系、文件监听、自动 rebase、多 Asset 事务、更丰富的视图与多 Agent 编排仍暂缓。Repository 只在调用边界 reconcile，支持的写入模型是单 Host 进程。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -122,6 +126,15 @@ Exact-read Consumer that freezes canonical references before a model step.
 
 ```ts cordis-catalog
 /**
+ * Replace the complete non-prose context workset for one live Session.
+ * @param agent - owning Agent whose Session records the whole value.
+ * @param workset - exact retained references selected by the browser.
+ * @param signal - optional cancellation before validation and append.
+ * @returns the detached normalized value now in force.
+ */
+async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorkset>
+
+/**
  * Resolve exact retained Revisions for Novel tools and prompt preparation.
  * @param agent - owning Agent whose Session and working directory bound the request.
  * @param references - canonical exact Asset Revision references to resolve.
@@ -169,6 +182,16 @@ abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelPro
  * @returns current typed Asset rows in deterministic project-path order.
  */
 abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSummary[]>
+
+/**
+ * Search current typed Assets without exposing paths as identity.
+ * @param project - validated Project declaration returned by this provider.
+ * @param request - bounded text query, optional type allowlist, and result cap.
+ * @param signal - optional cancellation for scan and typed model-text extraction.
+ * @param sandboxPolicy - optional write policy if catalog reconciliation must recover a journal.
+ * @returns deterministically ranked exact current Revision results.
+ */
+abstract searchAssets( project: NovelProjectSnapshot, request: SearchAssetsRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSearchResult[]>
 
 /**
  * Create one new typed authored Asset at a provider-owned safe path.
@@ -279,6 +302,24 @@ Project browser projection consuming the provider-neutral repository service.
  * @returns browser-safe current Asset descriptors.
  */
 @Remote('assets') async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]>
+
+/**
+ * Search current typed Assets and return exact current Revision references.
+ * @param agent Addressed Agent whose Session selects the Novel Project.
+ * @param request Bounded lexical query, optional exact types, and optional result limit.
+ * @param signal Caller cancellation while reconciling and searching the catalog.
+ * @returns Browser-safe matches bound to current exact Revisions.
+ */
+@Remote('search') async search( agent: Agent, request: SearchNovelAssetsRequest, signal: AbortSignal, ): Promise<NovelAssetSearchResult[]>
+
+/**
+ * Replace the Session-owned non-prose Novel context workset.
+ * @param agent Addressed Agent whose Session owns the workset event.
+ * @param workset Complete next follow-and-pinned reference value.
+ * @param signal Caller cancellation while validating and appending the update.
+ * @returns The validated whole workset retained by the Session.
+ */
+@Remote('replaceContextWorkset') async replaceContextWorkset( agent: Agent, workset: NovelContextWorksetDescriptor, signal: AbortSignal, ): Promise<NovelContextWorksetDescriptor>
 
 /**
  * Create one new typed Asset below its registered project content root.

@@ -534,6 +534,7 @@ describe('ContextTray', () => {
     }
     const search = vi.fn(async () => [result])
     const view = render(<ContextTray
+      session={{} as never} input={{} as never}
       sessionId={SID} useSessions={useSessions as never} useProjection={() => null}
       useContextFocus={hookOf(focus) as never} search={search} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
@@ -562,6 +563,7 @@ describe('ContextTray', () => {
 
     view.unmount()
     const hidden = render(<ContextTray
+      session={{} as never} input={{} as never}
       sessionId={SID}
       useSessions={((select: (state: SessionListState) => unknown) => select({
         ids: [SID], byId: { [SID]: { id: SID, agentPreset: 'code' } }, current: SID,
@@ -585,6 +587,7 @@ describe('ContextTray', () => {
     }
     const replace = vi.fn(async (value: NovelContextWorksetDescriptor) => value)
     const view = render(<ContextTray
+      session={{} as never} input={{} as never}
       sessionId={SID} useSessions={useSessions as never} useProjection={() => workset}
       useContextFocus={hookOf(focus) as never} search={vi.fn()} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
@@ -715,6 +718,47 @@ describe('Explorer', () => {
       content: { kind: 'outline', level: 'volume', body: '' },
     }) })
     expect(store.getSnapshot().document?.id).toBe(created.id)
+  })
+
+  it('renders project-level book guidance and lets the author create each singleton Asset', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const manuscript = chapter()
+    const createdBrief = chapter({
+      id: 'book-brief' as never,
+      type: 'book.brief',
+      title: zh.newBookBriefTitle,
+      projectRelativePath: 'planning/book-brief.md',
+      content: { kind: 'book-brief', body: '' },
+    })
+    const createdStyle = chapter({
+      id: 'book-style' as never,
+      type: 'book.style-profile',
+      title: zh.newBookStyleProfileTitle,
+      projectRelativePath: 'planning/book-style.md',
+      content: { kind: 'book-style-profile', body: '' },
+    })
+    const create = vi.fn(async (_sid: SessionId, request: CreateNovelAssetRequest) =>
+      request.type === 'book.brief' ? createdBrief : createdStyle)
+    const view = render(<Explorer
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
+      renderers={renderers}
+      load={async () => ({ project: { title: '白港' } as never, assets: [{ ...manuscript, content: undefined }] as never })}
+      open={async () => manuscript} create={create} onRefresh={() => () => {}} t={t}
+    />)
+    await waitFor(() => { expect(view.getByText(zh.bookGuidance)).toBeTruthy() })
+    expect(view.getByText(zh.bookGuidance).parentElement?.textContent).toContain('0 项')
+    fireEvent.click(view.getByText(`＋ ${zh.addBookBrief}`))
+    await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
+      type: 'book.brief', title: zh.newBookBriefTitle, content: { kind: 'book-brief', body: '' },
+    }) })
+    expect(view.getByText(zh.newBookBriefTitle)).toBeTruthy()
+    fireEvent.click(view.getByText(`＋ ${zh.addBookStyleProfile}`))
+    await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
+      type: 'book.style-profile', title: zh.newBookStyleProfileTitle,
+      content: { kind: 'book-style-profile', body: '' },
+    }) })
+    expect(view.getByText(zh.newBookStyleProfileTitle)).toBeTruthy()
+    expect(view.getByText(zh.bookGuidance).parentElement?.textContent).toContain('2 项')
   })
 
   it('cancels late load outcomes and ignores chapter clicks without a Session', async () => {

@@ -11,8 +11,11 @@ import {
 import NovelAssetTypeRegistry from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import {
   apply,
+  bookBriefTypeDefinition,
+  bookStyleProfileTypeDefinition,
   chapterOutlineTypeDefinition,
   parseChapterOutline,
+  parseBookBrief,
   parseOutline,
   planningOutlineTypeDefinition,
   type PlanningOutlineContent,
@@ -66,9 +69,13 @@ describe('freeform planning Host definitions', () => {
     await contribution
     expect(ctx.novelAssetTypes.get('planning.outline')).toBe(planningOutlineTypeDefinition)
     expect(ctx.novelAssetTypes.get('planning.chapter-outline')).toBe(chapterOutlineTypeDefinition)
+    expect(ctx.novelAssetTypes.get('book.brief')).toBe(bookBriefTypeDefinition)
+    expect(ctx.novelAssetTypes.get('book.style-profile')).toBe(bookStyleProfileTypeDefinition)
     await contribution.dispose()
     expect(() => ctx.novelAssetTypes.get('planning.outline')).toThrow(/no registered Host definition/u)
     expect(() => ctx.novelAssetTypes.get('planning.chapter-outline')).toThrow(/no registered Host definition/u)
+    expect(() => ctx.novelAssetTypes.get('book.brief')).toThrow(/no registered Host definition/u)
+    expect(() => ctx.novelAssetTypes.get('book.style-profile')).toThrow(/no registered Host definition/u)
     await registry.dispose()
   })
 
@@ -136,6 +143,45 @@ describe('freeform planning Host definitions', () => {
       id: AssetId('orphan'), title: '孤立章纲', content: { kind: 'chapter-outline', body: '' },
     }, 'planning/orphan.md')).toThrow(/requires novel.parent/u)
     expect(parseChapterOutline(created.serializedUtf8, 'planning/chapter-outline-created.md').parentId).toBe('chapter-1')
+  })
+
+  it('creates freeform project-singleton book brief and style Assets with exact proposal behavior', () => {
+    expect(bookBriefTypeDefinition.projectSingleton).toBe(true)
+    expect(bookStyleProfileTypeDefinition.projectSingleton).toBe(true)
+    const created = bookBriefTypeDefinition.create!({
+      id: AssetId('book-brief'),
+      title: '本书概述',
+      content: { kind: 'book-brief', body: '# 作品承诺\n\n都市悬疑连载。' },
+    }, 'planning/book-brief.md')
+    expect(parseBookBrief(created.serializedUtf8, 'planning/book-brief.md').content).toEqual({
+      kind: 'book-brief',
+      body: '# 作品承诺\n\n都市悬疑连载。',
+    })
+    const retained: AssetSnapshot = {
+      asset: {
+        id: created.parsed.id,
+        projectId: ProjectId('project-white-harbor'),
+        type: created.parsed.type,
+        projectRelativePath: 'planning/book-brief.md',
+      },
+      revisionId: RevisionId('revision-book-brief-1'),
+      serializedUtf8: created.serializedUtf8,
+      contentHash: hash(created.serializedUtf8),
+      frontmatter: created.parsed.frontmatter,
+      content: created.parsed.content,
+    }
+    const startUtf16 = bookBriefTypeDefinition.modelText(retained).indexOf('都市')
+    const operations = bookBriefTypeDefinition.prepareOperations(retained, [{
+      kind: 'replace-text', startUtf16, endUtf16: startUtf16 + 2, replacement: '近未来',
+    }])
+    const materialized = bookBriefTypeDefinition.materializeOperations(retained, operations)
+    expect(bookBriefTypeDefinition.modelText({ ...retained, content: materialized.parsed.content })).toContain('近未来悬疑连载')
+    expect(() => bookStyleProfileTypeDefinition.create!({
+      id: AssetId('book-style'),
+      title: '本书风格',
+      parentId: AssetId('outline-main'),
+      content: { kind: 'book-style-profile', body: '克制、具体。' },
+    }, 'planning/book-style.md')).toThrow(/must not declare novel.parent/u)
   })
 
   it('materializes one exact replacement and preserves unrelated Frontmatter', () => {

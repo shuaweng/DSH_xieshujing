@@ -11,7 +11,7 @@ user-invocable: true
 
 ## 工作台协议
 
-先使用当前冻结选区或章节；缺少目标时用 `novel_search` 定位，用 `novel_get` 读取精确 Revision 与文本。必要时再读取被明确引用的章纲或风格资料，不扩读无关资产。
+先使用当前冻结选区或章节；从 `novel_list` 查看项目是否已有唯一的 `book.style-profile`，存在时用 canonical reference 调 `novel_get` 读取准确 Revision，并把它作为本书已确认的风格依据。缺少目标时用 `novel_search` 定位，用 `novel_get` 读取精确 Revision 与文本。必要时再读取被明确引用的章纲或 `book.brief`，不扩读无关资产。没有风格资产时只遵循用户本轮要求，不得臆造长期偏好。
 
 试写直接回复聊天。修改正式正文只能调用 `novel_propose_changes`，范围和 operation 必须来自 `novel_get` 的 proposalInstructions。ChangeSet 未 applied 时，只能称为待审建议。
 

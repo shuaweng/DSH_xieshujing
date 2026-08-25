@@ -104,6 +104,11 @@ const testNoteType = {
   materializeOperations: () => { throw new Error('unused') },
 } as never as NovelAssetTypeDefinition
 
+const singletonTestNoteType: NovelAssetTypeDefinition = {
+  ...testNoteType,
+  projectSingleton: true,
+}
+
 function chapter(id: string, title: string, body: string, newline = '\n'): string {
   return [
     '---',
@@ -137,6 +142,34 @@ function manifest(overrides: string[] = []): string {
 }
 
 describe('LocalNovelRepository', () => {
+  it('enforces registered project-singleton Asset types for creation and authored scans', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await mkdir(join(dir, 'notes'))
+    await writeFile(join(dir, 'novel.yaml'), manifest(['  notes: notes']))
+    const ctx = await boot(dir, {}, [singletonTestNoteType])
+    const novel = await project(ctx)
+    await ctx.novelRepository.createAsset(novel, {
+      type: 'bible.test' as never,
+      title: '唯一资料',
+      content: { kind: 'test-note', text: '第一份。' } as never,
+      actor: { kind: 'user', sessionId: SessionId('session-user') },
+    })
+    await expect(ctx.novelRepository.createAsset(novel, {
+      type: 'bible.test' as never,
+      title: '重复资料',
+      content: { kind: 'test-note', text: '第二份。' } as never,
+      actor: { kind: 'user', sessionId: SessionId('session-user') },
+    })).rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
+
+    await writeFile(join(dir, 'notes', 'duplicate.note'), [
+      '---', 'novel:', '  schema: 1', '  id: duplicate-note', '  type: bible.test',
+      '  title: 外部重复', '---', '外部写入。',
+    ].join('\n'))
+    await expect(ctx.novelRepository.listAssets(novel))
+      .rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
+  })
+
   it('creates a registered typed Asset at a repository-owned path and retains its first Revision', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))

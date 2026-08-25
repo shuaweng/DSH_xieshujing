@@ -633,7 +633,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/novel-context/src/index.ts:42`](../packages/experimental/novel-context/src/index.ts)
+Source: [`packages/experimental/novel-context/src/index.ts:47`](../packages/experimental/novel-context/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-novel-repository-local"></a>
 
@@ -661,7 +661,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/novel-repository-local/src/index.ts:59`](../packages/experimental/novel-repository-local/src/index.ts)
+Source: [`packages/experimental/novel-repository-local/src/index.ts:65`](../packages/experimental/novel-repository-local/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-novel-repository-remote"></a>
 
@@ -679,7 +679,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/novel-repository-remote/src/index.ts:56`](../packages/experimental/novel-repository-remote/src/index.ts)
+Source: [`packages/experimental/novel-repository-remote/src/index.ts:65`](../packages/experimental/novel-repository-remote/src/index.ts)
 
 <a id="deepseek-aidsh-experimental-tool-agent-team"></a>
 

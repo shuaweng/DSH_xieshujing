@@ -47,6 +47,7 @@ describe('Novel Workbench Skill model snapshot', () => {
     expect(result.stderr).toBe('')
     expect(normalized).toContain('rewrite-to-style')
     expect(normalized).toContain('这是窄权限表达改写')
+    expect(normalized).toContain('book.style-profile')
     expect(normalized).toContain('NOVEL_WORKBENCH_SKILL_OK')
     const records = result.stdout.trimEnd().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
     expect(records.at(-1)).toMatchObject({ type: 'result', output: 'NOVEL_WORKBENCH_SKILL_OK' })

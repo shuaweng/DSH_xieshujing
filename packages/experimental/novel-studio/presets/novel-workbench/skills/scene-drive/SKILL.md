@@ -11,7 +11,7 @@ user-invocable: true
 
 ## 工作台协议
 
-使用当前冻结资产优先；需要补足目标时用 `novel_search` 找章纲或相关正文，用 `novel_get` 读取准确 Revision。设计蓝图和诊断直接回复聊天；用户要求把设计落成章纲时，新建用 `novel_create`、修改用 `novel_propose_changes`；用户明确要求改正文时才对精确正文范围提案。未 applied 的提案绝不等于完成修改。
+使用当前冻结资产优先；从 `novel_list` 查看是否存在 `book.brief`，存在时用 canonical reference 调 `novel_get` 读取准确 Revision，校准当前场景与全书承诺和事实边界。需要补足目标时用 `novel_search` 找章纲或相关正文，用 `novel_get` 读取准确 Revision。设计蓝图和诊断直接回复聊天；用户要求把设计落成章纲时，新建用 `novel_create`、修改用 `novel_propose_changes`；用户明确要求改正文时才对精确正文范围提案。未 applied 的提案绝不等于完成修改。
 
 ## 推进诊断
 

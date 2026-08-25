@@ -22,7 +22,7 @@ Schema version 1 requires `kind: novel-project`, integer `schema: 1`, non-empty 
 
 ## Asset and Revision authority
 
-[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) defines the provider-neutral `ctx.novelRepository` seam and effect-scoped `ctx.novelAssetTypes` registry. [`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) scans only roots and extensions claimed by installed type definitions. A chapter becomes an Asset through strict Markdown Frontmatter; [`@deepseek-ai/dsh-experimental-novel-asset-outline`](../../packages/experimental/novel-asset-outline) contributes strict YAML `planning.outline` parsing and presentation without adding outline branches to the shared repository.
+[`@deepseek-ai/dsh-experimental-novel-repository`](../../packages/experimental/novel-repository) defines the provider-neutral `ctx.novelRepository` seam and effect-scoped `ctx.novelAssetTypes` registry. [`@deepseek-ai/dsh-experimental-novel-repository-local`](../../packages/experimental/novel-repository-local) scans only roots and extensions claimed by installed type definitions. A chapter becomes an Asset through strict Markdown Frontmatter; [`@deepseek-ai/dsh-experimental-novel-asset-outline`](../../packages/experimental/novel-asset-outline) contributes freeform Markdown book/volume outlines, chapter plans, a project-singleton book brief, and a project-singleton style profile without adding type branches to the shared repository.
 
 ```markdown
 ---
@@ -36,30 +36,34 @@ novel:
 Authored manuscript body.
 ```
 
-```yaml
+```markdown
+---
 novel:
   schema: 1
   id: outline_main
   type: planning.outline
   title: Main Outline
-nodes:
-  - id: act-one
-    title: Act One
-    summary: The protagonist reaches White Harbor.
-    children: []
+  level: book
+---
+
+# Act One
+
+The protagonist reaches White Harbor.
 ```
+
+`book.brief` and `book.style-profile` use the same freeform Markdown body and exact text operations, have no semantic parent, and set the registry's generic `projectSingleton` contract. Repository scans and typed creation therefore reject a second Asset of either exact type without hard-coding their names. They live under the declared `planning` root while the explorer projects them into a logical Book group.
 
 Project files are authoritative for current authored content. `.novel/history.sqlite` retains exact immutable Revision bytes, Asset heads, ChangeSets, and apply journals; it does not replace the files as current truth. A rename preserves Asset identity, while changed external bytes create an `external-edit` Revision during reconciliation. Every human save is materialized and reparsed by the exact type definition and requires both the displayed base Revision and filesystem version to remain current.
 
 ## Selection and Session context
 
-Version one freezes either a non-empty manuscript range with UTF-16 offsets and quote hash, or one outline node with stable node id and node hash. Every selection binds to one retained Revision and never silently falls forward to mutable current content. The browser context barrier first saves a dirty typed draft, captures the resulting exact selection, then inserts a canonical `dsh-novel:` mention into the ordinary DSH Composer.
+Version one freezes a non-empty UTF-16 text range with a quote hash for every currently shipped freeform Asset type. Every selection binds to one retained Revision and never silently falls forward to mutable current content. The browser context barrier first saves a dirty typed draft, captures the resulting exact selection, then inserts a canonical `dsh-novel:` mention into the ordinary DSH Composer.
 
 [`@deepseek-ai/dsh-experimental-novel-context`](../../packages/experimental/novel-context) resolves those mentions at `agent/pre-step`. It preserves the readable human message and appends one immutable `user/message` whose source kind is `novel-context`. The message contains deterministic, explicitly untrusted JSON for the exact retained Revision, so Session replay can reconstruct what the model saw. Reference count and aggregate UTF-8 bytes are bounded, and the first Novel context binds that Session to one Project.
 
 ## Proposal, review, and recovery
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) exposes `novel_list`, `novel_create`, `novel_get`, `novel_propose_changes`, and presentation-only `novel_present` in the package-owned Preset. Catalog discovery returns canonical exact-Revision references and registered creation contracts. Exact reads use each type's deterministic model projection and proposal instructions. A proposal uses the matching definition to validate an exact type-owned text operation before durably creating a ChangeSet without changing the authored file. `novel_present` only opens or closes the whole workbench through typed tool-result metadata. The model has no apply tool and cannot claim publication.
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) exposes `novel_list`, `novel_search`, `novel_create`, `novel_get`, `novel_propose_changes`, and presentation-only `novel_present` in the package-owned Preset. Catalog discovery returns canonical exact-Revision references and registered creation contracts. Exact reads use each type's deterministic model projection and proposal instructions. Relevant Workbench Skills explicitly discover and read current `book.brief` or `book.style-profile` Revisions; each call/result is retained in Session history instead of silently injecting mutable guidance. A proposal uses the matching definition to validate an exact type-owned text operation before durably creating a ChangeSet without changing the authored file. `novel_present` only opens or closes the whole workbench through typed tool-result metadata. The model has no apply tool and cannot claim publication.
 
 The browser reads that ChangeSet into an inline Diff card. Accept or Reject is an explicit Session-owned Remote action. Apply records exact before/after bytes, hashes, authorization, and the intended result Revision as `applying` before filesystem publication. On reopen, an after-hash finalizes, a before-hash retries the guarded write, and any third hash becomes `conflicted` without overwriting the authored file.
 
@@ -73,7 +77,7 @@ Browser saves and ChangeSet applies resolve the addressed Session's sandbox poli
 
 ## Current limits
 
-The current slice supports `manuscript.chapter` and `planning.outline`, one active type-defined selection, and one type-defined operation in a single-Asset ChangeSet. Outline node creation/deletion/reordering, persistent manuscript block ids, characters, ideas, search, relations, filesystem watching, automatic rebase, multi-Asset transactions, richer views, and multi-Agent orchestration remain deferred. Reconciliation happens on repository boundaries, and the supported writer model is one Host process.
+The current slice supports `manuscript.chapter`, `planning.outline`, `planning.chapter-outline`, `book.brief`, and `book.style-profile`, one active type-defined selection, and one type-defined operation in a single-Asset ChangeSet. Finalization and draft/final learning, persistent manuscript block ids, characters, ideas, semantic search, relations, filesystem watching, automatic rebase, multi-Asset transactions, richer views, and multi-Agent orchestration remain deferred. Reconciliation happens on repository boundaries, and the supported writer model is one Host process.
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -122,6 +126,15 @@ Exact-read Consumer that freezes canonical references before a model step.
 
 ```ts cordis-catalog
 /**
+ * Replace the complete non-prose context workset for one live Session.
+ * @param agent - owning Agent whose Session records the whole value.
+ * @param workset - exact retained references selected by the browser.
+ * @param signal - optional cancellation before validation and append.
+ * @returns the detached normalized value now in force.
+ */
+async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorkset>
+
+/**
  * Resolve exact retained Revisions for Novel tools and prompt preparation.
  * @param agent - owning Agent whose Session and working directory bound the request.
  * @param references - canonical exact Asset Revision references to resolve.
@@ -169,6 +182,16 @@ abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelPro
  * @returns current typed Asset rows in deterministic project-path order.
  */
 abstract listAssets( project: NovelProjectSnapshot, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSummary[]>
+
+/**
+ * Search current typed Assets without exposing paths as identity.
+ * @param project - validated Project declaration returned by this provider.
+ * @param request - bounded text query, optional type allowlist, and result cap.
+ * @param signal - optional cancellation for scan and typed model-text extraction.
+ * @param sandboxPolicy - optional write policy if catalog reconciliation must recover a journal.
+ * @returns deterministically ranked exact current Revision results.
+ */
+abstract searchAssets( project: NovelProjectSnapshot, request: SearchAssetsRequest, signal?: AbortSignal, sandboxPolicy?: SandboxExecutionPolicy, ): Promise<readonly AssetSearchResult[]>
 
 /**
  * Create one new typed authored Asset at a provider-owned safe path.
@@ -279,6 +302,24 @@ Project browser projection consuming the provider-neutral repository service.
  * @returns browser-safe current Asset descriptors.
  */
 @Remote('assets') async assets(agent: Agent, signal: AbortSignal): Promise<NovelAssetDescriptor[]>
+
+/**
+ * Search current typed Assets and return exact current Revision references.
+ * @param agent Addressed Agent whose Session selects the Novel Project.
+ * @param request Bounded lexical query, optional exact types, and optional result limit.
+ * @param signal Caller cancellation while reconciling and searching the catalog.
+ * @returns Browser-safe matches bound to current exact Revisions.
+ */
+@Remote('search') async search( agent: Agent, request: SearchNovelAssetsRequest, signal: AbortSignal, ): Promise<NovelAssetSearchResult[]>
+
+/**
+ * Replace the Session-owned non-prose Novel context workset.
+ * @param agent Addressed Agent whose Session owns the workset event.
+ * @param workset Complete next follow-and-pinned reference value.
+ * @param signal Caller cancellation while validating and appending the update.
+ * @returns The validated whole workset retained by the Session.
+ */
+@Remote('replaceContextWorkset') async replaceContextWorkset( agent: Agent, workset: NovelContextWorksetDescriptor, signal: AbortSignal, ): Promise<NovelContextWorksetDescriptor>
 
 /**
  * Create one new typed Asset below its registered project content root.

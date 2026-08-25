@@ -648,6 +648,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-conversation QueueDock id \'queue\'',
       'client-ui-conversation TodoDock id \'todo\'',
       'client-ui-goal GoalDock id \'goal\'',
+      'experimental-novel-workbench ContextTray id \'novel-context\'',
     ],
     replaceRisk: 'none',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.input.dock\', () => ctx.slots.register(\n      { name: \'conversation.input.dock\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
@@ -1198,7 +1199,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'novel.canvas\', () => ctx.slots.register(\n      { name: \'novel.canvas\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/experimental/novel-workbench/src/client/index.ts:77',
+    source: 'packages/experimental/novel-workbench/src/client/index.ts:79',
   },
   {
     key: 'novel.explorer',
@@ -1222,7 +1223,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'novel.explorer\', () => ctx.slots.register(\n      { name: \'novel.explorer\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
-    source: 'packages/experimental/novel-workbench/src/client/index.ts:71',
+    source: 'packages/experimental/novel-workbench/src/client/index.ts:73',
   },
   {
     key: 'root',

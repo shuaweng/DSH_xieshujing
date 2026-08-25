@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-experimental-novel-asset-outline",
-  "description": "Freeform book, volume, and chapter planning Assets for the experimental Novel Studio",
+  "description": "Freeform outline, chapter-plan, and project-level book guidance Assets for the experimental Novel Studio",
   "version": "0.1.1-rc.2",
   "private": true,
   "repository": {

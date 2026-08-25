@@ -1,56 +1,15 @@
 - main:
-  - complementary "DeepSeek Harness":
-    - button "New session"
-    - button "Collapse sidebar":
-      - img
-    - button "New session":
-      - img
-      - text: New Session
-    - button "Search sessions" [expanded]:
-      - img
-    - textbox "Search sessions...": 把开头改得更克制
-    - button "Clear search":
-      - img
-    - tree "Search results":
-      - treeitem "{{workspace}} {{workspace}} 把开头改得更克制。" [selected]
-    - button "Settings":
-      - img
-      - text: Settings
-  - complementary "Agent conversation":
-    - navigation "Session hierarchy":
-      - button "{{workspace}}" [disabled]
-    - img
-    - text: 小说工作台
-    - button "Session log":
-      - text: Session log
-      - img
-    - tablist:
-      - tab "Chat" [selected]
-      - tab "Trajectory"
-    - text: 把开头改得更克制。 {{clock}}
-    - button "Copy":
-      - img
-    - article:
-      - strong: Novel Asset change proposal
-      - text: 以动作替代直接解释
-      - deletion: 她
-      - insertion: 她沉默片刻
-      - button "Reject"
-      - button "Accept change"
-    - textbox "Message the agent"
-    - button "Commands":
-      - img
-    - 'button "Access mode, current: Workspace Write"'
-    - button "Select model, current DeepSeek-V4-Flash":
-      - text: DeepSeek-V4-Flash
-      - img
-    - button "Send message" [disabled]
-    - text: 1 turns · 1 steps LLM {{duration}} · Tool call {{duration}}
   - separator "Resize conversation and workbench"
   - complementary "Novel Asset sidebar":
     - strong: Novel Workbench
     - strong: 白港
     - navigation:
+      - group:
+        - text: ›
+        - strong: Book
+        - text: 2 items
+        - button "Book Brief Brief"
+        - button "Book Style Style"
       - group:
         - text: ›
         - strong: Manuscript
@@ -60,7 +19,9 @@
         - text: ›
         - strong: Outline
         - text: 1 items
+        - button "＋ New outline"
         - button "Main Outline"
+        - button "＋ New volume outline"
   - button "Collapse Asset sidebar": ‹
   - navigation "Current novel location":
     - strong: 白港
@@ -73,5 +34,6 @@
     - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
   - text: Chapter characters：
   - strong: "12"
+  - button "Chapter plan"
   - button "Change reader skin"
   - button "Typeface and size": A

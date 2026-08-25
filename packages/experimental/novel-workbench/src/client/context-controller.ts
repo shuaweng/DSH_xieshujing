@@ -19,13 +19,18 @@ export class NovelContextFocusController {
   #snapshot: NovelContextFocus | undefined
   readonly #listeners = new Set<() => void>()
 
+  /** Return the last detached focus fact for React external-store reads. */
   readonly getSnapshot = (): NovelContextFocus | undefined => this.#snapshot
+  /** Subscribe one listener until its returned disposer is called. */
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener)
     return () => { this.#listeners.delete(listener) }
   }
 
-  /** Publish the latest detached focus fact, or clear it when no Asset is open. */
+  /**
+   * Publish the latest detached focus fact, or clear it when no Asset is open.
+   * @param value Latest visible Asset focus, or undefined when the canvas has none.
+   */
   set(value: NovelContextFocus | undefined): void {
     const next = value === undefined ? undefined : structuredClone(value)
     if (JSON.stringify(this.#snapshot) === JSON.stringify(next)) return

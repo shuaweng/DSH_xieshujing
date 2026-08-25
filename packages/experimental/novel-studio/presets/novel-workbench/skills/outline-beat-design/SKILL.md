@@ -12,7 +12,7 @@ user-invocable: true
 ## 工作台协议
 
 1. 用户本轮要求优先，其次使用已经冻结到本轮的当前资产、选区和引用。
-2. 目标不明确时，用 `novel_search` 按标题或内容定位；需要浏览目录、确认层级或创建契约时用 `novel_list`；精确内容和 Revision 必须用 `novel_get` 读取。
+2. 先从 `novel_list` 查看是否存在项目唯一的 `book.brief`；存在时用它的 canonical reference 调 `novel_get` 读取准确 Revision，作为作品承诺、全书事实和边界依据。目标仍不明确时，用 `novel_search` 按标题或内容定位；需要确认层级或创建契约时用 `novel_list`；精确内容和 Revision 必须用 `novel_get` 读取。
 3. 讨论方案、比较方向或输出诊断时直接回复聊天。新建大纲用 `novel_create`；修改既有大纲只能用 `novel_propose_changes` 创建等待审阅的 ChangeSet。
 4. 提案必须基于 `novel_get` 返回的准确 Revision、范围和 proposalInstructions。工具未明确返回 applied 时，不得声称内容已经修改。
 

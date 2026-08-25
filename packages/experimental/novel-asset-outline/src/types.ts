@@ -16,6 +16,18 @@ export interface ChapterOutlineContent {
   readonly body: string
 }
 
+/** Freeform project-level synopsis and canon boundary for one book. */
+export interface BookBriefContent {
+  readonly kind: 'book-brief'
+  readonly body: string
+}
+
+/** Freeform project-level prose, rhythm, and serial-writing guidance. */
+export interface BookStyleProfileContent {
+  readonly kind: 'book-style-profile'
+  readonly body: string
+}
+
 declare module '@deepseek-ai/dsh-experimental-novel-repository/types' {
   interface NovelAssetTypeMap {
     'planning.outline': {
@@ -26,6 +38,18 @@ declare module '@deepseek-ai/dsh-experimental-novel-repository/types' {
     }
     'planning.chapter-outline': {
       readonly content: ChapterOutlineContent
+      readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
+      readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
+      readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
+    }
+    'book.brief': {
+      readonly content: BookBriefContent
+      readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
+      readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
+      readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
+    }
+    'book.style-profile': {
+      readonly content: BookStyleProfileContent
       readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
       readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
       readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation

@@ -9,12 +9,12 @@
         - strong: Book
         - text: 2 items
         - button "Book Brief Brief"
-        - button "Book Style Style"
+        - button "White Harbor Style Style"
       - group:
         - text: ›
         - strong: Manuscript
         - text: 1 chapters
-        - button "雨夜归人 12 characters"
+        - button "雨夜归人"
       - group:
         - text: ›
         - strong: Outline
@@ -25,24 +25,13 @@
   - button "Collapse Asset sidebar": ‹
   - navigation "Current novel location":
     - strong: 白港
-    - text: 雨夜归人
+    - text: White Harbor Style
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent"
-  - article:
-    - textbox "Chapter title": 雨夜归人
-    - textbox "雨夜归人 · Chapter manuscript": 她只看着窗外。雨还在下。
-  - text: Chapter characters：
-  - strong: "12"
-  - dialog "Typeface and size":
-    - strong: Typeface and size
-    - group "Typeface":
-      - button "Song serif"
-      - button "Kai serif" [pressed]
-      - button "Sans serif"
-    - button "Decrease font size": −
-    - status: 19px
-    - button "Increase font size": ＋
-  - button "Chapter plan"
-  - button "Change reader skin"
-  - button "Typeface and size" [expanded]: A
+  - region "White Harbor Style · Book style":
+    - text: Name
+    - textbox "Name": White Harbor Style
+    - textbox "Freeform planning content":
+      - /placeholder: Freely record narrative voice, sentence rhythm, dialogue, information release, serial pacing, hooks, positive references, and explicit avoidances…
+      - text: "## Voice Restrained, concrete, and character-specific."

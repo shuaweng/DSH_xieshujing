@@ -11,7 +11,7 @@ user-invocable: true
 
 ## 工作台协议
 
-优先使用当前冻结的对白选区；目标缺失时用 `novel_search` 定位，再用 `novel_get` 读取准确 Revision。只读取理解这场交流所需的上下文，不扩展到整本书。若用户随后要求改写，转用 `rewrite-to-style`；场景本身没有冲突时转用 `scene-drive`。
+优先使用当前冻结的对白选区；从 `novel_list` 查看是否存在 `book.style-profile`，存在时用 canonical reference 调 `novel_get` 读取准确 Revision，提取其中与对白声音、直接程度和节奏有关的规则。目标缺失时用 `novel_search` 定位，再用 `novel_get` 读取准确 Revision。只读取理解这场交流所需的上下文，不扩展到整本书。若用户随后要求改写，转用 `rewrite-to-style`；场景本身没有冲突时转用 `scene-drive`。
 
 ## 六项检查
 

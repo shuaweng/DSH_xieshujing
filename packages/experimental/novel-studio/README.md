@@ -8,7 +8,7 @@ This experimental package is the explicit Novel Studio Profile bundle. It compos
 
 ## Behavior
 
-- Add this bundle after the existing base and Web App bundles. It inserts the Host Asset-type registry, the independent `planning.outline` Host/Client contribution, and `novel-repository-local`, followed by context, Remote, the separate Client adapter, and `novel-workbench`.
+- Add this bundle after the existing base and Web App bundles. It inserts the Host Asset-type registry, the independent freeform planning/guidance Host/Client contribution, and `novel-repository-local`, followed by context, Remote, the separate Client adapter, and `novel-workbench`.
 - The ordinary `ui-layout` remains the sole root and layout-service owner. Novel Workbench contributes a preset-scoped `novel` surface through its selector-routed `shell.workbench` chain, so native DSH sidebar, conversation, details, settings, model selection, tool rendering, and Session services stay authoritative.
 - A package-owned `novel-workbench` Agent Preset combines a Novel persona with `novel_list`, `novel_search`, `novel_create`, `novel_get`, `novel_propose_changes`, and `novel_present`; generic shell and filesystem mutation tools are absent.
 - The same Preset mounts six package-owned, self-contained writing Skills through the standard on-demand `skill` tool: outline/beat design, chapter execution, style rewrite, style audit, scene drive, and dialogue diagnostics. Skills teach method but cannot widen Novel tool authority.
@@ -42,7 +42,7 @@ pnpm dsh --profile novel-studio --port 3080
 
 #### What the model sees
 
-The model sees the Novel persona, six stable Novel tool schemas, the standard `skill` loader and its compact catalog, plus exact material chosen explicitly or retained in the visible Context Tray. It loads one of the six shipped writing methods only when the task needs it. Browser layout state never enters model context; Asset discovery occurs only through Novel tools.
+The model sees the Novel persona, six stable Novel tool schemas, the standard `skill` loader and its compact catalog, plus exact material chosen explicitly or retained in the visible Context Tray. It loads one of the six shipped writing methods only when the task needs it. For relevant outline/writing/review tasks, the persona or loaded method explicitly discovers and reads the current exact Revision of a present `book.brief` or `book.style-profile`; these are visible tool reads, not hidden always-on context. Browser layout state never enters model context.
 
 #### Token effect
 
@@ -55,7 +55,8 @@ The Preset composition and Skill catalog are stable across page and selection ch
 ## Known Limitations and Deferred Work
 
 - **No shipped Profile entry** — callers must explicitly install this bundle after base and Web App; there is no built-in `novel-studio` CLI template or route switcher.
-- **MVP asset scope** — the Host and Client registries install `manuscript.chapter` and `planning.outline`, one active type-defined selection, and one-operation ChangeSets. Characters, ideas, relations, and structural outline edits remain deferred.
+- **Current asset scope** — the Host and Client registries install `manuscript.chapter`, freeform `planning.outline`, chapter-bound `planning.chapter-outline`, and project-singleton `book.brief` / `book.style-profile`, with one active type-defined selection and one-operation ChangeSets. Characters, ideas, relations, and structural outline edits remain deferred.
+- **No finalization or learning loop** — book guidance records explicit author-confirmed rules only. Marking a Revision final and learning preferences from draft/final diffs are deferred.
 - **No semantic search or live file events** — bounded lexical Asset search is shipped; relations, semantic ranking, file watching, and browser invalidation streams are deferred.
 - **First Skill tranche only** — six high-frequency writing and diagnostic methods are adapted. The legacy direct-file Novel Skills are intentionally not mounted in the Workbench Preset, and additional methods will be migrated against Asset semantics as their target types land.
 - **No orchestration** — Role Profiles, Task Blackboard, `novel_delegate`, and multi-Agent workflows are deferred.

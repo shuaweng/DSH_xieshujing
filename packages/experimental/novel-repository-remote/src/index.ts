@@ -139,7 +139,13 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     return assets
   }
 
-  /** Search current typed Assets and return exact current Revision references. */
+  /**
+   * Search current typed Assets and return exact current Revision references.
+   * @param agent Addressed Agent whose Session selects the Novel Project.
+   * @param request Bounded lexical query, optional exact types, and optional result limit.
+   * @param signal Caller cancellation while reconciling and searching the catalog.
+   * @returns Browser-safe matches bound to current exact Revisions.
+   */
   @Remote('search')
   async search(
     agent: Agent,
@@ -173,7 +179,13 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     return descriptors
   }
 
-  /** Replace the Session-owned non-prose Novel context workset. */
+  /**
+   * Replace the Session-owned non-prose Novel context workset.
+   * @param agent Addressed Agent whose Session owns the workset event.
+   * @param workset Complete next follow-and-pinned reference value.
+   * @param signal Caller cancellation while validating and appending the update.
+   * @returns The validated whole workset retained by the Session.
+   */
   @Remote('replaceContextWorkset')
   async replaceContextWorkset(
     agent: Agent,

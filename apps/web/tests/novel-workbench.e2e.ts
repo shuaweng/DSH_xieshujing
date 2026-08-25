@@ -35,6 +35,7 @@ import { newEnglishPage, saveFailureShot } from './support.ts'
 const SNAPSHOT_DIR = fileURLToPath(new URL('./snapshots/novel-workbench', import.meta.url))
 const PROPOSED_EXPECTED = join(SNAPSHOT_DIR, 'proposed.expected.md')
 const APPLIED_EXPECTED = join(SNAPSHOT_DIR, 'applied-and-context.expected.md')
+const GUIDANCE_EXPECTED = join(SNAPSHOT_DIR, 'guidance.expected.md')
 const OUTLINE_EXPECTED = join(SNAPSHOT_DIR, 'outline.expected.md')
 const NOVEL_OVERLAY = fileURLToPath(new URL('../../../packages/experimental/novel-studio/cordis.patch.yml', import.meta.url))
 const NOVEL_PRESETS = fileURLToPath(new URL('../../../packages/experimental/novel-studio/presets', import.meta.url))
@@ -148,21 +149,47 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       '---',
       '她没有再解释。雨还在下。',
     ].join('\n'))
-    await writeFile(join(scaffold.workspaceCwd, 'planning', 'main-outline.yaml'), [
+    await writeFile(join(scaffold.workspaceCwd, 'planning', 'main-outline.md'), [
+      '---',
       'novel:',
       '  schema: 1',
       '  id: outline-white-harbor-main',
       '  type: planning.outline',
       '  title: Main Outline',
-      'nodes:',
-      '  - id: act-one',
-      '    title: Act One',
-      '    summary: The protagonist reaches White Harbor.',
-      '    children:',
-      '      - id: opening',
-      '        title: Opening',
-      '        goal: Establish the rain-soaked harbor.',
-      '        children: []',
+      '  level: book',
+      '---',
+      '',
+      '# Act One',
+      '',
+      'Opening: The protagonist reaches White Harbor.',
+      '',
+    ].join('\n'))
+    await writeFile(join(scaffold.workspaceCwd, 'planning', 'book-brief.md'), [
+      '---',
+      'novel:',
+      '  schema: 1',
+      '  id: brief-white-harbor',
+      '  type: book.brief',
+      '  title: Book Brief',
+      '---',
+      '',
+      '# Reader promise',
+      '',
+      'A restrained harbor mystery.',
+      '',
+    ].join('\n'))
+    await writeFile(join(scaffold.workspaceCwd, 'planning', 'book-style.md'), [
+      '---',
+      'novel:',
+      '  schema: 1',
+      '  id: style-white-harbor',
+      '  type: book.style-profile',
+      '  title: Book Style',
+      '---',
+      '',
+      '# Voice',
+      '',
+      'Restrained, concrete, and character-specific.',
       '',
     ].join('\n'))
 
@@ -190,11 +217,6 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
-    try {
-      await page.locator('[data-novel-workbench]').waitFor({ timeout: 30_000 })
-    } catch (cause) {
-      throw new Error(`Novel Workbench did not mount; page errors: ${JSON.stringify(tripwire.pageErrors)}; body: ${JSON.stringify(await page.locator('body').innerText())}`, { cause })
-    }
     const searchButton = page.getByRole('button', { name: 'Search sessions' })
     await searchButton.click()
     const search = page.getByRole('textbox', { name: 'Search sessions...', exact: true })
@@ -203,6 +225,8 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     await result.waitFor({ timeout: 30_000 })
     await result.click()
     try {
+      await page.getByRole('button', { name: 'Open Novel Workbench' }).click()
+      await page.locator('[data-novel-workbench]').waitFor({ timeout: 30_000 })
       await page.getByRole('textbox', { name: '第一章 · Chapter manuscript' }).waitFor({ timeout: 30_000 })
       await page.getByText('以动作替代直接解释', { exact: true }).waitFor({ timeout: 30_000 })
     } catch (cause) {
@@ -235,7 +259,7 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     await renamedEditor.press('Home')
     for (let offset = 0; offset < authored.length; offset += 1) await renamedEditor.press('Shift+ArrowRight')
     await page.getByRole('button', { name: 'Reference selection to Agent' }).click()
-    const composer = page.getByRole('complementary', { name: 'Agent conversation' }).locator('textarea')
+    const composer = page.getByRole('textbox', { name: 'Message the agent' })
     try {
       await expect.poll(() => composer.inputValue()).toBe('@[她只看着窗外。雨还在…] ')
     } catch (cause) {
@@ -260,9 +284,9 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     await page.getByRole('separator', { name: 'Resize conversation and workbench' }).press('ArrowRight')
     await expect.poll(() => page.getByRole('separator', { name: 'Resize conversation and workbench' }).getAttribute('aria-valuenow')).toBe('426')
 
-    await page.getByRole('button', { name: 'Collapse Asset sidebar' }).click()
+    await page.getByRole('button', { name: 'Collapse Asset sidebar' }).press('Enter')
     await page.getByRole('button', { name: 'Expand Asset sidebar' }).waitFor()
-    await page.getByRole('button', { name: 'Expand Asset sidebar' }).click()
+    await page.getByRole('button', { name: 'Expand Asset sidebar' }).press('Enter')
     await page.getByRole('button', { name: 'Collapse Asset sidebar' }).waitFor()
 
     expect(await readFile(join(scaffold.workspaceCwd, 'manuscript', 'chapter-1.md'), 'utf8'))
@@ -275,19 +299,50 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       MODE,
     )
 
-    await page.getByRole('button', { name: 'Main Outline', exact: true }).click()
-    await page.getByRole('region', { name: 'Main Outline · Structured outline' }).waitFor()
-    await page.getByRole('button', { name: 'Opening', exact: true }).click()
-    await page.getByRole('textbox', { name: 'Outline title' }).fill('White Harbor Story Outline')
-    await page.getByRole('textbox', { name: 'Summary · optional' }).fill('Open with hunger, rain, and an uncertain arrival.')
+    await page.getByRole('button', { name: 'Book Style Style', exact: true }).click()
+    await page.getByRole('region', { name: 'Book Style · Book style' }).waitFor()
+    const styleEditor = page.getByRole('textbox', { name: 'Freeform planning content' })
+    await page.getByRole('textbox', { name: 'Name' }).fill('White Harbor Style')
+    await styleEditor.fill('## Voice\n\nRestrained, concrete, and character-specific.')
     await page.getByRole('button', { name: 'Save', exact: true }).click()
     await page.getByText('Saved', { exact: true }).waitFor()
     await composer.fill('')
+    await styleEditor.evaluate((element: HTMLTextAreaElement) => {
+      element.focus()
+      element.setSelectionRange(0, 0)
+    })
+    for (let offset = 0; offset < 18; offset += 1) await styleEditor.press('Shift+ArrowRight')
+    const styleReferenceButton = page.getByRole('button', { name: 'Reference selection to Agent' })
+    await expect.poll(() => styleReferenceButton.isEnabled()).toBe(true)
+    await styleReferenceButton.click()
+    await expect.poll(() => composer.inputValue()).toBe('@[## Voice R…] ')
+    const styleFile = await readFile(join(scaffold.workspaceCwd, 'planning', 'book-style.md'), 'utf8')
+    expect(styleFile).toContain('title: White Harbor Style')
+    expect(styleFile).toContain('Restrained, concrete, and character-specific.')
+    await compareOrRefreshGolden(
+      GUIDANCE_EXPECTED,
+      await captureNovelWorkbench(page, scaffold.workspaceCwd),
+      MODE,
+    )
+
+    await page.getByRole('button', { name: 'Main Outline', exact: true }).click()
+    await page.getByRole('region', { name: 'Main Outline · Freeform outline' }).waitFor()
+    const outlineEditor = page.getByRole('textbox', { name: 'Freeform planning content' })
+    await page.getByRole('textbox', { name: 'Name' }).fill('White Harbor Story Outline')
+    await outlineEditor.fill('# Act One\n\nOpening: Open with hunger, rain, and an uncertain arrival.')
+    await page.getByRole('button', { name: 'Save', exact: true }).click()
+    await page.getByText('Saved', { exact: true }).waitFor()
+    await composer.fill('')
+    await outlineEditor.evaluate((element: HTMLTextAreaElement) => {
+      element.focus()
+      element.setSelectionRange(0, 0)
+    })
+    for (let offset = 0; offset < 18; offset += 1) await outlineEditor.press('Shift+ArrowRight')
     await page.getByRole('button', { name: 'Reference selection to Agent' }).click()
-    await expect.poll(() => composer.inputValue()).toBe('@[Opening] ')
-    const outlineFile = await readFile(join(scaffold.workspaceCwd, 'planning', 'main-outline.yaml'), 'utf8')
+    await expect.poll(() => composer.inputValue()).toBe('@[# Act One …] ')
+    const outlineFile = await readFile(join(scaffold.workspaceCwd, 'planning', 'main-outline.md'), 'utf8')
     expect(outlineFile).toContain('title: White Harbor Story Outline')
-    expect(outlineFile).toContain('summary: Open with hunger, rain, and an uncertain arrival.')
+    expect(outlineFile).toContain('Opening: Open with hunger, rain, and an uncertain arrival.')
     await compareOrRefreshGolden(
       OUTLINE_EXPECTED,
       await captureNovelWorkbench(page, scaffold.workspaceCwd),
@@ -295,10 +350,11 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     )
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'applied-and-context.expected.md',
+      'guidance.expected.md',
       'outline.expected.md',
       'proposed.expected.md',
     ])
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
-  }, 60_000)
+  }, 120_000)
 })

@@ -13,17 +13,34 @@ type OutlineTranslate = TranslateNS<'novel-asset-outline'>
 
 /** Create the freeform book/volume outline renderer. */
 export function createPlanningOutlineRenderer(t: OutlineTranslate): NovelAssetRendererDefinition {
-  return freeformRenderer('planning.outline', t('outlineEditor'), outlineContent, t)
+  return freeformRenderer('planning.outline', t('outlineEditor'), t('freeformPlaceholder'), outlineContent, t)
 }
 
 /** Create the freeform chapter-plan renderer used by proposal review and direct navigation. */
 export function createChapterOutlineRenderer(t: OutlineTranslate): NovelAssetRendererDefinition {
-  return freeformRenderer('planning.chapter-outline', t('chapterOutlineEditor'), chapterContent, t)
+  return freeformRenderer('planning.chapter-outline', t('chapterOutlineEditor'), t('freeformPlaceholder'), chapterContent, t)
+}
+
+/** Create the project-singleton book-brief renderer. */
+export function createBookBriefRenderer(t: OutlineTranslate): NovelAssetRendererDefinition {
+  return freeformRenderer('book.brief', t('bookBriefEditor'), t('bookBriefPlaceholder'), bookBriefContent, t)
+}
+
+/** Create the project-singleton style-profile renderer. */
+export function createBookStyleProfileRenderer(t: OutlineTranslate): NovelAssetRendererDefinition {
+  return freeformRenderer(
+    'book.style-profile',
+    t('bookStyleProfileEditor'),
+    t('bookStyleProfilePlaceholder'),
+    bookStyleProfileContent,
+    t,
+  )
 }
 
 function freeformRenderer(
-  type: 'planning.outline' | 'planning.chapter-outline',
+  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile',
   label: string,
+  placeholder: string,
   decode: (value: NovelWireValue) => {
     readonly body: string
     readonly withBody: (body: string) => NovelWireValue
@@ -35,7 +52,7 @@ function freeformRenderer(
     editorLabel: () => label,
     renderEditor(props) {
       const value = decode(props.content)
-      return <FreeformEditor {...props} body={value.body} contentOf={value.withBody} t={t} />
+      return <FreeformEditor {...props} body={value.body} contentOf={value.withBody} placeholder={placeholder} t={t} />
     },
     renderDiff(before, operations) {
       const body = decode(before).body
@@ -56,13 +73,19 @@ function freeformRenderer(
 }
 
 function FreeformEditor({
-  body, title, ariaLabel, onContentChange, onTitleChange, onSelectionChange, contentOf, t,
+  body, title, ariaLabel, onContentChange, onTitleChange, onSelectionChange, contentOf, placeholder, t,
 }: NovelAssetEditorProps & {
   readonly body: string
   readonly contentOf: (body: string) => NovelWireValue
+  readonly placeholder: string
   readonly t: OutlineTranslate
 }) {
   const editor = useRef<HTMLTextAreaElement>(null)
+  const captureSelection = (target: HTMLTextAreaElement) => {
+    const startUtf16 = target.selectionStart
+    const endUtf16 = target.selectionEnd
+    onSelectionChange(endUtf16 <= startUtf16 ? undefined : { kind: 'text-range', startUtf16, endUtf16 })
+  }
   useLayoutEffect(() => {
     if (editor.current === null) return
     editor.current.style.height = '0px'
@@ -78,14 +101,12 @@ function FreeformEditor({
       className={css.editor}
       aria-label={t('freeformBody')}
       value={body}
-      placeholder={t('freeformPlaceholder')}
+      placeholder={placeholder}
       spellCheck
       onChange={(event) => { onContentChange(contentOf(event.target.value)) }}
-      onSelect={(event) => {
-        const startUtf16 = event.currentTarget.selectionStart
-        const endUtf16 = event.currentTarget.selectionEnd
-        onSelectionChange(endUtf16 <= startUtf16 ? undefined : { kind: 'text-range', startUtf16, endUtf16 })
-      }}
+      onSelect={(event) => { captureSelection(event.currentTarget) }}
+      onKeyUp={(event) => { captureSelection(event.currentTarget) }}
+      onPointerUp={(event) => { captureSelection(event.currentTarget) }}
     />
   </section>
 }
@@ -102,6 +123,24 @@ function chapterContent(value: NovelWireValue): { body: string; withBody: (body:
     throw new Error('novel planning renderer: incompatible chapter-outline content')
   }
   return { body: value['body'], withBody: body => ({ kind: 'chapter-outline', body }) }
+}
+
+function bookBriefContent(value: NovelWireValue): { body: string; withBody: (body: string) => NovelWireValue } {
+  return exactFreeformContent(value, 'book-brief')
+}
+
+function bookStyleProfileContent(value: NovelWireValue): { body: string; withBody: (body: string) => NovelWireValue } {
+  return exactFreeformContent(value, 'book-style-profile')
+}
+
+function exactFreeformContent(
+  value: NovelWireValue,
+  kind: 'book-brief' | 'book-style-profile',
+): { body: string; withBody: (body: string) => NovelWireValue } {
+  if (!isRecord(value) || value['kind'] !== kind || typeof value['body'] !== 'string') {
+    throw new Error(`novel planning renderer: incompatible ${kind} content`)
+  }
+  return { body: value['body'], withBody: body => ({ kind, body }) }
 }
 
 function textOperation(operations: readonly NovelWireValue[]): { start: number; end: number; replacement: string } {

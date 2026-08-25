@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 import { fireEvent, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { createChapterOutlineRenderer, createPlanningOutlineRenderer, zh } from '../src/client/index.ts'
+import {
+  createBookBriefRenderer,
+  createBookStyleProfileRenderer,
+  createChapterOutlineRenderer,
+  createPlanningOutlineRenderer,
+  zh,
+} from '../src/client/index.ts'
 
 const t = ((key: keyof typeof zh) => zh[key]) as never
 
@@ -28,6 +34,9 @@ describe('freeform planning Client renderers', () => {
       selectionEnd: { configurable: true, value: 8 },
     })
     fireEvent.select(editor)
+    expect(onSelectionChange).toHaveBeenCalledWith({ kind: 'text-range', startUtf16: 6, endUtf16: 8 })
+    onSelectionChange.mockClear()
+    fireEvent.keyUp(editor, { key: 'ArrowRight' })
     expect(onSelectionChange).toHaveBeenCalledWith({ kind: 'text-range', startUtf16: 6, endUtf16: 8 })
     fireEvent.change(view.getByRole('textbox', { name: zh.outlineTitle }), { target: { value: '新总纲' } })
     expect(onTitleChange).toHaveBeenCalledWith('新总纲')
@@ -58,5 +67,32 @@ describe('freeform planning Client renderers', () => {
     }))
     const chapterEditor = chapterView.container.querySelector('textarea')
     expect(chapterEditor?.value).toBe('自由章纲')
+  })
+
+  it('edits book guidance with distinct freeform renderers', () => {
+    const onBriefChange = vi.fn()
+    const brief = render(createBookBriefRenderer(t).renderEditor({
+      document: {} as never,
+      title: '本书概述',
+      content: { kind: 'book-brief', body: '旧概述' },
+      ariaLabel: '本书概述',
+      onContentChange: onBriefChange,
+      onTitleChange: vi.fn(),
+      onSelectionChange: vi.fn(),
+    }))
+    const briefEditor = brief.getByPlaceholderText(zh.bookBriefPlaceholder)
+    fireEvent.change(briefEditor, { target: { value: '新概述' } })
+    expect(onBriefChange).toHaveBeenCalledWith({ kind: 'book-brief', body: '新概述' })
+
+    const style = render(createBookStyleProfileRenderer(t).renderEditor({
+      document: {} as never,
+      title: '本书风格',
+      content: { kind: 'book-style-profile', body: '克制、具体。' },
+      ariaLabel: '本书风格',
+      onContentChange: vi.fn(),
+      onTitleChange: vi.fn(),
+      onSelectionChange: vi.fn(),
+    }))
+    expect(style.getByPlaceholderText(zh.bookStyleProfilePlaceholder)).toBeTruthy()
   })
 })

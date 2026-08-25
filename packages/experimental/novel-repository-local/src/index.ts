@@ -365,6 +365,7 @@ export class LocalNovelRepository extends NovelRepository {
         || materialized.parsed.parentId !== request.parentId) {
         throw new NovelRepositoryError('novel repository: Asset creator changed identity, type, or parent', 'NOVEL_ASSET_INVALID')
       }
+      validateProjectSingleton(materialized.parsed, definition, catalog)
       validateParentRelationship(materialized.parsed, definition, catalog)
       const outcome = await this.ctx.fs.writeText(
         target,
@@ -1124,7 +1125,25 @@ function validateCatalogRelationships(
   registry: Context['novelAssetTypes'],
 ): void {
   for (const observed of catalog.values()) {
-    validateParentRelationship(observed.parsed, registry.get(observed.parsed.type), catalog)
+    const definition = registry.get(observed.parsed.type)
+    validateProjectSingleton(observed.parsed, definition, catalog)
+    validateParentRelationship(observed.parsed, definition, catalog)
+  }
+}
+
+function validateProjectSingleton(
+  parsed: ParsedNovelAsset,
+  definition: ReturnType<Context['novelAssetTypes']['get']>,
+  catalog: ReadonlyMap<AssetId, ObservedAsset>,
+): void {
+  if (definition.projectSingleton !== true) return
+  for (const candidate of catalog.values()) {
+    if (candidate.parsed.id !== parsed.id && sameAssetType(candidate.parsed.type, parsed.type)) {
+      throw new NovelRepositoryError(
+        `novel repository: project has multiple ${JSON.stringify(parsed.type)} Assets`,
+        'NOVEL_ASSET_INVALID',
+      )
+    }
   }
 }
 

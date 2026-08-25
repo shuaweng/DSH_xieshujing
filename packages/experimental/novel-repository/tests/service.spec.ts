@@ -186,6 +186,7 @@ describe('NovelAssetTypeRegistry', () => {
       { ...definition, type: 'Chapter' },
       { ...definition, extensions: [] },
       { ...definition, requiredContentRoot: 'yes' },
+      { ...definition, projectSingleton: 'yes' },
       { ...definition, model: { description: '', proposalInstructions: 'x' } },
       { ...definition, parse: undefined },
     ]) {

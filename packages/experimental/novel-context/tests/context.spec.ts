@@ -201,7 +201,8 @@ describe('Novel context preparation', () => {
         assetId: 'chapter-context', revisionId, origin: 'message', mode: 'explicit',
       }],
     })
-    expect(source?.kind === 'novel-context' ? source.manifestId : '').toMatch(/^sha256:[a-f0-9]{64}$/u)
+    expect(source?.kind === 'novel-context' && source.version === 2 ? source.manifestId : '')
+      .toMatch(/^sha256:[a-f0-9]{64}$/u)
     const modelText = decision.messages[1]?.content[0]
     expect(modelText?.type === 'text' ? modelText.text : '').toContain('"text":"下雨"')
     expect(Object.isFrozen(decision.messages[1])).toBe(true)

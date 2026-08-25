@@ -376,7 +376,11 @@ function isWorkset(value: unknown): value is NovelContextWorkset {
   return valid && follows <= 1
 }
 
-/** Pure latest-value fold shared by Host preparation and Session Projection. */
+/**
+ * Fold durable workset events with latest-value semantics.
+ * @param events Session events inspected by Host preparation or Projection replay.
+ * @returns The latest valid Novel context workset, or null before any valid update.
+ */
 export function foldNovelContextWorkset(events: readonly { readonly type: string; readonly data: unknown }[]): NovelContextWorkset | null {
   let current: NovelContextWorkset | null = null
   for (const event of events) {
