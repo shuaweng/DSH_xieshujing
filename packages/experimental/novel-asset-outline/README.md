@@ -95,5 +95,5 @@ Switching between Book, Volume, and Chapter Outline surfaces does not change the
 - **Single exact replacement** — multi-range proposals, automatic rebase, and structural merge are deferred.
 - **Two outline levels only** — nested acts or custom hierarchy levels should be expressed inside freeform Markdown until an evidence-backed semantic need appears.
 - **One Chapter Outline per chapter** — alternatives and branch plans are deferred.
-- **No finalized-preference learning** — guidance changes remain ordinary human edits or reviewable ChangeSets. Marking a Revision final, learning from draft/final diffs, and promoting durable preferences are deferred.
+- **Only reviewed finalized-preference learning** — an accepted draft/final candidate is appended to `book.style-profile` through a ChangeSet. Automatic promotion, deduplication across many finalizations, and preference retrieval are deferred.
 - **Lexical discovery only** — planning and guidance Assets participate in provider-neutral title/model-text search; semantic and relation-scoped search are deferred.

@@ -9,6 +9,9 @@ import type {
   CaptureNovelSelectionRequest,
   CreateNovelAssetRequest,
   NovelAnalysisReportDescriptor,
+  NovelPreferenceCandidateDescriptor,
+  NovelRevisionFinalizationDescriptor,
+  FinalizeNovelChapterDescriptor,
   NovelAssetDescriptor,
   NovelAssetDocument,
   NovelAssetRevisionDescriptor,
@@ -31,6 +34,13 @@ export interface CanvasInjected {
   ) => Promise<readonly NovelAnalysisReportDescriptor[]>
   scanNoAi: (sessionId: SessionId, assetId: string, revisionId: string) => Promise<NovelAnalysisReportDescriptor>
   reviewChapter: (sessionId: SessionId, assetId: string, revisionId: string) => Promise<NovelAnalysisReportDescriptor>
+  finalizations: (sessionId: SessionId, assetId: string) => Promise<readonly NovelRevisionFinalizationDescriptor[]>
+  preferenceCandidates: (
+    sessionId: SessionId, assetId: string, revisionId: string,
+  ) => Promise<readonly NovelPreferenceCandidateDescriptor[]>
+  finalizeChapter: (sessionId: SessionId, assetId: string, revisionId: string) => Promise<FinalizeNovelChapterDescriptor>
+  acceptPreference: (sessionId: SessionId, candidateId: string) => Promise<NovelPreferenceCandidateDescriptor>
+  rejectPreference: (sessionId: SessionId, candidateId: string) => Promise<NovelPreferenceCandidateDescriptor>
   create: (sessionId: SessionId, request: CreateNovelAssetRequest) => Promise<NovelAssetDocument>
   save: (sessionId: SessionId, request: SaveNovelAssetRequest) => Promise<NovelAssetDocument>
   capture: (sessionId: SessionId, request: CaptureNovelSelectionRequest) => Promise<NovelSelectionDescriptor>
@@ -82,6 +92,7 @@ const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 /** One exact-revision typed Asset editor with an optional chapter-local planning surface. */
 export function Canvas({
   useSessions, useStore, actions, renderers, open, revisions, analysisReports, scanNoAi, reviewChapter,
+  finalizations, preferenceCandidates, finalizeChapter, acceptPreference, rejectPreference,
   create, save, capture, appendReference,
   reportContextFocus = ignoreContextFocus, t,
 }: CanvasProps) {
@@ -94,6 +105,12 @@ export function Canvas({
   const [reports, setReports] = useState<readonly NovelAnalysisReportDescriptor[]>([])
   const [analysisBusy, setAnalysisBusy] = useState(false)
   const [analysisError, setAnalysisError] = useState<string>()
+  const [finalizationItems, setFinalizationItems] = useState<readonly NovelRevisionFinalizationDescriptor[]>([])
+  const [preferenceCandidate, setPreferenceCandidate] = useState<NovelPreferenceCandidateDescriptor>()
+  const [preferenceOpen, setPreferenceOpen] = useState(false)
+  const [preferenceBusy, setPreferenceBusy] = useState(false)
+  const [preferenceError, setPreferenceError] = useState<string>()
+  const [preferenceNotice, setPreferenceNotice] = useState<string>()
   const [statusHost, setStatusHost] = useState<Element | null>(null)
   const analysisEpoch = useRef(0)
 
@@ -118,6 +135,13 @@ export function Canvas({
   }, [state.document?.id, state.document?.type])
 
   useEffect(() => {
+    setPreferenceOpen(false)
+    setPreferenceCandidate(undefined)
+    setPreferenceError(undefined)
+    setPreferenceNotice(undefined)
+  }, [state.document?.id, state.document?.revisionId])
+
+  useEffect(() => {
     if (sessionId === undefined || state.document === undefined) { setRevisionItems([]); return }
     let live = true
     void revisions(sessionId, state.document.id).then((items) => {
@@ -125,6 +149,22 @@ export function Canvas({
     }).catch((cause: unknown) => { if (live) actions.fail(errorMessage(cause)) })
     return () => { live = false }
   }, [actions, revisions, sessionId, state.document?.id, state.document?.revisionId])
+
+  useEffect(() => {
+    if (sessionId === undefined || state.document?.type !== 'manuscript.chapter') {
+      setFinalizationItems([]); setPreferenceCandidate(undefined); return
+    }
+    let live = true
+    void Promise.all([
+      finalizations(sessionId, state.document.id),
+      preferenceCandidates(sessionId, state.document.id, state.document.revisionId),
+    ]).then(([finalized, candidates]) => {
+      if (!live) return
+      setFinalizationItems(finalized)
+      setPreferenceCandidate(candidates[0])
+    }).catch((cause: unknown) => { if (live) setPreferenceError(errorMessage(cause)) })
+    return () => { live = false }
+  }, [finalizations, preferenceCandidates, sessionId, state.document?.id, state.document?.revisionId, state.document?.type])
 
   useEffect(() => {
     if (analysisMode === undefined || sessionId === undefined || state.document === undefined) return
@@ -227,6 +267,42 @@ export function Canvas({
     finally { setAnalysisBusy(false) }
   }
 
+  const markFinal = async () => {
+    if (sessionId === undefined || state.document?.type !== 'manuscript.chapter') return
+    setPreferenceBusy(true)
+    setPreferenceError(undefined)
+    setPreferenceNotice(undefined)
+    try {
+      const document = await persist()
+      if (document === undefined) return
+      const result = await finalizeChapter(sessionId, document.id, document.revisionId)
+      setFinalizationItems(previous => previous.some(item => item.revisionId === result.finalization.revisionId)
+        ? previous : [result.finalization, ...previous])
+      setPreferenceCandidate(result.candidate)
+      setPreferenceNotice(result.noCandidateReason === undefined ? undefined : t(
+        result.noCandidateReason === 'no-agent-source' ? 'preferenceNoAgentSource'
+          : result.noCandidateReason === 'no-author-diff' ? 'preferenceNoAuthorDiff'
+            : 'preferenceMissingStyle',
+      ))
+      setPreferenceOpen(true)
+    } catch (cause: unknown) { setPreferenceError(errorMessage(cause)); setPreferenceOpen(true) }
+    finally { setPreferenceBusy(false) }
+  }
+
+  const decidePreference = async (decision: 'accept' | 'reject') => {
+    if (sessionId === undefined || preferenceCandidate === undefined) return
+    setPreferenceBusy(true)
+    setPreferenceError(undefined)
+    try {
+      const next = decision === 'accept'
+        ? await acceptPreference(sessionId, preferenceCandidate.id)
+        : await rejectPreference(sessionId, preferenceCandidate.id)
+      setPreferenceCandidate(next)
+      if (decision === 'accept') actions.refresh()
+    } catch (cause: unknown) { setPreferenceError(errorMessage(cause)) }
+    finally { setPreferenceBusy(false) }
+  }
+
   if (state.document === undefined || state.draft === undefined) {
     return <div className={css.empty}>{state.error ?? t('noChapter')}</div>
   }
@@ -235,6 +311,7 @@ export function Canvas({
   catch (error: unknown) { return <div className={css.empty}>{errorMessage(error)}</div> }
   const reader = renderer.reader
   const title = state.titleDraft ?? state.document.title
+  const isFinal = finalizationItems.some(item => item.revisionId === state.document?.revisionId)
   const editorLabel = renderer.editorLabel?.() ?? t('editor')
   const characterCount = reader?.countCharacters(state.draft)
   const controls = <ReaderControls
@@ -259,11 +336,19 @@ export function Canvas({
           </option>)}
         </select>}
         {historical && <span className={css.historicalBadge}>{t('historicalReadOnly')}</span>}
+        {isFinal && <span className={css.finalBadge}>{t('finalized')}</span>}
       </nav>
       <div className={css.editorActions}>
         {state.error === undefined ? <span>{busy ? t('saving') : state.dirty ? '' : t('saved')}</span>
           : <span className={css.error} role="alert">{state.error}</span>}
         <button type="button" disabled={!state.dirty || busy || historical} onClick={() => { void persist() }}>{t('save')}</button>
+        {state.document.type === 'manuscript.chapter' && <button type="button" disabled={busy || preferenceBusy}
+          onClick={() => {
+            if (isFinal && preferenceCandidate !== undefined) setPreferenceOpen(true)
+            else void markFinal()
+          }}>
+          {isFinal ? t('viewFinalPreference') : t('markFinal')}
+        </button>}
         <button type="button" disabled={state.selection === undefined || busy} onClick={() => { void referenceSelection() }}>{t('reference')}</button>
       </div>
     </header>
@@ -314,6 +399,17 @@ export function Canvas({
       error={analysisError}
       rerun={() => { void runAnalysis(analysisMode) }}
       close={() => { setAnalysisMode(undefined); setAnalysisError(undefined) }}
+      t={t}
+    />}
+    {preferenceOpen && state.document.type === 'manuscript.chapter' && <PreferenceDrawer
+      revisionId={state.document.revisionId}
+      candidate={preferenceCandidate}
+      notice={preferenceNotice}
+      busy={preferenceBusy}
+      error={preferenceError}
+      accept={() => { void decidePreference('accept') }}
+      reject={() => { void decidePreference('reject') }}
+      close={() => { setPreferenceOpen(false) }}
       t={t}
     />}
   </div>
@@ -449,6 +545,49 @@ function AnalysisDrawer({ kind, revisionId, report, busy, error, rerun, close, t
           <div className={css.analysisMeta}><span>{new Date(report.generatedAt).toLocaleString()}</span>
             <span>{report.analyzerVersion}</span></div>
           <AnalysisReportBody report={report} t={t} />
+        </>}
+      </div>
+    </aside>
+  </div>
+}
+
+function PreferenceDrawer({ revisionId, candidate, notice, busy, error, accept, reject, close, t }: {
+  readonly revisionId: string
+  readonly candidate: NovelPreferenceCandidateDescriptor | undefined
+  readonly notice: string | undefined
+  readonly busy: boolean
+  readonly error: string | undefined
+  readonly accept: () => void
+  readonly reject: () => void
+  readonly close: () => void
+  readonly t: CanvasProps['t']
+}) {
+  return <div className={css.chapterOutlineBackdrop} onMouseDown={close}>
+    <aside className={css.analysisDrawer} role="dialog" aria-modal="true" aria-label={t('preferenceLearning')}
+      onMouseDown={(event) => { event.stopPropagation() }}>
+      <header className={css.analysisHeader}>
+        <div><strong>{t('preferenceLearning')}</strong>
+          <small>{t('boundRevision')} · {shortRevisionId(revisionId)}</small></div>
+        <div><button type="button" onClick={close}>{t('collapseChapterOutline')} ›</button></div>
+      </header>
+      {error !== undefined && <p className={css.chapterOutlineError} role="alert">{error}</p>}
+      <div className={css.analysisBody}>
+        {busy && candidate === undefined && <p className={css.analysisEmpty}>{t('analyzing')}</p>}
+        {notice !== undefined && <p className={css.preferenceNotice}>{notice}</p>}
+        {candidate !== undefined && <>
+          <div className={css.analysisMeta}><span>{new Date(candidate.generatedAt).toLocaleString()}</span>
+            <span>{candidate.status === 'pending' ? t('preferencePending')
+              : candidate.status === 'accepted' ? t('preferenceAccepted') : t('preferenceRejected')}</span></div>
+          <h3 className={css.preferenceSummary}>{candidate.summary}</h3>
+          <pre className={css.preferenceGuidance}>{candidate.guidanceMarkdown}</pre>
+          <section className={css.preferenceEvidence}><h3>{t('preferenceEvidence')}</h3>
+            {candidate.evidence.map((item, index) => <article key={`${index}-${item.inference}`}>
+              <p><del>{item.before}</del></p><p><ins>{item.after}</ins></p><small>{item.inference}</small>
+            </article>)}</section>
+          {candidate.status === 'pending' && <div className={css.preferenceActions}>
+            <button type="button" disabled={busy} onClick={reject}>{t('rejectPreference')}</button>
+            <button type="button" disabled={busy} onClick={accept}>{busy ? t('saving') : t('acceptPreference')}</button>
+          </div>}
         </>}
       </div>
     </aside>

@@ -7,6 +7,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   AssetId,
   ChangeSetId,
+  PreferenceCandidateId,
   NovelRepositoryError,
   ProjectId,
   RevisionId,
@@ -18,11 +19,13 @@ import {
   type NovelAnalysisReport,
   type NovelAnalysisReportKind,
   type NovelOperation,
+  type NovelPreferenceCandidate,
+  type RevisionFinalization,
   type RevisionOrigin,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 
 /** Physical schema containing revisions, proposals, and recoverable apply intent. */
-export const NOVEL_HISTORY_SCHEMA_VERSION = 4
+export const NOVEL_HISTORY_SCHEMA_VERSION = 5
 /** SQLite application id reserved for DSH Novel history. */
 export const NOVEL_HISTORY_APPLICATION_ID = 0x44534E48
 
@@ -77,6 +80,39 @@ interface AnalysisReportRow {
   data_json: string
   source_session_id: string | null
   worker_session_id: string | null
+}
+
+interface FinalizationRow {
+  project_id: string
+  asset_id: string
+  revision_id: string
+  finalized_at: string
+  finalized_by_session_id: string
+  source_revision_id: string | null
+  source_change_set_id: string | null
+  source_session_id: string | null
+}
+
+interface PreferenceCandidateRow {
+  id: string
+  project_id: string
+  asset_id: string
+  source_revision_id: string
+  final_revision_id: string
+  source_change_set_id: string | null
+  source_session_id: string | null
+  target_style_asset_id: string
+  target_style_revision_id: string
+  extractor_version: string
+  generated_at: string
+  summary: string
+  guidance_markdown: string
+  evidence_json: string
+  status: string
+  decided_at: string | null
+  decided_by_session_id: string | null
+  result_change_set_id: string | null
+  result_revision_id: string | null
 }
 
 /** Exact durable intent needed to finish or reject an interrupted publication. */
@@ -150,7 +186,7 @@ function configure(db: DatabaseSync, path: string): void {
       'NOVEL_HISTORY_CORRUPT',
     )
   }
-  if (version !== 0 && version !== 1 && version !== 2 && version !== 3
+  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4
     && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
     throw new NovelRepositoryError(
       `novel repository: history database "${path}" uses unsupported schema ${version}`,
@@ -225,6 +261,43 @@ function configure(db: DatabaseSync, path: string): void {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS analysis_reports_revision
         ON analysis_reports(project_id, asset_id, revision_id, kind);
+      CREATE TABLE IF NOT EXISTS revision_finalizations (
+        project_id TEXT NOT NULL,
+        asset_id TEXT NOT NULL,
+        revision_id TEXT NOT NULL REFERENCES revisions(id),
+        finalized_at TEXT NOT NULL,
+        finalized_by_session_id TEXT NOT NULL,
+        source_revision_id TEXT REFERENCES revisions(id),
+        source_change_set_id TEXT REFERENCES change_sets(id),
+        source_session_id TEXT,
+        PRIMARY KEY(project_id, asset_id, revision_id)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS revision_finalizations_asset
+        ON revision_finalizations(project_id, asset_id, finalized_at, revision_id);
+      CREATE TABLE IF NOT EXISTS preference_candidates (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        asset_id TEXT NOT NULL,
+        source_revision_id TEXT NOT NULL REFERENCES revisions(id),
+        final_revision_id TEXT NOT NULL REFERENCES revisions(id),
+        source_change_set_id TEXT REFERENCES change_sets(id),
+        source_session_id TEXT,
+        target_style_asset_id TEXT NOT NULL,
+        target_style_revision_id TEXT NOT NULL REFERENCES revisions(id),
+        extractor_version TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        guidance_markdown TEXT NOT NULL,
+        evidence_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending', 'accepted', 'rejected')),
+        decided_at TEXT,
+        decided_by_session_id TEXT,
+        result_change_set_id TEXT REFERENCES change_sets(id),
+        result_revision_id TEXT REFERENCES revisions(id),
+        UNIQUE(project_id, asset_id, final_revision_id)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS preference_candidates_final
+        ON preference_candidates(project_id, asset_id, final_revision_id, generated_at, id);
     `)
     const changeSetColumns = db.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>
     if (version > 0 && version < 3 && !changeSetColumns.some(column => column.name === 'asset_type')) {
@@ -320,6 +393,126 @@ export class NovelHistory {
       origin: revisionOrigin(row.origin),
       createdAt: row.created_at,
     }))
+  }
+
+  /** Read the applied ChangeSet which produced an exact Revision, if any. */
+  changeSetByResultRevision(revisionId: RevisionId): ChangeSet | undefined {
+    const row = this.db.prepare(`
+      SELECT id, project_id, asset_id, base_revision_id, operations_json,
+             asset_type, actor_json, summary, status, result_revision_id
+      FROM change_sets WHERE result_revision_id = ? AND status = 'applied'
+      ORDER BY id LIMIT 1
+    `).get(revisionId) as ChangeSetRow | undefined
+    return row === undefined ? undefined : changeSetFromRow(row, this.decodeOperations)
+  }
+
+  /** Retain an idempotent explicit finalization decision. */
+  putFinalization(value: RevisionFinalization): RevisionFinalization {
+    this.db.prepare(`
+      INSERT OR IGNORE INTO revision_finalizations (
+        project_id, asset_id, revision_id, finalized_at, finalized_by_session_id,
+        source_revision_id, source_change_set_id, source_session_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      value.projectId, value.assetId, value.revisionId, value.finalizedAt,
+      value.finalizedBySessionId, value.sourceRevisionId ?? null,
+      value.sourceChangeSetId ?? null, value.sourceSessionId ?? null,
+    )
+    return requiredFinalization(this.finalization(value.projectId, value.assetId, value.revisionId))
+  }
+
+  finalization(projectId: ProjectId, assetId: AssetId, revisionId: RevisionId): RevisionFinalization | undefined {
+    const row = this.db.prepare(`
+      SELECT project_id, asset_id, revision_id, finalized_at, finalized_by_session_id,
+             source_revision_id, source_change_set_id, source_session_id
+      FROM revision_finalizations
+      WHERE project_id = ? AND asset_id = ? AND revision_id = ?
+    `).get(projectId, assetId, revisionId) as FinalizationRow | undefined
+    return row === undefined ? undefined : finalizationFromRow(row)
+  }
+
+  finalizations(projectId: ProjectId, assetId: AssetId): readonly RevisionFinalization[] {
+    const rows = this.db.prepare(`
+      SELECT project_id, asset_id, revision_id, finalized_at, finalized_by_session_id,
+             source_revision_id, source_change_set_id, source_session_id
+      FROM revision_finalizations WHERE project_id = ? AND asset_id = ?
+      ORDER BY finalized_at DESC, revision_id DESC
+    `).all(projectId, assetId) as unknown as FinalizationRow[]
+    return rows.map(finalizationFromRow)
+  }
+
+  putPreferenceCandidate(value: NovelPreferenceCandidate): NovelPreferenceCandidate {
+    this.db.prepare(`
+      INSERT INTO preference_candidates (
+        id, project_id, asset_id, source_revision_id, final_revision_id,
+        source_change_set_id, source_session_id, target_style_asset_id,
+        target_style_revision_id, extractor_version, generated_at, summary,
+        guidance_markdown, evidence_json, status, decided_at,
+        decided_by_session_id, result_change_set_id, result_revision_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id, asset_id, final_revision_id) DO UPDATE SET
+        extractor_version = excluded.extractor_version,
+        generated_at = excluded.generated_at,
+        summary = excluded.summary,
+        guidance_markdown = excluded.guidance_markdown,
+        evidence_json = excluded.evidence_json,
+        target_style_asset_id = excluded.target_style_asset_id,
+        target_style_revision_id = excluded.target_style_revision_id
+      WHERE preference_candidates.status = 'pending'
+    `).run(
+      value.id, value.projectId, value.assetId, value.sourceRevisionId, value.finalRevisionId,
+      value.sourceChangeSetId ?? null, value.sourceSessionId ?? null,
+      value.targetStyleAssetId, value.targetStyleRevisionId, value.extractorVersion,
+      value.generatedAt, value.summary, value.guidanceMarkdown,
+      JSON.stringify(value.evidence), value.status, value.decidedAt ?? null,
+      value.decidedBySessionId ?? null, value.resultChangeSetId ?? null,
+      value.resultRevisionId ?? null,
+    )
+    return requiredCandidate(this.preferenceCandidateForFinal(value.projectId, value.assetId, value.finalRevisionId))
+  }
+
+  preferenceCandidate(id: PreferenceCandidateId): NovelPreferenceCandidate | undefined {
+    const row = this.db.prepare('SELECT * FROM preference_candidates WHERE id = ?')
+      .get(id) as PreferenceCandidateRow | undefined
+    return row === undefined ? undefined : preferenceCandidateFromRow(row)
+  }
+
+  preferenceCandidateForFinal(
+    projectId: ProjectId,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+  ): NovelPreferenceCandidate | undefined {
+    const row = this.db.prepare(`
+      SELECT * FROM preference_candidates
+      WHERE project_id = ? AND asset_id = ? AND final_revision_id = ?
+    `).get(projectId, assetId, finalRevisionId) as PreferenceCandidateRow | undefined
+    return row === undefined ? undefined : preferenceCandidateFromRow(row)
+  }
+
+  preferenceCandidates(
+    projectId: ProjectId,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+  ): readonly NovelPreferenceCandidate[] {
+    const value = this.preferenceCandidateForFinal(projectId, assetId, finalRevisionId)
+    return value === undefined ? [] : [value]
+  }
+
+  decidePreferenceCandidate(
+    id: PreferenceCandidateId,
+    status: 'accepted' | 'rejected',
+    decidedAt: string,
+    sessionId: SessionId,
+    result?: { readonly changeSetId: ChangeSetId; readonly revisionId: RevisionId },
+  ): NovelPreferenceCandidate | undefined {
+    const current = this.preferenceCandidate(id)
+    if (current === undefined || current.status !== 'pending') return current
+    this.db.prepare(`
+      UPDATE preference_candidates SET status = ?, decided_at = ?, decided_by_session_id = ?,
+        result_change_set_id = ?, result_revision_id = ?
+      WHERE id = ? AND status = 'pending'
+    `).run(status, decidedAt, sessionId, result?.changeSetId ?? null, result?.revisionId ?? null, id)
+    return this.preferenceCandidate(id)
   }
 
   /**
@@ -582,6 +775,16 @@ function requiredChangeSet(value: ChangeSet | undefined): ChangeSet {
   return value
 }
 
+function requiredFinalization(value: RevisionFinalization | undefined): RevisionFinalization {
+  if (value === undefined) throw corrupt('Revision finalization disappeared during a transaction')
+  return value
+}
+
+function requiredCandidate(value: NovelPreferenceCandidate | undefined): NovelPreferenceCandidate {
+  if (value === undefined) throw corrupt('preference candidate disappeared during a transaction')
+  return value
+}
+
 function corrupt(detail: string, cause?: unknown): NovelRepositoryError {
   return new NovelRepositoryError(
     `novel repository: corrupt history: ${detail}`,
@@ -683,6 +886,61 @@ function analysisReportFromRow(row: AnalysisReportRow): NovelAnalysisReport {
     ...(row.source_session_id === null ? {} : { sourceSessionId: row.source_session_id as SessionId }),
     ...(row.worker_session_id === null ? {} : { workerSessionId: row.worker_session_id as SessionId }),
   }
+}
+
+function finalizationFromRow(row: FinalizationRow): RevisionFinalization {
+  if (!Number.isFinite(Date.parse(row.finalized_at))) throw corrupt('finalization time is invalid')
+  return {
+    projectId: ProjectId(row.project_id),
+    assetId: AssetId(row.asset_id),
+    revisionId: RevisionId(row.revision_id),
+    finalizedAt: row.finalized_at,
+    finalizedBySessionId: row.finalized_by_session_id as SessionId,
+    ...(row.source_revision_id === null ? {} : { sourceRevisionId: RevisionId(row.source_revision_id) }),
+    ...(row.source_change_set_id === null ? {} : { sourceChangeSetId: ChangeSetId(row.source_change_set_id) }),
+    ...(row.source_session_id === null ? {} : { sourceSessionId: row.source_session_id as SessionId }),
+  }
+}
+
+function preferenceCandidateFromRow(row: PreferenceCandidateRow): NovelPreferenceCandidate {
+  const evidence = preferenceEvidence(parseJson(row.evidence_json, 'preference evidence'))
+  if (!['pending', 'accepted', 'rejected'].includes(row.status)) throw corrupt('preference status is invalid')
+  if (!Number.isFinite(Date.parse(row.generated_at))) throw corrupt('preference generation time is invalid')
+  return {
+    id: PreferenceCandidateId(row.id),
+    projectId: ProjectId(row.project_id),
+    assetId: AssetId(row.asset_id),
+    sourceRevisionId: RevisionId(row.source_revision_id),
+    finalRevisionId: RevisionId(row.final_revision_id),
+    ...(row.source_change_set_id === null ? {} : { sourceChangeSetId: ChangeSetId(row.source_change_set_id) }),
+    ...(row.source_session_id === null ? {} : { sourceSessionId: row.source_session_id as SessionId }),
+    targetStyleAssetId: AssetId(row.target_style_asset_id),
+    targetStyleRevisionId: RevisionId(row.target_style_revision_id),
+    extractorVersion: row.extractor_version,
+    generatedAt: row.generated_at,
+    summary: row.summary,
+    guidanceMarkdown: row.guidance_markdown,
+    evidence,
+    status: row.status as NovelPreferenceCandidate['status'],
+    ...(row.decided_at === null ? {} : { decidedAt: row.decided_at }),
+    ...(row.decided_by_session_id === null ? {} : { decidedBySessionId: row.decided_by_session_id as SessionId }),
+    ...(row.result_change_set_id === null ? {} : { resultChangeSetId: ChangeSetId(row.result_change_set_id) }),
+    ...(row.result_revision_id === null ? {} : { resultRevisionId: RevisionId(row.result_revision_id) }),
+  }
+}
+
+function preferenceEvidence(value: unknown): NovelPreferenceCandidate['evidence'] {
+  if (!Array.isArray(value) || value.length > 12) throw corrupt('preference evidence is invalid')
+  return value.map((item) => {
+    if (!isRecord(item)) throw corrupt('preference evidence is invalid')
+    const before = item['before']
+    const after = item['after']
+    const inference = item['inference']
+    if (typeof before !== 'string' || typeof after !== 'string' || typeof inference !== 'string') {
+      throw corrupt('preference evidence is invalid')
+    }
+    return { before, after, inference }
+  })
 }
 
 function isJsonValue(value: unknown, depth = 0): boolean {

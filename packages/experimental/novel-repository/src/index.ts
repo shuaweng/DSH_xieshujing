@@ -23,6 +23,10 @@ import type {
   NovelAnalysisReport,
   NovelSelectionInput,
   PutNovelAnalysisReportRequest,
+  PutNovelPreferenceCandidateRequest,
+  NovelPreferenceCandidate,
+  PreferenceCandidateId,
+  RevisionFinalization,
   ProposeChangeSetRequest,
   RevisionId,
   SaveAssetContentRequest,
@@ -33,6 +37,7 @@ import type {
 export {
   AssetId,
   ChangeSetId,
+  PreferenceCandidateId,
   ProjectId,
   RevisionId,
   SelectionRefId,
@@ -56,6 +61,9 @@ export type {
   NovelAssetTypeMap,
   NovelAnalysisReport,
   NovelAnalysisReportKind,
+  NovelPreferenceCandidate,
+  NovelPreferenceCandidateStatus,
+  NovelPreferenceEvidence,
   NovelOperation,
   NovelSelectionInput,
   NovelSelector,
@@ -64,8 +72,10 @@ export type {
   NovelRepositoryErrorCode,
   ProposeChangeSetRequest,
   PutNovelAnalysisReportRequest,
+  PutNovelPreferenceCandidateRequest,
   ReplaceTextOperation,
   RevisionOrigin,
+  RevisionFinalization,
   SaveAssetContentRequest,
   SearchAssetsRequest,
   SelectionRef,
@@ -167,6 +177,72 @@ export abstract class NovelRepository extends Service {
     assetId: AssetId,
     signal?: AbortSignal,
   ): Promise<readonly AssetRevisionSummary[]>
+
+  /** Mark one exact chapter Revision final and retain its nearest Agent lineage. */
+  finalizeRevision(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    finalizedBySessionId: import('@deepseek-ai/dsh-session/types').SessionId,
+    signal?: AbortSignal,
+  ): Promise<RevisionFinalization> {
+    void project; void assetId; void revisionId; void finalizedBySessionId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Revision finalization'))
+  }
+
+  /** List explicit finalization decisions for one Asset, newest first. */
+  listRevisionFinalizations(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    signal?: AbortSignal,
+  ): Promise<readonly RevisionFinalization[]> {
+    void project; void assetId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Revision finalization'))
+  }
+
+  /** Retain one inert, reviewable preference candidate. */
+  putPreferenceCandidate(
+    project: NovelProjectSnapshot,
+    request: PutNovelPreferenceCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    void project; void request; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
+
+  /** List retained preference candidates for one final Revision. */
+  listPreferenceCandidates(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelPreferenceCandidate[]> {
+    void project; void assetId; void finalRevisionId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
+
+  /** Read one retained preference candidate. */
+  readPreferenceCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: PreferenceCandidateId,
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    void project; void candidateId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
+
+  /** Record the explicit terminal user decision and optional applied lineage. */
+  decidePreferenceCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: PreferenceCandidateId,
+    decision: 'accepted' | 'rejected',
+    decidedBySessionId: import('@deepseek-ai/dsh-session/types').SessionId,
+    result?: { readonly changeSetId: ChangeSetId; readonly revisionId: RevisionId },
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    void project; void candidateId; void decision; void decidedBySessionId; void result; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
 
   /**
    * List generated reports attached to one exact retained Revision.

@@ -1075,7 +1075,7 @@ describe('LocalNovelRepository', () => {
     },
   )
 
-  it('migrates an identified version-one history database to Revision analysis schema four', async () => {
+  it('migrates an identified version-one history database to finalization schema five', async () => {
     const dir = await tempDir()
     const path = join(dir, 'history.sqlite')
     const { DatabaseSync } = await import('node:sqlite')
@@ -1086,15 +1086,17 @@ describe('LocalNovelRepository', () => {
     const history = await openHistory(path, 100, decodeHistoryOperations)
     history.close()
     const migrated = new DatabaseSync(path)
-    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(4)
+    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(5)
     expect((migrated.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>).map(row => row.name))
       .toContain('asset_type')
     const tables = migrated.prepare(`
       SELECT name FROM sqlite_master
-      WHERE type = 'table' AND name IN ('change_sets', 'apply_journal', 'analysis_reports')
+      WHERE type = 'table' AND name IN ('change_sets', 'apply_journal', 'analysis_reports', 'revision_finalizations', 'preference_candidates')
       ORDER BY name
     `).all() as Array<{ name: string }>
-    expect(tables.map(row => row.name)).toEqual(['analysis_reports', 'apply_journal', 'change_sets'])
+    expect(tables.map(row => row.name)).toEqual([
+      'analysis_reports', 'apply_journal', 'change_sets', 'preference_candidates', 'revision_finalizations',
+    ])
     migrated.close()
   })
 

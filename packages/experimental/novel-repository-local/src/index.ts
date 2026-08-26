@@ -15,6 +15,7 @@ import NovelRepository, {
   ChangeSetId,
   AssetId,
   NovelRepositoryError,
+  PreferenceCandidateId,
   RevisionId,
   SelectionRefId,
   type Asset,
@@ -29,6 +30,9 @@ import NovelRepository, {
   type CreateAssetRequest,
   type NovelProjectSnapshot,
   type NovelAnalysisReport,
+  type NovelPreferenceCandidate,
+  type PutNovelPreferenceCandidateRequest,
+  type RevisionFinalization,
   type NovelSelectionInput,
   type ProjectId,
   type ProposeChangeSetRequest,
@@ -328,6 +332,138 @@ export class LocalNovelRepository extends NovelRepository {
       const revisions = state.history.revisions(project.id, assetId)
       if (revisions.length === 0) throw assetNotFound(assetId)
       return revisions.map(revision => ({ ...revision }))
+    })
+  }
+
+  override async finalizeRevision(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    revisionId: RevisionIdValue,
+    finalizedBySessionId: RevisionFinalization['finalizedBySessionId'],
+    signal?: AbortSignal,
+  ): Promise<RevisionFinalization> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const snapshot = this.snapshotFromHistory(project, state, assetId, revisionId)
+      if (!sameAssetType(snapshot.asset.type, 'manuscript.chapter')) {
+        throw new NovelRepositoryError(
+          'novel repository: only manuscript.chapter Revisions can be finalized',
+          'NOVEL_FINALIZATION_INVALID',
+        )
+      }
+      const existing = state.history.finalization(project.id, assetId, revisionId)
+      if (existing !== undefined) return existing
+      let cursor: RevisionIdValue | undefined = revisionId
+      let sourceRevisionId: RevisionIdValue | undefined
+      let sourceChangeSet: ChangeSet | undefined
+      while (cursor !== undefined) {
+        const retained: AssetRevision | undefined = state.history.revision(cursor)?.revision
+        if (retained === undefined || retained.projectId !== project.id || retained.assetId !== assetId) break
+        if (retained.origin === 'agent-apply') {
+          sourceRevisionId = retained.id
+          sourceChangeSet = state.history.changeSetByResultRevision(retained.id)
+          break
+        }
+        cursor = retained.parentRevisionId
+      }
+      return state.history.putFinalization({
+        projectId: project.id,
+        assetId,
+        revisionId,
+        finalizedAt: new Date().toISOString(),
+        finalizedBySessionId,
+        ...(sourceRevisionId === undefined ? {} : { sourceRevisionId }),
+        ...(sourceChangeSet === undefined ? {} : { sourceChangeSetId: sourceChangeSet.id }),
+        ...(sourceChangeSet?.actor.kind === 'agent' ? { sourceSessionId: sourceChangeSet.actor.sessionId } : {}),
+      })
+    })
+  }
+
+  override async listRevisionFinalizations(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    signal?: AbortSignal,
+  ): Promise<readonly RevisionFinalization[]> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      if (state.history.revisions(project.id, assetId).length === 0) throw assetNotFound(assetId)
+      return state.history.finalizations(project.id, assetId).map(value => ({ ...value }))
+    })
+  }
+
+  override async putPreferenceCandidate(
+    project: NovelProjectSnapshot,
+    request: PutNovelPreferenceCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      this.snapshotFromHistory(project, state, request.assetId, request.sourceRevisionId)
+      this.snapshotFromHistory(project, state, request.assetId, request.finalRevisionId)
+      const style = this.snapshotFromHistory(project, state, request.targetStyleAssetId, request.targetStyleRevisionId)
+      if (!sameAssetType(style.asset.type, 'book.style-profile')) {
+        throw new NovelRepositoryError('novel repository: preference target is not book.style-profile', 'NOVEL_PREFERENCE_CANDIDATE_INVALID')
+      }
+      validatePreferenceCandidateInput(request, this.config.analysisReportMaxBytes)
+      return structuredClone(state.history.putPreferenceCandidate({
+        id: PreferenceCandidateId(`preference_${randomUUID()}`),
+        projectId: project.id,
+        ...request,
+        status: 'pending',
+      }))
+    })
+  }
+
+  override async listPreferenceCandidates(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    finalRevisionId: RevisionIdValue,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelPreferenceCandidate[]> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      this.snapshotFromHistory(project, state, assetId, finalRevisionId)
+      return state.history.preferenceCandidates(project.id, assetId, finalRevisionId).map(value => structuredClone(value))
+    })
+  }
+
+  override async readPreferenceCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: PreferenceCandidateId,
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const value = state.history.preferenceCandidate(candidateId)
+      if (value === undefined || value.projectId !== project.id) {
+        throw new NovelRepositoryError('novel repository: preference candidate not found', 'NOVEL_PREFERENCE_CANDIDATE_NOT_FOUND')
+      }
+      return structuredClone(value)
+    })
+  }
+
+  override async decidePreferenceCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: PreferenceCandidateId,
+    decision: 'accepted' | 'rejected',
+    decidedBySessionId: RevisionFinalization['finalizedBySessionId'],
+    result?: { readonly changeSetId: ChangeSetId; readonly revisionId: RevisionIdValue },
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const current = state.history.preferenceCandidate(candidateId)
+      if (current === undefined || current.projectId !== project.id) {
+        throw new NovelRepositoryError('novel repository: preference candidate not found', 'NOVEL_PREFERENCE_CANDIDATE_NOT_FOUND')
+      }
+      if (decision === 'accepted' && result === undefined) {
+        throw new NovelRepositoryError('novel repository: accepted preference requires applied ChangeSet lineage', 'NOVEL_PREFERENCE_CANDIDATE_INVALID')
+      }
+      const decided = state.history.decidePreferenceCandidate(
+        candidateId, decision, new Date().toISOString(), decidedBySessionId, result,
+      )
+      if (decided === undefined) throw new NovelRepositoryError('novel repository: preference candidate not found', 'NOVEL_PREFERENCE_CANDIDATE_NOT_FOUND')
+      return structuredClone(decided)
     })
   }
 
@@ -1303,6 +1439,34 @@ function searchExcerpt(text: string, matchIndex: number, queryLength: number): s
   const start = Math.max(0, Math.min(safeIndex - lead, normalized.length - SEARCH_EXCERPT_CHARS))
   const excerpt = normalized.slice(start, start + SEARCH_EXCERPT_CHARS)
   return `${start > 0 ? '…' : ''}${excerpt}${start + SEARCH_EXCERPT_CHARS < normalized.length ? '…' : ''}`
+}
+
+function validatePreferenceCandidateInput(
+  request: PutNovelPreferenceCandidateRequest,
+  maxBytes: number,
+): void {
+  if (request.sourceRevisionId === request.finalRevisionId) {
+    throw new NovelRepositoryError('novel repository: preference source and final Revision must differ', 'NOVEL_PREFERENCE_CANDIDATE_INVALID')
+  }
+  if (request.extractorVersion.length === 0 || request.extractorVersion.length > 100
+    || request.extractorVersion !== request.extractorVersion.trim()
+    || !Number.isFinite(Date.parse(request.generatedAt))) {
+    throw new NovelRepositoryError('novel repository: preference extractor provenance is invalid', 'NOVEL_PREFERENCE_CANDIDATE_INVALID')
+  }
+  if (request.summary.trim().length === 0 || request.summary.length > 1_000
+    || request.guidanceMarkdown.trim().length === 0 || request.guidanceMarkdown.length > 8_000
+    || request.evidence.length === 0 || request.evidence.length > 12) {
+    throw new NovelRepositoryError('novel repository: preference candidate is outside bounds', 'NOVEL_PREFERENCE_CANDIDATE_INVALID')
+  }
+  for (const item of request.evidence) {
+    if (item.before.length > 1_000 || item.after.length > 1_000
+      || item.inference.trim().length === 0 || item.inference.length > 1_000) {
+      throw new NovelRepositoryError('novel repository: preference evidence is outside bounds', 'NOVEL_PREFERENCE_CANDIDATE_INVALID')
+    }
+  }
+  if (new TextEncoder().encode(JSON.stringify(request)).byteLength > maxBytes) {
+    throw new NovelRepositoryError('novel repository: preference candidate is too large', 'NOVEL_ASSET_TOO_LARGE')
+  }
 }
 
 function staleRevision(revisionId: RevisionIdValue, cause?: unknown): NovelRepositoryError {

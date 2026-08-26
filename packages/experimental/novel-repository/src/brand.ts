@@ -61,3 +61,11 @@ export type ChangeSetId = Branded<'NovelChangeSetId'>
 export function ChangeSetId(value: string): ChangeSetId {
   return value as ChangeSetId
 }
+
+/** Opaque identity of one inferred, author-reviewable preference candidate. */
+export type PreferenceCandidateId = Branded<'NovelPreferenceCandidateId'>
+
+/** Brand a provider-created preference candidate identity. */
+export function PreferenceCandidateId(value: string): PreferenceCandidateId {
+  return value as PreferenceCandidateId
+}

@@ -17,6 +17,8 @@ import type {
   NovelAssetDocument,
   NovelAssetSearchResult,
   NovelAnalysisReportDescriptor,
+  NovelPreferenceCandidateDescriptor,
+  NovelRevisionFinalizationDescriptor,
   NovelContextWorksetDescriptor,
   NovelSelectionDescriptor,
   CreateNovelAssetRequest,
@@ -81,6 +83,11 @@ const canvasAnalysisStubs = {
   analysisReports: async () => [],
   scanNoAi: async () => analysisReport('noai-scan'),
   reviewChapter: async () => analysisReport('chapter-review'),
+  finalizations: async () => [],
+  preferenceCandidates: async () => [],
+  finalizeChapter: async () => { throw new Error('not exercised') },
+  acceptPreference: async () => { throw new Error('not exercised') },
+  rejectPreference: async () => { throw new Error('not exercised') },
 }
 
 function chapter(overrides: Partial<NovelAssetDocument> = {}): NovelAssetDocument {
@@ -145,6 +152,36 @@ function analysisReport(kind: NovelAnalysisReportDescriptor['kind']): NovelAnaly
         dimensions: [{ id: 'hook', score: 58, summary: '新期待不足。' }],
         findings: [{ severity: 'medium', category: '章末钩子', quote: '他回家了。',
           diagnosis: '局面闭合。', suggestion: '追加真实的新行动。' }], priorities: ['先强化章末局面变化。'] },
+  }
+}
+
+function finalization(): NovelRevisionFinalizationDescriptor {
+  return {
+    projectId: 'project-1' as never,
+    assetId: 'asset-chapter-1' as never,
+    revisionId: 'revision-1' as never,
+    finalizedAt: '2026-08-26T08:00:00.000Z',
+    finalizedBySessionId: SID,
+    sourceRevisionId: 'revision-agent-1' as never,
+    sourceChangeSetId: 'changeset-agent-1' as never,
+    sourceSessionId: SID,
+  }
+}
+
+function preference(status: NovelPreferenceCandidateDescriptor['status'] = 'pending'): NovelPreferenceCandidateDescriptor {
+  return {
+    id: 'preference-1' as never,
+    projectId: 'project-1' as never,
+    assetId: 'asset-chapter-1' as never,
+    sourceRevisionId: 'revision-agent-1' as never,
+    finalRevisionId: 'revision-1' as never,
+    targetStyleAssetId: 'style-1' as never,
+    targetStyleRevisionId: 'revision-style-1' as never,
+    generatedAt: '2026-08-26T08:00:01.000Z',
+    summary: '作者偏好用画面承载情绪。',
+    guidanceMarkdown: '- 用具体动作和环境承载情绪，减少直接总结。',
+    evidence: [{ before: '她很紧张。', after: '她把票根折了两次。', inference: '用动作替代情绪命名。' }],
+    status,
   }
 }
 
@@ -695,6 +732,45 @@ describe('Canvas', () => {
     const review = await view.findByRole('dialog', { name: zh.chapterReview })
     await waitFor(() => { expect(within(review).getByText('72')).toBeTruthy() })
     expect(reviewChapter).not.toHaveBeenCalled()
+  })
+
+  it('marks the exact Revision final and keeps inferred preference inert until the author accepts it', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const current = chapter()
+    act(() => {
+      store.actions.loaded({ title: '白港' } as never, [{ ...current, content: undefined }] as never)
+      store.actions.open(current)
+    })
+    const finalizeChapter = vi.fn(async () => ({ finalization: finalization(), candidate: preference() }))
+    const acceptPreference = vi.fn(async () => preference('accepted'))
+    const rejectPreference = vi.fn(async () => preference('rejected'))
+    const view = render(<Canvas
+      {...canvasAnalysisStubs}
+      finalizations={async () => []}
+      preferenceCandidates={async () => []}
+      finalizeChapter={finalizeChapter}
+      acceptPreference={acceptPreference}
+      rejectPreference={rejectPreference}
+      open={openStub} create={createStub}
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
+    />)
+
+    fireEvent.click(view.getByRole('button', { name: zh.markFinal }))
+    await waitFor(() => {
+      expect(finalizeChapter).toHaveBeenCalledWith(SID, current.id, current.revisionId)
+    })
+    const drawer = await view.findByRole('dialog', { name: zh.preferenceLearning })
+    expect(within(drawer).getByText('作者偏好用画面承载情绪。')).toBeTruthy()
+    expect(within(drawer).getByText('她很紧张。')).toBeTruthy()
+    expect(within(drawer).getByText('她把票根折了两次。')).toBeTruthy()
+    expect(acceptPreference).not.toHaveBeenCalled()
+
+    fireEvent.click(within(drawer).getByRole('button', { name: zh.acceptPreference }))
+    await waitFor(() => { expect(acceptPreference).toHaveBeenCalledWith(SID, 'preference-1') })
+    await waitFor(() => { expect(within(drawer).getByText(zh.preferenceAccepted)).toBeTruthy() })
+    expect(within(drawer).queryByRole('button', { name: zh.acceptPreference })).toBeNull()
+    expect(rejectPreference).not.toHaveBeenCalled()
   })
 })
 

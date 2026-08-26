@@ -208,6 +208,26 @@ export function apply(ctx: Context): void {
         remote.reviewChapter(sessionId, assetId as AssetId, revisionId as RevisionId),
         'review chapter',
       ),
+      finalizations: async (sessionId, assetId) => await unwrapRemote(
+        remote.revisionFinalizations(sessionId, assetId as AssetId),
+        'list Revision finalizations',
+      ),
+      preferenceCandidates: async (sessionId, assetId, revisionId) => await unwrapRemote(
+        remote.preferenceCandidates(sessionId, assetId as AssetId, revisionId as RevisionId),
+        'list preference candidates',
+      ),
+      finalizeChapter: async (sessionId, assetId, revisionId) => await unwrapRemote(
+        remote.finalizeChapter(sessionId, assetId as AssetId, revisionId as RevisionId),
+        'finalize chapter',
+      ),
+      acceptPreference: async (sessionId, candidateId) => (await unwrapRemote(
+        remote.acceptPreference(sessionId, candidateId as import('@deepseek-ai/dsh-experimental-novel-repository').PreferenceCandidateId),
+        'accept preference candidate',
+      )).candidate,
+      rejectPreference: async (sessionId, candidateId) => (await unwrapRemote(
+        remote.rejectPreference(sessionId, candidateId as import('@deepseek-ai/dsh-experimental-novel-repository').PreferenceCandidateId),
+        'reject preference candidate',
+      )).candidate,
       create: async (sessionId, request) => await unwrapRemote(
         remote.createAsset(sessionId, request),
         'create Novel Asset',

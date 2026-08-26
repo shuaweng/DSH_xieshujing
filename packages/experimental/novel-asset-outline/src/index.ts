@@ -271,14 +271,17 @@ function freeformBehavior(
         || typeof operation['replacement'] !== 'string') {
         invalidChangeSet('model operation is not a valid replace-text input')
       }
-      const captured = this.captureSelection(snapshot, {
-        kind: 'text-range',
-        startUtf16: operation['startUtf16'] as number,
-        endUtf16: operation['endUtf16'] as number,
-      }, { contextUnits: 0, previewUnits: 1 })
+      const body = bodyOf(snapshot.content)
+      const startUtf16 = operation['startUtf16'] as number
+      const endUtf16 = operation['endUtf16'] as number
+      validateRange(body, startUtf16, endUtf16, 'ChangeSet')
+      const quote = body.slice(startUtf16, endUtf16)
       return [{
         kind: 'replace-text',
-        selector: textRangeSelector(captured.selector),
+        selector: {
+          kind: 'text-range', startUtf16, endUtf16,
+          quoteHash: contentHash(new TextEncoder().encode(quote)),
+        },
         replacement: operation['replacement'],
       }]
     },
@@ -554,7 +557,8 @@ function decodeTextRangeSelector(value: unknown): TextRangeSelector {
 }
 
 function validateRange(body: string, start: number, end: number, owner: 'selection' | 'ChangeSet'): void {
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > body.length
+  const emptyNotAllowed = owner === 'selection' ? end <= start : end < start
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || emptyNotAllowed || end > body.length
     || splitsSurrogatePair(body, start) || splitsSurrogatePair(body, end)) {
     if (owner === 'selection') invalidSelection()
     invalidChangeSet('replace-text selector is outside the retained body')

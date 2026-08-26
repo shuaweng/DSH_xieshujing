@@ -11,6 +11,7 @@ import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-experimental-novel-analysis'
 import {
   ChangeSetId,
+  PreferenceCandidateId,
   NovelRepositoryError,
   type AssetId,
   type AssetSnapshot,
@@ -36,6 +37,10 @@ import type {
   NovelAssetDocument,
   NovelAssetRevisionDescriptor,
   NovelAnalysisReportDescriptor,
+  NovelPreferenceCandidateDescriptor,
+  NovelRevisionFinalizationDescriptor,
+  FinalizeNovelChapterDescriptor,
+  DecideNovelPreferenceDescriptor,
   NovelProjectDescriptor,
   NovelAssetSearchResult,
   NovelContextWorksetDescriptor,
@@ -53,6 +58,10 @@ export type {
   NovelAssetDocument,
   NovelAssetRevisionDescriptor,
   NovelAnalysisReportDescriptor,
+  NovelPreferenceCandidateDescriptor,
+  NovelRevisionFinalizationDescriptor,
+  FinalizeNovelChapterDescriptor,
+  DecideNovelPreferenceDescriptor,
   NovelProjectDescriptor,
   NovelAssetSearchResult,
   NovelContextWorksetDescriptor,
@@ -289,6 +298,83 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       .map(value => ({ ...value }))
     assertResponseBytes(revisions, this.responseMaxBytes, 'Asset Revisions')
     return revisions
+  }
+
+  /** List exact chapter Revisions explicitly marked final by the author. */
+  @Remote('revisionFinalizations')
+  async revisionFinalizations(
+    agent: Agent,
+    assetId: AssetId,
+    signal: AbortSignal,
+  ): Promise<NovelRevisionFinalizationDescriptor[]> {
+    const project = await this.requireProject(agent, signal)
+    const values = (await this.ctx.novelRepository.listRevisionFinalizations(project, assetId, signal))
+      .map(finalizationDescriptor)
+    assertResponseBytes(values, this.responseMaxBytes, 'Revision finalizations')
+    return values
+  }
+
+  /** List preference candidates attached to one exact final Revision. */
+  @Remote('preferenceCandidates')
+  async preferenceCandidates(
+    agent: Agent,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+    signal: AbortSignal,
+  ): Promise<NovelPreferenceCandidateDescriptor[]> {
+    const project = await this.requireProject(agent, signal)
+    const values = (await this.ctx.novelRepository.listPreferenceCandidates(
+      project, assetId, finalRevisionId, signal,
+    )).map(preferenceCandidateDescriptor)
+    assertResponseBytes(values, this.responseMaxBytes, 'preference candidates')
+    return values
+  }
+
+  /** Explicitly finalize the exact chapter Revision and optionally extract a preference candidate. */
+  @Remote('finalizeChapter')
+  async finalizeChapter(
+    agent: Agent,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    signal: AbortSignal,
+  ): Promise<FinalizeNovelChapterDescriptor> {
+    const value = await this.ctx.novelAnalysis.finalizeChapter(agent, assetId, revisionId, signal)
+    const result: FinalizeNovelChapterDescriptor = {
+      finalization: finalizationDescriptor(value.finalization),
+      ...(value.candidate === undefined ? {} : { candidate: preferenceCandidateDescriptor(value.candidate) }),
+      ...(value.noCandidateReason === undefined ? {} : { noCandidateReason: value.noCandidateReason }),
+    }
+    assertResponseBytes(result, this.responseMaxBytes, 'chapter finalization')
+    return result
+  }
+
+  /** Apply one reviewed preference candidate through the style ChangeSet protocol. */
+  @Remote('acceptPreference')
+  async acceptPreference(
+    agent: Agent,
+    candidateId: PreferenceCandidateId,
+    signal: AbortSignal,
+  ): Promise<DecideNovelPreferenceDescriptor> {
+    const value = await this.ctx.novelAnalysis.acceptPreference(agent, candidateId, signal)
+    const result: DecideNovelPreferenceDescriptor = {
+      candidate: preferenceCandidateDescriptor(value.candidate),
+      changeSet: changeSetDescriptor(value.changeSet),
+    }
+    assertResponseBytes(result, this.responseMaxBytes, 'accepted preference')
+    return result
+  }
+
+  /** Reject one pending preference candidate without changing authored assets. */
+  @Remote('rejectPreference')
+  async rejectPreference(
+    agent: Agent,
+    candidateId: PreferenceCandidateId,
+    signal: AbortSignal,
+  ): Promise<DecideNovelPreferenceDescriptor> {
+    const candidate = await this.ctx.novelAnalysis.rejectPreference(agent, candidateId, signal)
+    const result = { candidate: preferenceCandidateDescriptor(candidate) }
+    assertResponseBytes(result, this.responseMaxBytes, 'rejected preference')
+    return result
   }
 
   /**
@@ -569,6 +655,41 @@ function analysisReportDescriptor(
     data: wireValue(value.data, 'analysis report data'),
     ...(value.sourceSessionId === undefined ? {} : { sourceSessionId: value.sourceSessionId }),
     ...(value.workerSessionId === undefined ? {} : { workerSessionId: value.workerSessionId }),
+  }
+}
+
+function finalizationDescriptor(
+  value: Awaited<ReturnType<Context['novelRepository']['finalizeRevision']>>,
+): NovelRevisionFinalizationDescriptor {
+  return {
+    projectId: value.projectId,
+    assetId: value.assetId,
+    revisionId: value.revisionId,
+    finalizedAt: value.finalizedAt,
+    finalizedBySessionId: value.finalizedBySessionId,
+    ...(value.sourceRevisionId === undefined ? {} : { sourceRevisionId: value.sourceRevisionId }),
+    ...(value.sourceChangeSetId === undefined ? {} : { sourceChangeSetId: value.sourceChangeSetId }),
+    ...(value.sourceSessionId === undefined ? {} : { sourceSessionId: value.sourceSessionId }),
+  }
+}
+
+function preferenceCandidateDescriptor(
+  value: Awaited<ReturnType<Context['novelRepository']['readPreferenceCandidate']>>,
+): NovelPreferenceCandidateDescriptor {
+  return {
+    id: value.id,
+    projectId: value.projectId,
+    assetId: value.assetId,
+    sourceRevisionId: value.sourceRevisionId,
+    finalRevisionId: value.finalRevisionId,
+    targetStyleAssetId: value.targetStyleAssetId,
+    targetStyleRevisionId: value.targetStyleRevisionId,
+    generatedAt: value.generatedAt,
+    summary: value.summary,
+    guidanceMarkdown: value.guidanceMarkdown,
+    evidence: value.evidence.map(item => ({ ...item })),
+    status: value.status,
+    ...(value.resultRevisionId === undefined ? {} : { resultRevisionId: value.resultRevisionId }),
   }
 }
 

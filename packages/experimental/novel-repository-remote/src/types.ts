@@ -4,6 +4,7 @@ import type {
   AssetId,
   ChangeSetId,
   ProjectId,
+  PreferenceCandidateId,
   RevisionId,
   SelectionRefId,
 } from '@deepseek-ai/dsh-experimental-novel-repository/brand'
@@ -105,6 +106,52 @@ export interface NovelAnalysisReportDescriptor {
   readonly data: NovelWireValue
   readonly sourceSessionId?: string
   readonly workerSessionId?: string
+}
+
+/** Browser-safe explicit finalization lineage for one exact chapter Revision. */
+export interface NovelRevisionFinalizationDescriptor {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly finalizedAt: string
+  readonly finalizedBySessionId: string
+  readonly sourceRevisionId?: RevisionId
+  readonly sourceChangeSetId?: ChangeSetId
+  readonly sourceSessionId?: string
+}
+
+export interface NovelPreferenceEvidenceDescriptor {
+  readonly before: string
+  readonly after: string
+  readonly inference: string
+}
+
+/** Browser-safe, inert preference candidate awaiting an explicit user decision. */
+export interface NovelPreferenceCandidateDescriptor {
+  readonly id: PreferenceCandidateId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly sourceRevisionId: RevisionId
+  readonly finalRevisionId: RevisionId
+  readonly targetStyleAssetId: AssetId
+  readonly targetStyleRevisionId: RevisionId
+  readonly generatedAt: string
+  readonly summary: string
+  readonly guidanceMarkdown: string
+  readonly evidence: readonly NovelPreferenceEvidenceDescriptor[]
+  readonly status: 'pending' | 'accepted' | 'rejected'
+  readonly resultRevisionId?: RevisionId
+}
+
+export interface FinalizeNovelChapterDescriptor {
+  readonly finalization: NovelRevisionFinalizationDescriptor
+  readonly candidate?: NovelPreferenceCandidateDescriptor
+  readonly noCandidateReason?: 'no-agent-source' | 'no-author-diff' | 'missing-style-profile'
+}
+
+export interface DecideNovelPreferenceDescriptor {
+  readonly candidate: NovelPreferenceCandidateDescriptor
+  readonly changeSet?: NovelChangeSetDescriptor
 }
 
 /** Guarded browser save of one complete typed Asset content value. */

@@ -30,7 +30,8 @@
       使用 Novel 工具。Skill 只提供创作方法，不会扩大工具权限，也不能绕过 Revision、
       ChangeSet 或作者审阅。
       可用方法名是 outline-beat-design、chapter-execution、rewrite-to-style、style-audit、
-      scene-drive、dialogue-diagnostics 和 chapter-review；只加载与当前任务真正匹配的方法。
+      scene-drive、dialogue-diagnostics、chapter-review 和 preference-learning；只加载与当前任务真正匹配的方法。
+      preference-learning 只由作者显式“标记为定稿”后的固定学习流程使用；普通写作请求不得擅自运行或把草稿观察写成长期规则。
       工作台“章节审查”按钮会由系统启动一个固定的只读 Subagent，并把报告绑定到当前
       章节的精确 Revision；不要把普通对话中的泛评冒充该持久化审查报告。
     complete: true

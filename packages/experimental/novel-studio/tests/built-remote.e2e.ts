@@ -25,9 +25,11 @@ const requiredArtifacts = [
   'packages/experimental/novel-repository/lib/index.js',
   'packages/experimental/novel-repository-local/lib/index.js',
   'packages/experimental/novel-context/lib/index.js',
+  'packages/experimental/novel-analysis/lib/index.js',
   'packages/experimental/novel-repository-remote/lib/index.js',
   'packages/experimental/novel-repository-remote/lib/typert.host.js',
   'packages/experimental/novel-repository-client/lib/client.js',
+  'packages/subagent/subagent/lib/index.js',
   clientDeclaration,
 ].every(path => existsSync(artifact(path)))
 
@@ -62,6 +64,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         apiGatewayHost: 'packages/api/gateway/lib/index.js',
         fsSandbox: 'packages/fs/fs-sandbox/lib/index.js',
         novelAssetTypes: 'packages/experimental/novel-repository/lib/types/asset-types.js',
+        novelAnalysis: 'packages/experimental/novel-analysis/lib/index.js',
         novelClient: 'packages/experimental/novel-repository-client/lib/client.js',
         novelLocal: 'packages/experimental/novel-repository-local/lib/index.js',
         novelRemote: 'packages/experimental/novel-repository-remote/lib/index.js',
@@ -69,6 +72,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         registryClient: 'packages/typert/registry/lib/client.js',
         registryHost: 'packages/typert/registry/lib/index.js',
         sandboxPolicy: 'packages/sandbox/sandbox-policy/lib/index.js',
+        subagent: 'packages/subagent/subagent/lib/index.js',
       }).map(([key, path]) => [key, artifactUrl(path)]))
       const script = `
         import * as cordis from '@deepseek-ai/cordis'
@@ -80,17 +84,21 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         const { default: TypertGatewayService } = await import(urls.apiGatewayHost)
         const { default: SandboxedFileSystem } = await import(urls.fsSandbox)
         const { default: NovelAssetTypeRegistry } = await import(urls.novelAssetTypes)
+        const { default: NovelAnalysis } = await import(urls.novelAnalysis)
         const { default: LocalNovelRepository } = await import(urls.novelLocal)
         const { default: NovelRepositoryRemote } = await import(urls.novelRemote)
         const { TYPERT } = await import(urls.novelTypert)
         const { default: TypertRegistry } = await import(urls.registryHost)
         const { default: SandboxPolicyService } = await import(urls.sandboxPolicy)
+        const { default: SubagentRuntime } = await import(urls.subagent)
 
         const host = new Context()
         await host.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: projectRoot })
         await host.plugin(SandboxedFileSystem, { cwd: projectRoot })
         await host.plugin(NovelAssetTypeRegistry)
         await host.plugin(LocalNovelRepository)
+        await host.plugin(SubagentRuntime)
+        await host.plugin(NovelAnalysis)
         await host.plugin(TypertRegistry)
         await host.plugin(AgentRegistry)
         await host.plugin(TypertGatewayService)

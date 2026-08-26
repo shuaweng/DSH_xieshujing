@@ -15,6 +15,7 @@
 - 第一版内置 `manuscript.chapter`，并由独立策划包贡献自由的 `planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile`；同时提供精确 `sha256:` 内容哈希、不可变 Revision 父链、绑定 Revision 的 `SelectionRef`、类型化 `replace-text` 操作，以及携带目标 Asset 类型的持久单资产 ChangeSet。
 - `proposeChangeSet()` 记录提案但不修改创作文件。`readChangeSet()`、`applyChangeSet()` 和 `rejectChangeSet()` 暴露明确审阅状态转换；应用权威是由获授权 Consumer 提供的 Session id。
 - `NovelAnalysisReport` 绑定一个 Project、Asset、精确 Revision 和报告种类。提供方暴露列出与 upsert 操作，因此成功重跑只替换某 Revision 的同类报告，而失败分析无法清除旧报告；各报告 payload 的语义归分析 Consumer 所有。
+- `RevisionFinalization` 保留用户对一个精确章节 Revision 的显式定稿决策及其最近 Agent 作者祖先；`NovelPreferenceCandidate` 保留有边界的草稿/定稿证据，并在用户显式采纳或拒绝前保持惰性。提取与审阅后应用语义归分析 Consumer 所有。
 - 可能发布文件或恢复中断 apply 的操作接收可选的逐调用 sandbox policy。感知 Session 的 Consumer 必须传入被寻址 Session 的已解析策略，使位于 Host 进程工作目录之外的 Project 也只能在该 Session 工作区边界内写入。
 - 提供方通过稳定的 `NovelRepositoryError` code 报告非法根目录、格式错误或过大的清单、不支持的 schema 与路径逃逸，而不会猜测如何修复。
 - 本包只负责 Service Definition、与提供方无关的公共值和错误类型。`@deepseek-ai/dsh-experimental-novel-repository-local` 等提供方负责清单 I/O 与校验；任何 Remote 或 UI 投影均由独立 Consumer 负责。

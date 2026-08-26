@@ -2,7 +2,12 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
-import { AssetId, type RevisionId } from '@deepseek-ai/dsh-experimental-novel-repository'
+import {
+  AssetId,
+  type NovelProjectSnapshot,
+  type RevisionId,
+} from '@deepseek-ai/dsh-experimental-novel-repository'
+import { apply as applyOutlineAssetTypes } from '@deepseek-ai/dsh-experimental-novel-asset-outline'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -68,6 +73,7 @@ async function harness(): Promise<{
   const dir = await mkdtemp(join(tmpdir(), 'dsh-novel-analysis-'))
   cleanups.push(() => rm(dir, { recursive: true, force: true }))
   await mkdir(join(dir, 'manuscript'))
+  await mkdir(join(dir, 'planning'))
   await writeFile(join(dir, 'novel.yaml'), [
     'kind: novel-project',
     'schema: 1',
@@ -75,6 +81,7 @@ async function harness(): Promise<{
     'title: Analysis Project',
     'contentRoots:',
     '  manuscript: manuscript',
+    '  planning: planning',
     '',
   ].join('\n'))
   await writeFile(join(dir, 'manuscript', 'chapter.md'), [
@@ -88,10 +95,22 @@ async function harness(): Promise<{
     '白港下雨了。林澈停在路口，没有立刻进门。',
     '',
   ].join('\n'))
+  await writeFile(join(dir, 'planning', 'style.md'), [
+    '---',
+    'novel:',
+    '  schema: 1',
+    '  id: style-analysis',
+    '  type: book.style-profile',
+    '  title: 本书风格',
+    '---',
+    '保持克制，避免替人物总结情绪。',
+    '',
+  ].join('\n'))
   const ctx = new Context()
   await ctx.plugin(LocalFileSystem, { cwd: dir })
   await ctx.plugin(SandboxPolicy, { mode: 'workspace-write', workspaceRoot: dir })
   await ctx.plugin(NovelAssetTypeRegistry)
+  applyOutlineAssetTypes(ctx)
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SubagentRuntime)
   const provider = new ReviewProvider()
@@ -105,6 +124,34 @@ async function harness(): Promise<{
   const id = SessionId('analysis-parent')
   const session = Session.create(id, [], { version: 0, id, createdAt: 0, cwd: dir })
   return { ctx, agent: { id, session, ctx } as Agent, revisionId: chapter.revisionId, provider }
+}
+
+async function authorFinalAfterAgent(
+  ctx: Context,
+  agent: Agent,
+  revisionId: RevisionId,
+): Promise<{ readonly project: NovelProjectSnapshot; readonly finalRevisionId: RevisionId }> {
+  const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
+  if (project === undefined) throw new Error('expected Novel Project')
+  const selection = await ctx.novelRepository.captureSelection(project, {
+    assetId: AssetId('chapter-analysis'), revisionId,
+    selector: { kind: 'text-range', startUtf16: 0, endUtf16: 5 },
+  })
+  const proposed = await ctx.novelRepository.proposeChangeSet(project, {
+    assetId: AssetId('chapter-analysis'),
+    baseRevisionId: revisionId,
+    operations: [{ kind: 'replace-text', selector: selection.selector, replacement: '白港落着雨' }],
+    actor: { kind: 'agent', sessionId: agent.id },
+    summary: 'Agent 初稿',
+  })
+  const applied = await ctx.novelRepository.applyChangeSet(project, proposed.id, { sessionId: agent.id })
+  if (applied.resultRevisionId === undefined) throw new Error('expected applied Agent Revision')
+  const final = await ctx.novelRepository.saveAssetContent(project, {
+    assetId: AssetId('chapter-analysis'),
+    baseRevisionId: applied.resultRevisionId,
+    content: { kind: 'manuscript', body: '雨线压低了白港的天。林澈停在路口，没有立刻进门。' },
+  })
+  return { project, finalRevisionId: final.revisionId }
 }
 
 describe('NovelAnalysis', () => {
@@ -151,5 +198,96 @@ describe('NovelAnalysis', () => {
       .toMatchObject([{ kind: 'chapter-review', data: { overallScore: 91 } }])
     expect(provider.disposals).toHaveLength(3)
     for (const dispose of provider.disposals) expect(dispose).toHaveBeenCalledOnce()
+  })
+
+  it('learns only from an explicit author-final Revision and applies reviewed guidance through a ChangeSet', async () => {
+    const { ctx, agent, revisionId, provider } = await harness()
+    const signal = new AbortController().signal
+    const { project, finalRevisionId } = await authorFinalAfterAgent(ctx, agent, revisionId)
+    provider.structured = {
+      summary: '作者更偏好用可见环境建立情绪，不直接概括天气。',
+      guidanceMarkdown: '- 用具体可见的环境细节承载氛围，少用概括性天气句。',
+      evidence: [{
+        before: '白港落着雨。',
+        after: '雨线压低了白港的天。',
+        inference: '用画面替代概括。',
+      }],
+    }
+
+    const learned = await ctx.novelAnalysis.finalizeChapter(
+      agent, AssetId('chapter-analysis'), finalRevisionId, signal,
+    )
+    expect(learned.finalization).toMatchObject({
+      revisionId: finalRevisionId,
+      sourceSessionId: agent.id,
+    })
+    expect(learned.candidate).toMatchObject({
+      status: 'pending',
+      finalRevisionId,
+      targetStyleAssetId: 'style-analysis',
+      summary: '作者更偏好用可见环境建立情绪，不直接概括天气。',
+    })
+    expect(provider.requests.at(-1)).toMatchObject({
+      maxDepth: 1,
+      toolFilter: { allow: ['skill'] },
+      descriptor: { mode: 'one-shot', provider: provider.name },
+    })
+    const preferencePrompt = provider.requests.at(-1)?.prompt[0]
+    if (preferencePrompt?.type !== 'text') throw new Error('expected text preference prompt')
+    expect(preferencePrompt.text).toContain(String(learned.finalization.sourceRevisionId))
+    expect(preferencePrompt.text).toContain(String(finalRevisionId))
+    expect(preferencePrompt.text).toContain('保持克制')
+
+    if (learned.candidate === undefined) throw new Error('expected preference candidate')
+    const accepted = await ctx.novelAnalysis.acceptPreference(agent, learned.candidate.id, signal)
+    expect(accepted.candidate).toMatchObject({
+      status: 'accepted',
+      resultChangeSetId: accepted.changeSet.id,
+      resultRevisionId: accepted.changeSet.resultRevisionId,
+    })
+    const style = await ctx.novelRepository.readAsset(project, AssetId('style-analysis'))
+    expect(ctx.novelAssetTypes.get(style.asset.type).modelText(style)).toContain('用具体可见的环境细节承载氛围')
+
+    const replay = await ctx.novelAnalysis.finalizeChapter(
+      agent, AssetId('chapter-analysis'), finalRevisionId, signal,
+    )
+    expect(replay.candidate).toEqual(accepted.candidate)
+    expect(provider.requests).toHaveLength(1)
+  })
+
+  it('does not fabricate learning without an Agent ancestor and preserves a pending candidate on style conflict', async () => {
+    const noSource = await harness()
+    const signal = new AbortController().signal
+    await expect(noSource.ctx.novelAnalysis.finalizeChapter(
+      noSource.agent, AssetId('chapter-analysis'), noSource.revisionId, signal,
+    )).resolves.toMatchObject({ noCandidateReason: 'no-agent-source' })
+    expect(noSource.provider.requests).toEqual([])
+
+    const { ctx, agent, revisionId, provider } = await harness()
+    const { project, finalRevisionId } = await authorFinalAfterAgent(ctx, agent, revisionId)
+    provider.structured = {
+      summary: '作者偏好更具体的环境动作。',
+      guidanceMarkdown: '- 让环境细节参与人物处境。',
+      evidence: [{ before: '白港落着雨。', after: '雨线压低了白港的天。', inference: '环境更具体。' }],
+    }
+    const learned = await ctx.novelAnalysis.finalizeChapter(
+      agent, AssetId('chapter-analysis'), finalRevisionId, signal,
+    )
+    if (learned.candidate === undefined) throw new Error('expected preference candidate')
+    const style = await ctx.novelRepository.readAsset(project, AssetId('style-analysis'))
+    await ctx.novelRepository.saveAssetContent(project, {
+      assetId: style.asset.id,
+      baseRevisionId: style.revisionId,
+      content: { kind: 'book-style-profile', body: '作者同时补充了更新的风格规则。' },
+    })
+
+    const conflicted = await ctx.novelAnalysis.acceptPreference(agent, learned.candidate.id, signal)
+    expect(conflicted.changeSet).toMatchObject({ status: 'conflicted' })
+    expect(conflicted.candidate).toMatchObject({ status: 'pending' })
+    const rejected = await ctx.novelAnalysis.rejectPreference(agent, learned.candidate.id, signal)
+    expect(rejected).toMatchObject({ status: 'rejected', decidedBySessionId: agent.id })
+    const currentStyle = await ctx.novelRepository.readAsset(project, AssetId('style-analysis'))
+    expect(ctx.novelAssetTypes.get(currentStyle.asset.type).modelText(currentStyle))
+      .toBe('作者同时补充了更新的风格规则。')
   })
 })

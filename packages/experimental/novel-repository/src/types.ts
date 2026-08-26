@@ -7,6 +7,7 @@ import type {
   AssetId,
   ChangeSetId,
   ProjectId,
+  PreferenceCandidateId,
   RevisionId,
   SelectionRefId,
 } from './brand.ts'
@@ -15,6 +16,7 @@ export type {
   AssetId,
   ChangeSetId,
   ProjectId,
+  PreferenceCandidateId,
   RevisionId,
   SelectionRefId,
 } from './brand.ts'
@@ -109,6 +111,9 @@ export type NovelRepositoryErrorCode =
   | 'NOVEL_CHANGESET_INVALID'
   | 'NOVEL_CHANGESET_CONFLICT'
   | 'NOVEL_CHANGESET_UNAUTHORIZED'
+  | 'NOVEL_FINALIZATION_INVALID'
+  | 'NOVEL_PREFERENCE_CANDIDATE_NOT_FOUND'
+  | 'NOVEL_PREFERENCE_CANDIDATE_INVALID'
 
 /** One validated version-one Novel Project declaration. */
 export interface NovelProjectSnapshot {
@@ -194,6 +199,67 @@ export interface AssetRevisionSummary {
   readonly contentHash: ContentHash
   readonly origin: RevisionOrigin
   readonly createdAt: string
+}
+
+/** Explicit author decision that one exact chapter Revision is a finished version. */
+export interface RevisionFinalization {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly finalizedAt: string
+  readonly finalizedBySessionId: SessionId
+  /** Nearest Agent-authored ancestor eligible for draft/final comparison. */
+  readonly sourceRevisionId?: RevisionId
+  readonly sourceChangeSetId?: ChangeSetId
+  readonly sourceSessionId?: SessionId
+}
+
+/** Bounded evidence supporting one inferred author preference. */
+export interface NovelPreferenceEvidence {
+  readonly before: string
+  readonly after: string
+  readonly inference: string
+}
+
+export type NovelPreferenceCandidateStatus = 'pending' | 'accepted' | 'rejected'
+
+/** Model-inferred guidance that remains inert until the author decides it. */
+export interface NovelPreferenceCandidate {
+  readonly id: PreferenceCandidateId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly sourceRevisionId: RevisionId
+  readonly finalRevisionId: RevisionId
+  readonly sourceChangeSetId?: ChangeSetId
+  readonly sourceSessionId?: SessionId
+  readonly targetStyleAssetId: AssetId
+  readonly targetStyleRevisionId: RevisionId
+  readonly extractorVersion: string
+  readonly generatedAt: string
+  readonly summary: string
+  readonly guidanceMarkdown: string
+  readonly evidence: readonly NovelPreferenceEvidence[]
+  readonly status: NovelPreferenceCandidateStatus
+  readonly decidedAt?: string
+  readonly decidedBySessionId?: SessionId
+  readonly resultChangeSetId?: ChangeSetId
+  readonly resultRevisionId?: RevisionId
+}
+
+/** Valid generated preference candidate before provider identity and project fields are assigned. */
+export interface PutNovelPreferenceCandidateRequest {
+  readonly assetId: AssetId
+  readonly sourceRevisionId: RevisionId
+  readonly finalRevisionId: RevisionId
+  readonly sourceChangeSetId?: ChangeSetId
+  readonly sourceSessionId?: SessionId
+  readonly targetStyleAssetId: AssetId
+  readonly targetStyleRevisionId: RevisionId
+  readonly extractorVersion: string
+  readonly generatedAt: string
+  readonly summary: string
+  readonly guidanceMarkdown: string
+  readonly evidence: readonly NovelPreferenceEvidence[]
 }
 
 /** First durable analysis products attached to exact chapter bytes. */

@@ -4169,6 +4169,9 @@ importers:
       '@deepseek-ai/dsh-agent':
         specifier: workspace:^
         version: link:../../core/agent
+      '@deepseek-ai/dsh-experimental-novel-asset-outline':
+        specifier: workspace:^
+        version: link:../novel-asset-outline
       '@deepseek-ai/dsh-experimental-novel-context':
         specifier: workspace:^
         version: link:../novel-context

@@ -23,6 +23,7 @@ const workbenchSkillNames = [
   'chapter-review',
   'dialogue-diagnostics',
   'outline-beat-design',
+  'preference-learning',
   'rewrite-to-style',
   'scene-drive',
   'style-audit',
