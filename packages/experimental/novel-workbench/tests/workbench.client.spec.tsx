@@ -785,7 +785,7 @@ describe('ContextTray', () => {
     expect(humanContextLabel('白港 · 全书大纲')).toBe('白港 · 全书大纲')
   })
 
-  it('is preset-scoped and replaces exact follow and searched pinned worksets', async () => {
+  it('is preset-scoped and replaces live follow plus exact searched pinned worksets', async () => {
     const focus = new NovelContextFocusController()
     act(() => { focus.set({ sessionId: SID, project, document: chapter(), dirty: false }) })
     const replace = vi.fn(async (workset: NovelContextWorksetDescriptor) => workset)
@@ -804,8 +804,8 @@ describe('ContextTray', () => {
     />)
 
     await waitFor(() => { expect(replace).toHaveBeenCalledWith({
-      version: 1, projectId: 'project-1', items: [{
-        projectId: 'project-1', assetId: 'asset-chapter-1', revisionId: 'revision-1',
+      version: 2, projectId: 'project-1', items: [{
+        projectId: 'project-1', assetId: 'asset-chapter-1',
         label: '第一章', mode: 'follow', origin: 'active-asset',
       }],
     }) })
@@ -815,8 +815,8 @@ describe('ContextTray', () => {
     await waitFor(() => { expect(view.getByText('全书大纲')).toBeTruthy() })
     fireEvent.click(view.getByText('全书大纲'))
     await waitFor(() => { expect(replace).toHaveBeenCalledWith({
-      version: 1, projectId: 'project-1', items: [{
-        projectId: 'project-1', assetId: 'asset-chapter-1', revisionId: 'revision-1',
+      version: 2, projectId: 'project-1', items: [{
+        projectId: 'project-1', assetId: 'asset-chapter-1',
         label: '第一章', mode: 'follow', origin: 'active-asset',
       }, {
         projectId: 'project-1', assetId: 'asset-outline-1', revisionId: 'revision-outline-1',
@@ -844,9 +844,9 @@ describe('ContextTray', () => {
     const focus = new NovelContextFocusController()
     act(() => { focus.set({ sessionId: SID, project, document: chapter(), dirty: true }) })
     const workset: NovelContextWorksetDescriptor = {
-      version: 1, projectId: 'project-1' as never, items: [{
+      version: 2, projectId: 'project-1' as never, items: [{
         projectId: 'project-1' as never, assetId: 'asset-chapter-1' as never,
-        revisionId: 'revision-1' as never, label: '第一章', mode: 'follow', origin: 'active-asset',
+        label: '第一章', mode: 'follow', origin: 'active-asset',
       }],
     }
     const replace = vi.fn(async (value: NovelContextWorksetDescriptor) => value)
@@ -1386,7 +1386,7 @@ describe('Novel workbench stores and browser assembly', () => {
       replace: (workset: NovelContextWorksetDescriptor) => Promise<unknown>
     })(SID)
     await expect(trayFace.search({ query: '白港' })).resolves.toEqual([])
-    const workset: NovelContextWorksetDescriptor = { version: 1, projectId: 'project-1' as never, items: [] }
+    const workset: NovelContextWorksetDescriptor = { version: 2, projectId: 'project-1' as never, items: [] }
     await expect(trayFace.replace(workset)).resolves.toEqual(workset)
 
     const explorer = slots.entries('novel.explorer')[0]!.inject as () => {

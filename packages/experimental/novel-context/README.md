@@ -4,17 +4,19 @@ English | [中文](README.zh.md)
 
 ## Purpose
 
-This experimental Host Consumer turns canonical, Revision-bound Novel references into exact model-visible context that DSH can reconstruct from the Session log.
+This experimental Host Consumer turns canonical Novel references and explicit task policies into bounded, exact model-visible context that DSH can reconstruct from the Session log.
 
 ## Behavior
 
 - `dsh-novel:` URIs carry one project, asset, retained Revision, optional type-defined JSON selector, and display label; `formatNovelReferenceMention()` wraps the URI in a readable Markdown mention for Composer drafts.
-- `NovelContextResolver` intercepts direct user messages at `agent/pre-step`, removes only recognized canonical mentions from the readable message, resolves exact retained Revisions, and appends one immutable `user/message` with source kind `novel-context` immediately after it.
-- `replaceWorkset()` records the complete current follow/pinned reference set as a versioned `novel/context-workset` Session event. At most one item follows the active saved Asset; searched Assets can be pinned. Replacing an unchanged value appends no event.
-- A client-visible `novelContextWorkset` Session Projection folds the latest whole value. The browser uses it only to disclose and edit the next-turn workset; the model-visible authority is the version-two Context Manifest frozen into the Session Log.
-- Every item serializes a canonical exact-Revision `dsh-novel:` coordinate. Follow/pinned workset items are coordinate-only and can be fetched with `novel_get`; an explicit Composer reference embeds its exact selected text (or explicit whole-Asset projection) inside the untrusted-material frame.
-- On a direct user turn, explicit Composer references are ordered before the retained workset, exact duplicates are folded, and one Manifest records each exact Revision plus its `explicit`, `follow`, or `pinned` mode and origin. Tool-continuation steps do not inject the workset again.
-- One request may contain at most eight references and 256 KiB of resolved UTF-8 text by default. Both positive-integer limits are configurable, duplicate references are folded, and overflow fails before the model request.
+- `NovelContextResolver` intercepts direct user messages at `agent/pre-step`, removes only recognized canonical mentions from the readable message, and appends one immutable `user/message` with source kind `novel-context` immediately after it.
+- `compile()` accepts a closed task policy and exact targets. Version one policies cover direct turns, chapter writing, selection rewrite/review, outline editing, chapter review, and preference learning. Policy is selected by an explicit workflow or `novelContextPolicy` Skill metadata, never guessed from user prose.
+- Policies expand only deterministic typed relations: for example, chapter writing/review can include its chapter outline, Book Brief, and Book Style Profile while retaining the root Book Outline as a coordinate. Project-global guidance is not always-on context.
+- `replaceWorkset()` records a version-two whole value. Its single `follow` item stores only active Asset identity and resolves the current head at compile time; `pinned` items retain exact Revisions and optional selectors. Legacy version-one events replay and normalize on replacement.
+- A client-visible `novelContextWorkset` Session Projection folds the latest whole value. It is coordination state only; the model-visible authority is the version-three Context Manifest frozen into the Session Log.
+- Direct turns materialize explicit Composer references while follow/pinned workset items remain coordinates. An explicit `/skill-name` turn compiles the Skill policy immediately; after the model loads a Skill, the next step adds related material without copying text already materialized in the prior Manifest.
+- The compiler deduplicates identical exact coordinates while preserving distinct selections; required material for an Asset/Revision also prevents a lower-priority optional copy from broadening it. It caps references at eight and budgets 256 KiB of authored UTF-8 text by default. Required targets fail closed on overflow; optional materials degrade to coordinates rather than being truncated.
+- Every V3 Manifest records policy, exact Revision, type, origin, retention mode, projection, selection reason, content hash, model-text size, and model-text hash under one deterministic Manifest id.
 - The resolver asks the target Asset's registered Host definition to validate and project its selector. The shipped text selector rejects surrogate-pair splits and quote drift; no selector ever falls back to the current file.
 - The first durable Novel context message binds the Session to one Project; later Novel context for another Project fails explicitly.
 
@@ -24,11 +26,11 @@ This experimental Host Consumer turns canonical, Revision-bound Novel references
 
 #### What the model sees
 
-The model sees the user's readable message followed by one manifest containing canonical exact-Revision coordinates. Only explicit references carry authored text; the automatically followed current Asset and searched pins remain coordinates. Its version-two `novel-context` source carries a deterministic Manifest id, origin, and retention mode, so Session replay reconstructs the same context cut.
+The model sees the user's readable message followed by a `NovelContextManifestSourceV3` frame containing canonical exact-Revision coordinates and only the material selected by the active task policy. Ordinary direct turns remain lean. Skill and fixed-workflow requests can add chapter outline, brief, style, or outline relations with an explicit reason and projection. Session replay reconstructs the same exact context cut.
 
 #### Token effect
 
-Coordinates for the visible workset add only bounded metadata. Explicit referenced text is the variable portion governed by the configured byte limit.
+Coordinates add only bounded metadata. Materialized target and related text are the variable portions governed by the configured byte limit; optional text becomes a coordinate when the budget is exhausted.
 
 #### KV Cache effect
 
@@ -36,7 +38,7 @@ The package does not change the system prompt or tool catalog. A different refer
 
 ## Known Limitations and Deferred Work
 
-- **Author-controlled retrieval only** — search results enter context only after an author or Agent chooses an exact result; automatic retrieval, semantic ranking, and hidden context injection are deferred.
+- **Deterministic typed relations only** — semantic ranking, embeddings, generated summaries, Story State, and hidden intent classification are deferred.
 - **One Project per Session** — cross-project context and Series-level shared assets are not supported.
 - **UTF-16 range selectors** — persistent block ids, fuzzy relocation, and three-way selection repair are deferred.
-- **Explicit text is verbatim** — the resolver does not summarize or compact an explicit selection or whole-Asset reference; callers must stay within the configured budget.
+- **Materialized text is verbatim** — the compiler does not summarize or compact a selected projection. Later implementations may add policy-owned summaries or model-specific token budgets behind the same explicit compile and V3 Manifest seam.

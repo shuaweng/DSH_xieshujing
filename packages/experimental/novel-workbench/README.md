@@ -22,7 +22,7 @@ This experimental Client Consumer contributes an Agent-native Novel Studio surfa
 - Agent-created Assets return a replayable creation card and refresh the authoritative explorer. Human and Agent creation both use the same typed Remote/Repository path; neither invents a filesystem path.
 - The Novel Agent can call `novel_present` with `open-workbench` or `close-workbench`. Its durable tool-result metadata drives the same browser-local `ctx.layout` selection as the Composer toggle; ordinary Agent prose never controls layout and presentation never mutates an Asset.
 - “Reference selection to Agent” first saves a dirty typed draft, stops safely if that save fails, then freezes the selection. Composer displays only `@[the first ten characters…]`; its hidden occurrence retains the complete canonical `dsh-novel:` mention and serializes that exact value for the Agent on submit.
-- The preset-scoped `conversation.input.dock` adds a compact coordinate tray aligned to the Composer. It automatically follows whichever saved chapter, Book Outline, Volume Outline, guidance Asset, or other registered Asset is visible, displays coordinates instead of prose, and lets authors pin searched coordinates. A dirty editor retains the last saved Revision and visibly asks for save. Explicit selection references separately send the canonical coordinate plus the full selected text.
+- The preset-scoped `conversation.input.dock` adds a compact coordinate tray aligned to the Composer. Its live follow item stores the visible Asset identity and resolves the current saved head when the next task compiles; pinned search results remain exact Revision coordinates. A dirty editor still points at the last saved head and visibly asks for save. Explicit selection references separately send the canonical exact coordinate plus the full selected text.
 - `novel_propose_changes` tool results render a durable inline Diff card. Accept and Reject call Session-owned Remote methods; Accept refreshes the explorer and canvas from authoritative repository state.
 - The workbench resolves the conversation service lazily after its slot owner mounts, avoiding a client-plugin dependency cycle while still using DSH's ordinary Composer draft state.
 
@@ -32,7 +32,7 @@ This experimental Client Consumer contributes an Agent-native Novel Studio surfa
 
 #### What the model sees
 
-The Client package itself adds no hidden model content. Explicit mentions and the visible Context Tray workset are resolved by `@deepseek-ai/dsh-experimental-novel-context`, and model proposals are created by `@deepseek-ai/dsh-experimental-tool-novel`. Clicking chapter review launches a bounded reviewer; marking an eligible Revision final launches a separate bounded preference worker. Clicking NOAI uses no model.
+The Client package itself adds no hidden model content. Explicit mentions and the visible Context Tray workset are inputs to `@deepseek-ai/dsh-experimental-novel-context`; its explicit task policy decides whether they stay coordinates or gain bounded related material in the frozen V3 Manifest. Model proposals are created by `@deepseek-ai/dsh-experimental-tool-novel`. Clicking chapter review launches a bounded reviewer; marking an eligible Revision final launches a separate bounded preference worker. Clicking NOAI uses no model.
 
 #### Token effect
 

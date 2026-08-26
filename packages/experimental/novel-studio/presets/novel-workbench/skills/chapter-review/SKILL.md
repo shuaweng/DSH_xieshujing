@@ -3,6 +3,7 @@ name: chapter-review
 description: 对冻结的单章正文做证据化审查，检查剧情推进、因果连续性、人物可信度、节奏、追读钩子与文风；只生成报告，不修改资产。
 whenToUse: "[精确章节 Revision、相关章纲、本书概述、本书风格与必要上下文]"
 user-invocable: true
+novelContextPolicy: chapter-review
 ---
 
 # Chapter Review
@@ -11,7 +12,7 @@ user-invocable: true
 
 ## 工作台协议
 
-系统会把目标章节的准确 Revision 以及可用的章纲、本书概述、本书风格和固定引用交给你。若由用户在普通对话中调用本方法，先用 `novel_get` 读取规范引用的准确 Revision；没有引用时先用 `novel_search` 定位。不得用“最新文件”替代指定版本，也不得把缺失的前文、设定或作者意图当成已知事实。
+系统会通过 Novel Context Manifest 把目标章节的准确 Revision 以及可用的章纲、本书概述、本书风格和固定引用交给你。先使用已物化材料，不要重复读取；Manifest 仅给坐标时才用 `novel_get` 定点补足，没有目标坐标时才用 `novel_search` 定位。不得用“最新文件”替代指定版本，也不得把缺失的前文、设定或作者意图当成已知事实。
 
 ## 审查顺序
 

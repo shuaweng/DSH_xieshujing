@@ -9,11 +9,11 @@ This experimental Host service owns exact-Revision chapter analysis and explicit
 ## Behavior
 
 - `scanChapter()` reads one retained `manuscript.chapter` Revision, runs bounded deterministic rules without a model, and upserts one `noai-scan` report for that exact Revision.
-- `reviewChapter()` freezes the requested chapter plus bounded Chapter Outline, Book Brief, Book Style Profile, and current workset references. It starts a fresh one-shot Subagent with a read-only persona, `maxDepth: 1`, only the `skill` tool, and a strict structured-output schema.
+- `reviewChapter()` asks the Novel Context Compiler for the closed `chapter-review` policy. The compiler freezes the requested chapter, deterministically related Chapter Outline / Book guidance, and the current workset under one exact V3 Manifest before the service starts a fresh one-shot Subagent with a read-only persona, `maxDepth: 1`, only the `skill` tool, and a strict structured-output schema.
 - The reviewer loads the package-owned `chapter-review` Skill and scores plot, causality, character, pacing, hook, and style with evidence-bound findings. Authored material is explicitly marked untrusted and cannot widen worker authority.
 - A report is written only after the worker completes and the service validates every field and bound. A failed rerun leaves the previous successful `(project, asset, revision, kind)` report intact; a successful rerun replaces that one row.
 - `candidateWarning()` materializes a proposed chapter ChangeSet in memory and runs the same deterministic scanner. Material risk returns bounded advisory text for the caller to add to the current model turn; it does not persist a report or create another ChangeSet.
-- `finalizeChapter()` first retains the user's explicit decision for one exact chapter Revision, finds the nearest `agent-apply` ancestor, and starts a fresh one-shot preference worker only when an author edit actually follows that Agent draft. The worker compares bounded exact Revision text plus the current exact `book.style-profile` and can only return a strict inert candidate with evidence.
+- `finalizeChapter()` first retains the user's explicit decision for one exact chapter Revision, finds the nearest `agent-apply` ancestor, and starts a fresh one-shot preference worker only when an author edit actually follows that Agent draft. Its `preference-learning` context policy freezes the exact draft, final Revision, and current exact `book.style-profile`; the worker can only return a strict inert candidate with evidence.
 - `acceptPreference()` appends author-reviewed guidance to the exact style-profile Revision through the normal ChangeSet apply and crash-recovery protocol. `rejectPreference()` records a terminal decision without changing authored content. Save, review, scan, and Agent tool paths never finalize automatically.
 
 ## Model Experience
@@ -22,7 +22,7 @@ This experimental Host service owns exact-Revision chapter analysis and explicit
 
 #### What the model sees
 
-Only the dedicated reviewer sees the frozen exact-Revision chapter and bounded related Assets. Only the dedicated preference worker sees the exact Agent draft, exact user-final Revision, and exact current Book Style Profile. Both workers have fixed read-only personas, only the `skill` tool, and strict output contracts. The root Agent sees deterministic candidate warnings only when a proposed chapter crosses the configured threshold.
+Only the dedicated reviewer sees the V3 Manifest compiled for the exact-Revision chapter and its deterministic related Assets. Only the dedicated preference worker sees the Manifest containing the exact Agent draft, exact user-final Revision, and exact current Book Style Profile. Both workers have fixed read-only personas, only the `skill` tool, and strict output contracts. The root Agent sees deterministic candidate warnings only when a proposed chapter crosses the configured threshold.
 
 #### Token effect
 

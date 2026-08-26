@@ -37,13 +37,12 @@ export function ContextTray({
   const [error, setError] = useState<string>()
 
   const workset = projected ?? (focus === undefined ? undefined : {
-    version: 1 as const, projectId: focus.project.id, items: [],
+    version: 2 as const, projectId: focus.project.id, items: [],
   })
   const follow = workset?.items.find(item => item.mode === 'follow')
   const currentFollow = follow ?? (focus === undefined || focus.dirty ? undefined : {
     projectId: focus.project.id,
     assetId: focus.document.id,
-    revisionId: focus.document.revisionId,
     label: focus.document.title,
     mode: 'follow' as const,
     origin: 'active-asset' as const,
@@ -55,15 +54,15 @@ export function ContextTray({
 
   useEffect(() => {
     if (preset !== NOVEL_WORKBENCH_PRESET || focus === undefined || focus.dirty) return
-    if (follow?.assetId === focus.document.id && follow.revisionId === focus.document.revisionId) return
+    if (workset?.version === 2 && follow?.assetId === focus.document.id
+      && follow.projectId === focus.project.id && follow.label === focus.document.title) return
     const next: NovelContextWorksetDescriptor = {
-      version: 1,
+      version: 2,
       projectId: focus.project.id,
       items: [
         {
           projectId: focus.project.id,
           assetId: focus.document.id,
-          revisionId: focus.document.revisionId,
           label: focus.document.title,
           mode: 'follow',
           origin: 'active-asset',
@@ -72,7 +71,7 @@ export function ContextTray({
       ],
     }
     void replace(next).catch((cause: unknown) => { setError(errorMessage(cause)) })
-  }, [focus, follow, pinned, preset, replace])
+  }, [focus, follow, pinned, preset, replace, workset?.version])
 
   if (preset !== NOVEL_WORKBENCH_PRESET) return null
 
@@ -80,7 +79,7 @@ export function ContextTray({
     const projectId = focus?.project.id ?? workset?.projectId
     if (projectId === undefined) return
     setBusy(true); setError(undefined)
-    try { await replace({ version: 1, projectId, items }) }
+    try { await replace({ version: 2, projectId, items }) }
     catch (cause: unknown) { setError(errorMessage(cause)) }
     finally { setBusy(false) }
   }
@@ -148,7 +147,7 @@ function errorMessage(error: unknown): string { return error instanceof Error ? 
 
 /** Compact human coordinate; the model manifest also carries the canonical dsh-novel URI. */
 export function contextCoordinate(item: NovelContextWorksetDescriptor['items'][number]): string {
-  return `novel://${item.projectId}/${item.assetId}@${item.revisionId}`
+  return `novel://${item.projectId}/${item.assetId}@${item.mode === 'follow' ? 'current' : item.revisionId}`
 }
 
 /** Keep the tray readable while the exact coordinate remains available to the model and tooltip. */

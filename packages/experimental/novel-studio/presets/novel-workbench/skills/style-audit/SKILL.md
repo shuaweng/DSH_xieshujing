@@ -3,6 +3,7 @@ name: style-audit
 description: 诊断正文的 AI 味、解释腔、句法节奏、信息释放、作者腔钩子与连载拉力；只给有证据和优先级的问题单，不直接改稿。
 whenToUse: "[当前正文选区/章节引用与审查重点]"
 user-invocable: true
+novelContextPolicy: selection-review
 ---
 
 # Style Audit
@@ -11,7 +12,7 @@ user-invocable: true
 
 ## 工作台协议
 
-优先审查当前冻结的选区或章节。先从 `novel_list` 查看是否存在 `book.style-profile`；存在时用 canonical reference 调 `novel_get` 读取准确 Revision，并区分“违反本书已确认风格”和“一般性风险”。没有准确目标时用 `novel_search` 定位，再用 `novel_get` 读取确切 Revision；不要为了审一段而扫描整本书。若用户明确要改稿，先完成诊断，再建议调用 `rewrite-to-style`。审查结论不能自动写回风格资产。
+优先审查本轮 Novel Context Manifest 已物化的选区或章节及 `book.style-profile`，不要重复读取相同 Revision，并区分“违反本书已确认风格”和“一般性风险”。Manifest 仅给坐标时才用 `novel_get` 定点补足，没有准确目标时才用 `novel_search` 定位；不要为了审一段而扫描整本书。若用户明确要改稿，先完成诊断，再建议调用 `rewrite-to-style`。审查结论不能自动写回风格资产。
 
 ## 诊断维度
 

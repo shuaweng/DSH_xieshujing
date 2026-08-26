@@ -3,6 +3,7 @@ name: dialogue-diagnostics
 description: 专项诊断对白的声音同质化、生硬、信息倾泻、潜台词缺失、功能单一、节奏与权力关系失配；只诊断，不直接改写。
 whenToUse: "[当前对白选区/章节引用与希望检查的场景关系]"
 user-invocable: true
+novelContextPolicy: selection-review
 ---
 
 # Dialogue Diagnostics
@@ -11,7 +12,7 @@ user-invocable: true
 
 ## 工作台协议
 
-优先使用当前冻结的对白选区；从 `novel_list` 查看是否存在 `book.style-profile`，存在时用 canonical reference 调 `novel_get` 读取准确 Revision，提取其中与对白声音、直接程度和节奏有关的规则。目标缺失时用 `novel_search` 定位，再用 `novel_get` 读取准确 Revision。只读取理解这场交流所需的上下文，不扩展到整本书。若用户随后要求改写，转用 `rewrite-to-style`；场景本身没有冲突时转用 `scene-drive`。
+优先使用本轮 Novel Context Manifest 已物化的对白选区和 `book.style-profile`；不要重复读取相同 Revision。材料仅有坐标时才用 `novel_get` 定点补足，目标缺失时才用 `novel_search` 定位。只读取理解这场交流所需的上下文，不扩展到整本书。若用户随后要求改写，转用 `rewrite-to-style`；场景本身没有冲突时转用 `scene-drive`。
 
 ## 六项检查
 

@@ -32,6 +32,7 @@
       - option "8/26/2026, {{clock}} · Initial import"
   - text: Saved
   - button "Save" [disabled]
+  - button "Mark final"
   - button "Reference selection to Agent"
   - article:
     - textbox "Chapter title": 雨夜归人

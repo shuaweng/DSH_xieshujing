@@ -4,17 +4,19 @@
 
 ## 用途
 
-这个实验性 Host Consumer 将携带 Revision 的规范 Novel 引用转换为精确的模型可见上下文，并让 DSH 可以从 Session 日志中重建它。
+这个实验性 Host Consumer 将规范 Novel 引用和显式任务策略转换为有边界、精确的模型可见上下文，并让 DSH 可以从 Session 日志中重建它。
 
 ## 行为
 
 - `dsh-novel:` URI 携带一个项目、资产、已保留 Revision、可选的类型定义 JSON selector 和展示标签；`formatNovelReferenceMention()` 将 URI 包装为 Composer 草稿中的可读 Markdown 引用。
-- `NovelContextResolver` 在 `agent/pre-step` 拦截直接用户消息，只从可读消息中移除已识别的规范引用，解析精确的已保留 Revision，并紧随其后追加一条来源类型为 `novel-context` 的不可变 `user/message`。
-- `replaceWorkset()` 把完整的当前跟随/固定引用集记录为带版本的 `novel/context-workset` Session 事件。最多一个条目跟随当前已保存 Asset；检索到的 Asset 可以固定。替换为相同值时不追加事件。
-- 客户端可见的 `novelContextWorkset` Session Projection 折叠最新整值。浏览器只用它披露并编辑下一轮工作集；模型可见权威仍是冻结进 Session Log 的第二版 Context Manifest。
-- 每个条目都会序列化规范、绑定精确 Revision 的 `dsh-novel:` 坐标。跟随/固定工作集只携带坐标，需要正文时由 Agent 使用 `novel_get`；Composer 显式引用则在不可信资料框架中嵌入精确选中文字（或显式整 Asset 投影）。
-- 在直接用户轮次中，Composer 显式引用排在保留工作集之前，精确重复项会合并；一份 Manifest 会记录每个精确 Revision 的 `explicit`、`follow` 或 `pinned` 模式及来源。工具续步不会重复注入工作集。
-- 默认一次请求最多包含八个引用和 256 KiB 已解析 UTF-8 文本。两个正整数上限均可配置，重复引用会合并，超限会在模型请求前失败。
+- `NovelContextResolver` 在 `agent/pre-step` 拦截直接用户消息，只从可读消息中移除已识别的规范引用，并紧随其后追加一条来源类型为 `novel-context` 的不可变 `user/message`。
+- `compile()` 接受闭集任务策略与精确目标。第一版策略覆盖普通 Turn、章节写作、选区改写/审查、大纲编辑、章节审查与偏好学习。策略由显式流程或 Skill 的 `novelContextPolicy` metadata 选择，绝不从用户自然语言猜测。
+- 策略只扩展确定的类型化关系。例如章节写作/审查可加入对应章纲、本书概述与本书风格，而全书大纲只保留坐标。项目级指导不是常驻上下文。
+- `replaceWorkset()` 记录第二版整值。唯一 `follow` 条目只保存活动 Asset 身份，在编译时解析 current head；`pinned` 条目保留精确 Revision 和可选 selector。旧版事件可继续重放，并在替换时规范化。
+- 客户端可见的 `novelContextWorkset` Session Projection 折叠最新整值。它只是协调状态；模型可见权威是冻结进 Session Log 的第三版 Context Manifest。
+- 普通 Turn 物化 Composer 显式引用，follow/pinned 工作集只给坐标。显式 `/skill-name` Turn 会立即按 Skill 策略编译；模型加载 Skill 后，下一 Step 会增加关联材料，不复制上一份 Manifest 已经物化的文本。
+- 编译器会合并完全相同的精确坐标，同时保留不同选区；同一 Asset/Revision 已有必需材料时，也不会再被较低优先级的可选副本扩成全文。默认最多八个引用和 256 KiB 作者 UTF-8 文本。必需目标超预算时失败关闭；可选材料降级成坐标，而不是被截断。
+- 每份 V3 Manifest 在一个确定性 Manifest id 下记录策略、精确 Revision、类型、来源、保留模式、投影、选取原因、内容哈希、模型文本大小与模型文本哈希。
 - 解析器让目标 Asset 已注册的 Host 定义校验 selector 并生成模型投影。内置文本 selector 会拒绝切开代理对或 quote 漂移；任何 selector 都绝不回退读取当前文件。
 - 第一条持久 Novel 上下文消息把 Session 绑定到一个 Project；后续引用另一个 Project 会明确失败。
 
@@ -24,11 +26,11 @@
 
 #### 模型看到什么
 
-模型先看到用户的可读消息，随后看到一份含规范精确 Revision 坐标的 Manifest。只有显式引用携带创作文本；自动跟随的当前 Asset 与检索固定项只保留坐标。第二版 `novel-context` 来源携带确定性 Manifest id、来源和保留模式，因此 Session 回放可以重建同一个上下文切面。
+模型先看到用户的可读消息，随后看到一份 `NovelContextManifestSourceV3` 框架，其中包含规范精确 Revision 坐标，以及当前任务策略选中的必要材料。普通直接 Turn 保持轻量；Skill 与固定流程可以按显式原因和投影加入章纲、概述、风格或大纲关系。Session 回放能重建同一个精确上下文切面。
 
 #### Token 影响
 
-可见工作集的坐标只增加有界元数据；显式引用文本才是受配置字节上限约束的可变部分。
+坐标只增加有界元数据；物化的目标和关联文本才是受配置字节上限约束的可变部分。预算耗尽时，可选文本会变成坐标。
 
 #### KV Cache 影响
 
@@ -36,7 +38,7 @@
 
 ## 已知限制与延期工作
 
-- **仅由作者控制检索进入上下文** — 检索结果只有在作者或 Agent 选择精确结果后才会进入上下文；自动检索、语义排序和隐藏上下文注入尚未实现。
+- **仅确定类型关系** — 语义排序、embedding、生成摘要、Story State 与隐藏意图分类尚未实现。
 - **每个 Session 一个 Project** — 不支持跨项目上下文和 Series 级共享资产。
 - **UTF-16 范围选择器** — 稳定 Block id、模糊重定位和三方选区修复尚未实现。
-- **显式文本保持原文** — 解析器不摘要或压缩显式选区或整 Asset 引用；调用方必须遵守配置预算。
+- **物化文本保持原文** — 编译器不摘要或压缩选中的投影。后续可在相同显式 compile 与 V3 Manifest 接缝后增加策略化摘要或按模型 token 预算。

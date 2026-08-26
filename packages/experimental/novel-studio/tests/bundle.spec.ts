@@ -28,6 +28,16 @@ const workbenchSkillNames = [
   'scene-drive',
   'style-audit',
 ] as const
+const contextPolicies = {
+  'chapter-execution': 'chapter-write',
+  'chapter-review': 'chapter-review',
+  'dialogue-diagnostics': 'selection-review',
+  'outline-beat-design': 'outline-edit',
+  'preference-learning': 'preference-learning',
+  'rewrite-to-style': 'selection-rewrite',
+  'scene-drive': 'chapter-write',
+  'style-audit': 'selection-review',
+} as const
 
 afterEach(() => {
   while (temporaryHomes.length > 0) rmSync(temporaryHomes.pop()!, { recursive: true, force: true })
@@ -92,6 +102,7 @@ describe('experimental Novel Studio bundle', () => {
       const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
       expect(body).toMatch(new RegExp(`^---\\nname: ${name}\\n`))
       expect(body).toContain('user-invocable: true')
+      expect(body).toContain(`novelContextPolicy: ${contextPolicies[name]}`)
       expect(body).toContain('novel_get')
       expect(body).not.toMatch(/PROJECT\.md|STYLE\.md|\.lingtai|references\//)
       expect(body).not.toMatch(/`(?:read|write|edit|grep|glob|bash)`/)

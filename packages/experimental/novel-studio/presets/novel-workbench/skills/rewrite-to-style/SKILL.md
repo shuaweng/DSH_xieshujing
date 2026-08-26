@@ -3,6 +3,7 @@ name: rewrite-to-style
 description: 在不改变核心事实、剧情 beat、POV 和信息边界的前提下改写已有正文；用于去 AI 味、调句法节奏、对白声音与信息露出。
 whenToUse: "[当前正文选区/章节引用与明确的风格目标]"
 user-invocable: true
+novelContextPolicy: selection-rewrite
 ---
 
 # Rewrite To Style
@@ -11,7 +12,7 @@ user-invocable: true
 
 ## 工作台协议
 
-先使用当前冻结选区或章节；从 `novel_list` 查看项目是否已有唯一的 `book.style-profile`，存在时用 canonical reference 调 `novel_get` 读取准确 Revision，并把它作为本书已确认的风格依据。缺少目标时用 `novel_search` 定位，用 `novel_get` 读取精确 Revision 与文本。必要时再读取被明确引用的章纲或 `book.brief`，不扩读无关资产。没有风格资产时只遵循用户本轮要求，不得臆造长期偏好。
+先使用本轮 Novel Context Manifest 已物化的选区或章节及 `book.style-profile`，不要重复读取相同 Revision。Manifest 仅给坐标时才用 `novel_get` 定点补足，缺少目标时才用 `novel_search` 定位。必要时再读取被明确引用但尚未物化的章纲或 `book.brief`，不扩读无关资产。没有风格资产时只遵循用户本轮要求，不得臆造长期偏好。
 
 试写直接回复聊天。修改正式正文只能调用 `novel_propose_changes`，范围和 operation 必须来自 `novel_get` 的 proposalInstructions。ChangeSet 未 applied 时，只能称为待审建议。
 

@@ -3,6 +3,7 @@ name: scene-drive
 description: 设计或诊断单个场景、单章的推进引擎，包括目标、阻力、升级、结果与自然章末钩子；结构不清时先给蓝图，明确要求改稿时才提案。
 whenToUse: "[当前片段/章节/章纲引用，或场景发平、冲突不顶、章末收不住的问题]"
 user-invocable: true
+novelContextPolicy: chapter-write
 ---
 
 # Scene Drive
@@ -11,7 +12,7 @@ user-invocable: true
 
 ## 工作台协议
 
-使用当前冻结资产优先；从 `novel_list` 查看是否存在 `book.brief`，存在时用 canonical reference 调 `novel_get` 读取准确 Revision，校准当前场景与全书承诺和事实边界。需要补足目标时用 `novel_search` 找章纲或相关正文，用 `novel_get` 读取准确 Revision。设计蓝图和诊断直接回复聊天；用户要求把设计落成章纲时，新建用 `novel_create`、修改用 `novel_propose_changes`；用户明确要求改正文时才对精确正文范围提案。未 applied 的提案绝不等于完成修改。
+使用本轮 Novel Context Manifest 已物化的当前资产、章纲与 `book.brief` 优先，不要重复读取相同 Revision。材料仅有坐标时才用 `novel_get` 定点补足，需要定位缺失目标时才用 `novel_search`。设计蓝图和诊断直接回复聊天；用户要求把设计落成章纲时，新建用 `novel_create`、修改用 `novel_propose_changes`；用户明确要求改正文时才对精确正文范围提案。未 applied 的提案绝不等于完成修改。
 
 ## 推进诊断
 

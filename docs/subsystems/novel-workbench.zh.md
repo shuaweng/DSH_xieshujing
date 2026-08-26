@@ -59,11 +59,15 @@ The protagonist reaches White Harbor.
 
 第一版为当前全部自由正文 Asset 类型冻结带 UTF-16 offset 与 quote hash 的非空文本范围。每个选区都绑定一个已保留 Revision，绝不静默前移到可变的最新内容。浏览器 context barrier 先保存脏的类型化草稿，再捕获新 Revision 上的精确选区，最后把规范 `dsh-novel:` mention 插入普通 DSH Composer。
 
-[`@deepseek-ai/dsh-experimental-novel-context`](../../packages/experimental/novel-context) 在 `agent/pre-step` 解析这些 mention。它保留人类可读消息，并附加一个 source kind 为 `novel-context` 的不可变 `user/message`。该消息以确定性、明确不受信任的 JSON 保存精确 Revision，让 Session replay 能重建模型实际看到的内容。引用数量和 UTF-8 总字节数都有上限，而且第一次 Novel context 会把该 Session 绑定到一个 Project。
+[`@deepseek-ai/dsh-experimental-novel-context`](../../packages/experimental/novel-context) 在 `agent/pre-step` 解析这些 mention。它保留人类可读消息，并附加一个 source kind 为 `novel-context` 的不可变 `user/message`。该消息以确定性、明确不受信任的 JSON 保存精确 Revision，让 Session replay 能重建模型实际看到的内容。第一次 Novel context 会把该 Session 绑定到一个 Project。
+
+可见 workset 是协调状态，而不是始终注入 Prompt 的内容包。版本二的 `follow` 指针只保存当前 Asset 身份，在编译一轮请求时才解析已保存 head；`pinned` 引用仍绑定精确 Revision。普通对话只实体化 Composer 中显式引用的选区，follow 与 pinned 项以紧凑坐标表示。
+
+任务工作流以封闭 policy 与精确目标调用同一个 Host Context Compiler。显式 Novel Skill metadata 或固定审查/定稿入口分别选择章节写作、选区任务、大纲编辑、章节审查与偏好学习 policy，绝不从自然语言中猜测意图。Policy 只能增加章纲、本书概述、本书风格或大纲亲属等确定性的类型化关系。必需正文超出预算时关闭失败；可选材料则降级为坐标。最终版本三 Context Manifest 会在进入 Session Log 前，以确定性 ID 记录 policy、原因、projection、精确 Revision、内容 hash 与模型可见字节数。
 
 ## 提案、审阅与恢复
 
-[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_search`、`novel_create`、`novel_get`、`novel_propose_changes` 和纯展示工具 `novel_present`。目录发现会返回规范精确 Revision 引用与已注册创建契约；精确读取使用各类型的确定性模型投影与提案说明。相关 Workbench Skill 会显式发现并读取当前 `book.brief` 或 `book.style-profile` Revision；每次调用与结果都保留在 Session 历史中，不会暗中注入可变指导。提案由匹配定义校验精确、归类型所有的文本操作，再持久创建 ChangeSet，但不改作者文件。`novel_present` 只通过类型化工具结果 metadata 打开或关闭整个工作台。模型没有 apply 工具，也不能宣称已经发布修改。
+[`@deepseek-ai/dsh-experimental-tool-novel`](../../packages/experimental/tool-novel) 在包自带 Preset 中暴露 `novel_list`、`novel_search`、`novel_create`、`novel_get`、`novel_propose_changes` 和纯展示工具 `novel_present`。目录发现会返回规范精确 Revision 引用与已注册创建契约；精确读取使用各类型的确定性模型投影与提案说明。固定工作流接收 Compiler 冻结的相关材料，探索式读取则继续作为 Session 历史中可见的显式工具调用。提案由匹配定义校验精确、归类型所有的文本操作，再持久创建 ChangeSet，但不改作者文件。`novel_present` 只通过类型化工具结果 metadata 打开或关闭整个工作台。模型没有 apply 工具，也不能宣称已经发布修改。
 
 浏览器把 ChangeSet 读成行内 Diff 卡片。接受或拒绝都是显式、归 Session 所有的 Remote 操作。Apply 在接触文件前，把精确前后字节、hash、授权与预期结果 Revision 以 `applying` 状态写入 journal。项目重开时，after hash 会完成提交，before hash 会重试受保护写入，任何第三种 hash 都会变成 `conflicted`，且不覆盖作者文件。
 
@@ -77,7 +81,7 @@ The protagonist reaches White Harbor.
 
 ## 当前限制
 
-当前切片支持 `manuscript.chapter`、`planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile`、一个活动类型化选区，以及单 Asset ChangeSet 中的一项类型化操作。定稿与草稿/终稿学习、持久正文 block id、人物、灵感、语义搜索、关系、文件监听、自动 rebase、多 Asset 事务、更丰富的视图与多 Agent 编排仍暂缓。Repository 只在调用边界 reconcile，支持的写入模型是单 Host 进程。
+当前切片支持 `manuscript.chapter`、`planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile`、一个活动类型化选区、单 Asset ChangeSet 中的一项类型化操作、审查门控的章节定稿，以及草稿/终稿偏好学习。持久正文 block id、人物、灵感、语义检索、Story State、生成式摘要、关系、文件监听、自动 rebase、多 Asset 事务、更丰富的视图与通用多 Agent 编排仍暂缓。任务感知 Compiler 当前有意只使用确定性的类型关系，但它的显式 policy 请求与版本化 Manifest 已把这些未来选择器保留在一个可替换边界之后。Repository 只在调用边界 reconcile，支持的写入模型是单 Host 进程。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 

@@ -388,11 +388,11 @@ describe('NovelRepositoryRemote Host service', () => {
     expect(repository.searches).toEqual([{ query: '旧', types: ['manuscript.chapter'], limit: 3 }])
 
     const workset: NovelContextWorksetDescriptor = {
-      version: 1,
+      version: 2,
       projectId: ProjectId('project-1'),
       items: [{
         projectId: ProjectId('project-1'), assetId: AssetId('chapter-1'),
-        revisionId: RevisionId('revision-1'), label: '第一章',
+        label: '第一章',
         mode: 'follow', origin: 'active-asset',
       }],
     }

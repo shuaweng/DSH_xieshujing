@@ -8,6 +8,7 @@ import {
   type RevisionId,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import { apply as applyOutlineAssetTypes } from '@deepseek-ai/dsh-experimental-novel-asset-outline'
+import NovelContextResolver from '../../novel-context/src/index.ts'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -112,6 +113,7 @@ async function harness(): Promise<{
   await ctx.plugin(NovelAssetTypeRegistry)
   applyOutlineAssetTypes(ctx)
   await ctx.plugin(LocalNovelRepository)
+  await ctx.plugin(NovelContextResolver)
   await ctx.plugin(SubagentRuntime)
   const provider = new ReviewProvider()
   ctx.subagents.registerProvider(provider)
@@ -181,7 +183,9 @@ describe('NovelAnalysis', () => {
     expect(provider.requests[0]?.persona).toContain('只读')
     const promptItem = provider.requests[0]?.prompt[0]
     if (promptItem?.type !== 'text') throw new Error('expected text review prompt')
-    expect(promptItem.text).toContain('project-analysis/chapter-analysis@')
+    expect(promptItem.text).toContain('"policies":["chapter-review"]')
+    expect(promptItem.text).toContain('"assetId":"chapter-analysis"')
+    expect(promptItem.text).toContain(`"revisionId":"${revisionId}"`)
 
     provider.structured = review(91)
     const second = await ctx.novelAnalysis.reviewChapter(agent, AssetId('chapter-analysis'), revisionId, signal)

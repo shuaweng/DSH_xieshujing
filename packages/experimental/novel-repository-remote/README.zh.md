@@ -13,7 +13,7 @@
 - `NovelProjectDescriptor` 包含稳定项目 id、schema、标题与显示路径。它不会向浏览器暴露文件系统 target key 或可变的提供方对象。
 - `assets`、`createAsset`、`asset` 和 `saveAsset` 只投影浏览器安全的 id、语义父级 id、元数据和无损 JSON Asset 内容。浏览器创建只提交类型、标题、父级与内容，身份和路径由 Repository 拥有。`captureSelection` 携带类型定义的 JSON selector，并返回包含规范 `dsh-novel:` 引用的可读 Markdown mention。
 - `search` 把有边界的词法发现委托给当前 Repository 提供方，并返回浏览器安全摘要与精确当前 Revision 身份。结果保持为发现数据，直到用户固定它或发送显式引用。
-- `replaceContextWorkset` 把一份整值的跟随/固定工作集委托给可选 Novel context 能力。Context Consumer 校验每个精确 Revision 并记录 Session 事件；Remote 不拥有 fold 或模型注入。
+- `replaceContextWorkset` 把一份完整的第二版跟随/固定工作集委托给可选 Novel context 能力。跟随项携带活动 Asset 身份，并在编译上下文时解析当前已保存 head；固定项保留一个精确的已保留 Revision。Context Consumer 校验整值并记录 Session 事件；Remote 不拥有 fold 或模型注入。
 - Asset 类型、内容、selector 和 operation 通过 Remote 以有边界的 JSON 信封传输。Host 与 Client 注册表拥有其精确语义，因此增加类型不需要扩展生成的 Remote 方法清单；不兼容或非 JSON 的值会显式失败。
 - `changeSet`、`applyChangeSet` 和 `rejectChangeSet` 暴露浏览器审阅。应用和拒绝把被寻址 Agent Session id 作为显式授权，并返回持久终态或冲突状态。
 - `revisions` 返回不可变历史摘要，`asset` 可以打开一个已保留 Revision。`analysisReports`、`scanNoAi` 和 `reviewChapter` 都是精确 Revision 端点；确定性扫描与 Subagent 编排归 `ctx.novelAnalysis` 所有，而不是传输层。

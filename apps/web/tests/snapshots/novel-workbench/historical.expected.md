@@ -32,6 +32,7 @@
     - text: Historical Revision · read-only
   - text: Saved
   - button "Save" [disabled]
+  - button "Mark final"
   - button "Reference selection to Agent" [disabled]
   - article:
     - textbox "Chapter title": 第一章

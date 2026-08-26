@@ -3,6 +3,7 @@ name: chapter-execution
 description: 基于版本化正文、大纲与章纲起草、续写或内容级改写章节；允许推进剧情，但严格守住用户范围与已确认事实。只磨表达不改剧情时用 rewrite-to-style。
 whenToUse: "[当前章节/选区引用、章纲引用，或明确的起草与续写目标]"
 user-invocable: true
+novelContextPolicy: chapter-write
 ---
 
 # Chapter Execution
@@ -11,7 +12,7 @@ user-invocable: true
 
 ## 工作台协议
 
-1. 优先使用用户要求、当前冻结选区或章节、章纲、书纲/卷纲和已固定资料。先从 `novel_list` 查看项目是否已有 `book.brief` 与 `book.style-profile`；存在时用其 canonical reference 调 `novel_get` 读取当前准确 Revision，分别作为全书事实边界与落稿风格依据。缺少其他上下文时用 `novel_search` 定点找相关资产，用 `novel_list` 获取创建契约，用 `novel_get` 读取准确内容与 Revision。
+1. 优先使用用户要求和本轮 Novel Context Manifest 已物化的选区、章节、章纲、概述、风格及固定资料；不得对其中已有的精确 Revision 重复调用 `novel_list`/`novel_get`。只有材料缺失或 Manifest 仅给坐标时，才用 `novel_get` 定点读取；目标未知时用 `novel_search`，创建前才用 `novel_list` 获取契约。
 2. 不默认读取整本书。续写通常只需当前章、上一章的必要承接、当前章纲和直接相关设定；更早正文只有在回收伏笔或核对连续性时才定点读取。
 3. 短试写或方案讨论直接回复聊天。新章节用 `novel_create`；已有正文的任何正式修改都用 `novel_propose_changes`，并严格采用 `novel_get` 返回的 operation 说明。
 4. ChangeSet 只是提案。没有 applied 结果，不得说“已经写入”或“已经修改”。项目没有概述或风格资产时照常执行，不得虚构；一次写作观察也不能自动沉淀为长期偏好。

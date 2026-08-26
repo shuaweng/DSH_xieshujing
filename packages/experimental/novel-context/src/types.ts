@@ -29,8 +29,52 @@ export type NovelContextReferenceOrigin = 'message' | 'selection' | 'active-asse
 /** Explicit one-turn input or cross-turn workset retention mode. */
 export type NovelContextReferenceMode = 'explicit' | 'follow' | 'pinned'
 
+/** Task policies understood by the first Novel Context Compiler. */
+export type NovelContextPolicyId =
+  | 'direct-turn'
+  | 'chapter-write'
+  | 'selection-rewrite'
+  | 'selection-review'
+  | 'outline-edit'
+  | 'chapter-review'
+  | 'preference-learning'
+
+/** How much authored material one compiled reference contributes. */
+export type NovelContextProjection = 'coordinate' | 'selection' | 'full'
+
+/** Why a compiled reference was selected for one model request. */
+export type NovelContextReason =
+  | 'explicit-material'
+  | 'active-asset'
+  | 'pinned-asset'
+  | 'target-asset'
+  | 'chapter-outline'
+  | 'book-outline'
+  | 'book-brief'
+  | 'book-style'
+  | 'outline-parent'
+  | 'outline-child'
+  | 'draft-source'
+  | 'final-source'
+
+/** One exact task target supplied to the Novel Context Compiler. */
+export interface NovelContextCompileTarget extends NovelReferenceInput {
+  readonly projection: NovelContextProjection
+  readonly reason: NovelContextReason
+  /** Required material fails on budget overflow instead of degrading to a coordinate. */
+  readonly required?: boolean
+}
+
+/** Explicit task request compiled without inferring intent from prose. */
+export interface NovelContextCompileRequest {
+  readonly policies: readonly NovelContextPolicyId[]
+  readonly targets: readonly NovelContextCompileTarget[]
+  /** Include the Session's current follow and pinned workset. */
+  readonly includeWorkset?: boolean
+}
+
 /** One exact cross-turn reference retained in Session coordination state. */
-export interface NovelContextWorksetItem extends Required<Pick<
+export interface NovelContextWorksetItemV1 extends Required<Pick<
   NovelReferenceInput,
   'projectId' | 'assetId' | 'revisionId' | 'label'
 >>,
@@ -39,18 +83,45 @@ export interface NovelContextWorksetItem extends Required<Pick<
   readonly origin: Extract<NovelContextReferenceOrigin, 'active-asset' | 'selection' | 'search'>
 }
 
-/** Whole current non-prose reference workset for one Novel Session. */
-export interface NovelContextWorkset {
+/** Legacy exact-Revision workset retained for existing Session replay. */
+export interface NovelContextWorksetV1 {
   readonly version: 1
   readonly projectId: ProjectId
-  readonly items: readonly NovelContextWorksetItem[]
+  readonly items: readonly NovelContextWorksetItemV1[]
 }
 
-/** Versioned whole-value Session event; last event wins. */
-export interface NovelContextWorksetChange {
-  readonly version: 1
-  readonly workset: NovelContextWorkset
+/** Live active-Asset pointer resolved to the current Revision at prompt time. */
+export interface NovelContextFollowItem {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly label: string
+  readonly mode: 'follow'
+  readonly origin: 'active-asset'
 }
+
+/** Exact pinned Revision retained until the author removes it. */
+export interface NovelContextPinnedItem extends Required<Pick<
+  NovelReferenceInput,
+  'projectId' | 'assetId' | 'revisionId' | 'label'
+>>, Pick<NovelReferenceInput, 'selector'> {
+  readonly mode: 'pinned'
+  readonly origin: Extract<NovelContextReferenceOrigin, 'selection' | 'search'>
+}
+
+/** Current live/frozen workset authored by the browser. */
+export interface NovelContextWorksetV2 {
+  readonly version: 2
+  readonly projectId: ProjectId
+  readonly items: readonly (NovelContextFollowItem | NovelContextPinnedItem)[]
+}
+
+/** Every durable workset accepted during Session replay. */
+export type NovelContextWorkset = NovelContextWorksetV1 | NovelContextWorksetV2
+
+/** Versioned whole-value Session event; last event wins. */
+export type NovelContextWorksetChange =
+  | { readonly version: 1; readonly workset: NovelContextWorksetV1 }
+  | { readonly version: 2; readonly workset: NovelContextWorksetV2 }
 
 /** Legacy durable source retained for existing Session replay. */
 export interface NovelContextSourceV1 {
@@ -83,8 +154,35 @@ export interface NovelContextSourceV2 {
   }[]
 }
 
+/** One exact item selected and budgeted by the Context Compiler. */
+export interface NovelContextManifestItem {
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly label: string
+  readonly type: string
+  readonly selector?: NovelSelector
+  readonly origin: NovelContextReferenceOrigin
+  readonly mode: NovelContextReferenceMode
+  readonly projection: NovelContextProjection
+  readonly reason: NovelContextReason
+  readonly contentHash: string
+  readonly modelTextBytes: number
+  readonly modelTextHash?: `sha256:${string}`
+}
+
+/** Version-three task-aware Context Manifest attached to compiled material. */
+export interface NovelContextSourceV3 {
+  readonly kind: 'novel-context'
+  readonly form: 'manifest'
+  readonly version: 3
+  readonly manifestId: `sha256:${string}`
+  readonly projectId: ProjectId
+  readonly policies: readonly NovelContextPolicyId[]
+  readonly references: readonly NovelContextManifestItem[]
+}
+
 /** Every durable Novel context source accepted during Session replay. */
-export type NovelContextSource = NovelContextSourceV1 | NovelContextSourceV2
+export type NovelContextSource = NovelContextSourceV1 | NovelContextSourceV2 | NovelContextSourceV3
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -104,7 +202,7 @@ declare module '@deepseek-ai/dsh-session-projection/types' {
     novelContextWorkset: NovelContextWorkset | null
   }
   interface SessionProjectionMap {
-    /** Current exact Novel workset, or null before the first mutation. */
+    /** Current live-follow and exact-pinned Novel workset, or null before the first mutation. */
     novelContextWorkset: NovelContextWorkset | null
   }
 }
@@ -129,4 +227,12 @@ export interface ResolvedNovelReferences {
 export interface PreparedNovelMessage {
   readonly content: ContentBlock[]
   readonly additionalContext?: UserMessage
+}
+
+/** Frozen, budgeted result shared by root turns and fixed Novel workflows. */
+export interface CompiledNovelContext {
+  readonly source: NovelContextSourceV3
+  /** Exact model-visible frame; callers must log this text in the receiving Session. */
+  readonly text: string
+  readonly additionalContext: UserMessage
 }

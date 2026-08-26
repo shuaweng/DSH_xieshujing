@@ -53,22 +53,31 @@ export interface NovelAssetSearchResult extends NovelAssetDescriptor {
   readonly score: number
 }
 
-/** One exact non-prose reference retained across turns. */
-export interface NovelContextWorksetItemDescriptor {
+/** Active-Asset identity whose current Revision is resolved when a prompt is compiled. */
+export interface NovelContextFollowItemDescriptor {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly label: string
+  readonly mode: 'follow'
+  readonly origin: 'active-asset'
+}
+
+/** One exact Revision retained until the author removes it. */
+export interface NovelContextPinnedItemDescriptor {
   readonly projectId: ProjectId
   readonly assetId: AssetId
   readonly revisionId: RevisionId
   readonly label: string
   readonly selector?: NovelWireValue
-  readonly mode: 'follow' | 'pinned'
-  readonly origin: 'active-asset' | 'selection' | 'search'
+  readonly mode: 'pinned'
+  readonly origin: 'selection' | 'search'
 }
 
 /** Whole current workset submitted through one guarded Remote mutation. */
 export interface NovelContextWorksetDescriptor {
-  readonly version: 1
+  readonly version: 2
   readonly projectId: ProjectId
-  readonly items: readonly NovelContextWorksetItemDescriptor[]
+  readonly items: readonly (NovelContextFollowItemDescriptor | NovelContextPinnedItemDescriptor)[]
 }
 
 /** Browser request to create one new typed Asset at a provider-owned path. */

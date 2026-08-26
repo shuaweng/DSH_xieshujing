@@ -30,6 +30,7 @@
       - option "Current · 8/26/2026, {{clock}} · Initial import" [selected]
   - text: Saved
   - button "Save" [disabled]
+  - button "Mark final"
   - button "Reference selection to Agent" [disabled]
   - article:
     - textbox "Chapter title": 第一章

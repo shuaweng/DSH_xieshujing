@@ -22,7 +22,7 @@
 - Agent 创建的 Asset 会返回可回放创建卡片并刷新权威 Explorer。人类与 Agent 创建都经过同一条类型化 Remote/Repository 链路，任何一方都不能自行发明文件路径。
 - 小说 Agent 可以用 `novel_present` 调用 `open-workbench` 或 `close-workbench`。其持久工具结果 metadata 与 Composer 开关驱动同一个浏览器本地 `ctx.layout` 选择；普通 Agent 回复文字绝不控制布局，展示动作也绝不修改 Asset。
 - “引用选区到 Agent”先保存脏的类型化草稿，保存失败即安全停止，然后冻结选区。Composer 只显示 `@[引用文字前十个字…]`；隐藏的 occurrence 保留完整规范 `dsh-novel:` mention，并在提交时把精确值序列化给 Agent。
-- 按 Preset 限定的 `conversation.input.dock` 会加入与 Composer 等宽的紧凑坐标栏。它自动跟随当前可见且已保存的章节、大纲、卷纲、全书指导或其他注册 Asset，只展示坐标，并允许固定检索到的坐标；有脏稿时保留最后已保存 Revision 并明确提示保存。显式划词引用则另行发送规范坐标与完整选中文字。
+- 按 Preset 限定的 `conversation.input.dock` 会加入与 Composer 等宽的紧凑坐标栏。实时跟随项只保存当前可见 Asset 的身份，在下一次任务编译时解析当前已保存 head；搜索后固定的条目仍保留精确 Revision 坐标。有脏稿时仍指向最后已保存的 head，并明确提示保存。显式划词引用则另行发送规范精确坐标与完整选中文字。
 - `novel_propose_changes` 工具结果渲染持久的行内 Diff 卡片。接受和拒绝调用 Session 所属 Remote 方法；接受后从权威 Repository 状态刷新资产浏览器和画布。
 - 工作台在对话插槽所有者挂载后延迟解析 conversation service，在避免 Client 插件依赖循环的同时继续使用 DSH 普通 Composer 草稿状态。
 
@@ -32,7 +32,7 @@
 
 #### 模型看到什么
 
-Client 包本身不加入隐藏模型内容。显式 mention 与可见 Context Tray 工作集由 `@deepseek-ai/dsh-experimental-novel-context` 解析，模型提案由 `@deepseek-ai/dsh-experimental-tool-novel` 创建。点击章节审稿会启动有边界的审稿 Subagent；把满足条件的 Revision 标记为定稿会启动独立的有边界偏好 worker；点击 NOAI 不使用模型。
+Client 包本身不加入隐藏模型内容。显式 mention 与可见 Context Tray 工作集只是 `@deepseek-ai/dsh-experimental-novel-context` 的输入；其显式任务策略决定这些引用保留坐标，还是在冻结 V3 Manifest 中加入有边界的关联材料。模型提案由 `@deepseek-ai/dsh-experimental-tool-novel` 创建。点击章节审稿会启动有边界的审稿 Subagent；把满足条件的 Revision 标记为定稿会启动独立的有边界偏好 worker；点击 NOAI 不使用模型。
 
 #### Token 影响
 

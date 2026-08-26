@@ -1,12 +1,14 @@
 import { Context } from '@deepseek-ai/cordis'
 import { agentEvents, type Agent } from '@deepseek-ai/dsh-agent'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { CallId, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { AssetId, ProjectId, RevisionId } from '@deepseek-ai/dsh-experimental-novel-repository'
+import { apply as applyOutlineAssetTypes } from '@deepseek-ai/dsh-experimental-novel-asset-outline'
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
+import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -35,6 +37,7 @@ async function harness(config: ConstructorParameters<typeof NovelContextResolver
   const dir = await mkdtemp(join(tmpdir(), 'dsh-novel-context-'))
   cleanups.push(() => rm(dir, { recursive: true, force: true }))
   await mkdir(join(dir, 'manuscript'))
+  await mkdir(join(dir, 'planning'))
   await writeFile(join(dir, 'novel.yaml'), [
     'kind: novel-project',
     'schema: 1',
@@ -42,6 +45,7 @@ async function harness(config: ConstructorParameters<typeof NovelContextResolver
     'title: Context Project',
     'contentRoots:',
     '  manuscript: manuscript',
+    '  planning: planning',
     '',
   ].join('\n'))
   await writeFile(join(dir, 'manuscript', 'chapter.md'), [
@@ -54,12 +58,32 @@ async function harness(config: ConstructorParameters<typeof NovelContextResolver
     '---',
     body,
   ].join('\n'))
+  await writeFile(join(dir, 'planning', 'chapter-outline.md'), [
+    '---', 'novel:', '  schema: 1', '  id: chapter-outline-context',
+    '  type: planning.chapter-outline', '  title: 第一章章纲', '  parent: chapter-context',
+    '---', '先发现灯灭，再听见脚步。', '',
+  ].join('\n'))
+  await writeFile(join(dir, 'planning', 'brief.md'), [
+    '---', 'novel:', '  schema: 1', '  id: brief-context',
+    '  type: book.brief', '  title: 本书概述', '---', '白港悬疑故事。', '',
+  ].join('\n'))
+  await writeFile(join(dir, 'planning', 'style.md'), [
+    '---', 'novel:', '  schema: 1', '  id: style-context',
+    '  type: book.style-profile', '  title: 本书风格', '---', '克制，短句。', '',
+  ].join('\n'))
+  await writeFile(join(dir, 'planning', 'outline.md'), [
+    '---', 'novel:', '  schema: 1', '  id: outline-context',
+    '  type: planning.outline', '  title: 全书大纲', '  level: book',
+    '---', '第一卷抵达白港。', '',
+  ].join('\n'))
   const ctx = new Context()
   await ctx.plugin(LocalFileSystem, { cwd: dir })
   await ctx.plugin(NovelAssetTypeRegistry)
+  applyOutlineAssetTypes(ctx)
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SessionProjectionRegistry)
+  await ctx.plugin(SkillRegistry)
   await ctx.plugin(NovelContextResolver, config)
   cleanups.push(async () => { await ctx.fiber.dispose() })
   const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
@@ -195,13 +219,14 @@ describe('Novel context preparation', () => {
     expect(source).toMatchObject({
       kind: 'novel-context',
       form: 'manifest',
-      version: 2,
+      version: 3,
+      policies: ['direct-turn'],
       projectId: 'project-context',
       references: [{
         assetId: 'chapter-context', revisionId, origin: 'message', mode: 'explicit',
       }],
     })
-    expect(source?.kind === 'novel-context' && source.version === 2 ? source.manifestId : '')
+    expect(source?.kind === 'novel-context' && source.version === 3 ? source.manifestId : '')
       .toMatch(/^sha256:[a-f0-9]{64}$/u)
     const modelText = decision.messages[1]?.content[0]
     const frozenText = modelText?.type === 'text' ? modelText.text : ''
@@ -221,11 +246,22 @@ describe('Novel context preparation', () => {
         origin: 'active-asset' as const,
       }],
     }
-    await expect(ctx.novelContextResolver.replaceWorkset(agent, workset)).resolves.toEqual(workset)
+    const currentWorkset = {
+      version: 2 as const,
+      projectId: ProjectId('project-context'),
+      items: [{
+        projectId: ProjectId('project-context'),
+        assetId: AssetId('chapter-context'),
+        label: '白港选区',
+        mode: 'follow' as const,
+        origin: 'active-asset' as const,
+      }],
+    }
+    await expect(ctx.novelContextResolver.replaceWorkset(agent, workset)).resolves.toEqual(currentWorkset)
     const eventCount = session.events.filter(event => event.type === 'novel/context-workset').length
     await ctx.novelContextResolver.replaceWorkset(agent, workset)
     expect(session.events.filter(event => event.type === 'novel/context-workset')).toHaveLength(eventCount)
-    expect(ctx.sessionProjections.snapshot(session).values.novelContextWorkset).toEqual(workset)
+    expect(ctx.sessionProjections.snapshot(session).values.novelContextWorkset).toEqual(currentWorkset)
 
     const direct = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: '继续写。' }] })
     const signal = new AbortController().signal
@@ -246,6 +282,10 @@ describe('Novel context preparation', () => {
     const followedText = followed?.type === 'text' ? followed.text : ''
     expect(followedText).toContain('"reference":"dsh-novel:')
     expect(followedText).not.toContain('"text":')
+    expect(entered.messages[1]?.source).toMatchObject({
+      version: 3,
+      references: [{ revisionId, projection: 'coordinate' }],
+    })
     const toolContinuation = createUserMessage({
       source: { kind: 'novel-context', form: 'catalog', version: 1, projectId: ProjectId('project-context'), references: [] },
       content: [{ type: 'text', text: 'already frozen' }],
@@ -256,6 +296,255 @@ describe('Novel context preparation', () => {
       () => Promise.resolve({ kind: 'enter' as const, messages: [toolContinuation] }),
     )
     expect(continuation).toMatchObject({ kind: 'enter', messages: [toolContinuation] })
+  })
+
+  it('compiles task-related exact material once and keeps lower-priority global context coordinate-only', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    const compiled = await ctx.novelContextResolver.compile(agent, {
+      policies: ['chapter-write'],
+      targets: [{
+        ...reference(revisionId),
+        origin: 'active-asset', mode: 'explicit', projection: 'full',
+        reason: 'target-asset', required: true,
+      }],
+    })
+    expect(compiled.source).toMatchObject({ version: 3, policies: ['chapter-write'] })
+    expect(compiled.source.references.find(item => item.assetId === 'chapter-context'))
+      .toMatchObject({ projection: 'full', reason: 'target-asset' })
+    expect(compiled.source.references.find(item => item.assetId === 'chapter-outline-context'))
+      .toMatchObject({ projection: 'full', reason: 'chapter-outline' })
+    expect(compiled.source.references.find(item => item.assetId === 'brief-context'))
+      .toMatchObject({ projection: 'full', reason: 'book-brief' })
+    expect(compiled.source.references.find(item => item.assetId === 'style-context'))
+      .toMatchObject({ projection: 'full', reason: 'book-style' })
+    expect(compiled.source.references.find(item => item.assetId === 'outline-context'))
+      .toMatchObject({ projection: 'coordinate', reason: 'book-outline' })
+    expect(new Set(compiled.source.references.map(item => `${item.assetId}@${item.revisionId}`)).size)
+      .toBe(compiled.source.references.length)
+    expect(compiled.text).toContain('先发现灯灭，再听见脚步。')
+    expect(compiled.text).not.toContain('"reason":"book-outline","text"')
+
+    const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
+    if (project === undefined) throw new Error('expected Novel Project')
+    const chapterOutline = (await ctx.novelRepository.listAssets(project))
+      .find(summary => summary.asset.id === 'chapter-outline-context')
+    if (chapterOutline === undefined) throw new Error('expected chapter outline')
+    const outlineTask = await ctx.novelContextResolver.compile(agent, {
+      policies: ['outline-edit'],
+      targets: [{
+        projectId: project.id,
+        assetId: chapterOutline.asset.id,
+        revisionId: chapterOutline.revisionId,
+        label: chapterOutline.title,
+        projection: 'full',
+        reason: 'target-asset',
+        required: true,
+      }],
+    })
+    expect(outlineTask.source.references.find(item => item.assetId === 'outline-context'))
+      .toMatchObject({ projection: 'full', reason: 'book-outline' })
+    expect(outlineTask.source.references.find(item => item.assetId === 'brief-context'))
+      .toMatchObject({ projection: 'full', reason: 'book-brief' })
+    expect(outlineTask.source.references.find(item => item.assetId === 'chapter-context'))
+      .toMatchObject({ projection: 'coordinate', reason: 'outline-parent' })
+  })
+
+  it('keeps required task material, degrades optional prose to coordinates, and hashes the frozen cut deterministically', async () => {
+    const { ctx, agent, revisionId } = await harness({ maxContextBytes: 20 })
+    const request = {
+      policies: ['chapter-write'] as const,
+      targets: [{
+        ...reference(revisionId),
+        origin: 'active-asset' as const,
+        mode: 'explicit' as const,
+        projection: 'full' as const,
+        reason: 'target-asset' as const,
+        required: true,
+      }],
+    }
+    const first = await ctx.novelContextResolver.compile(agent, request)
+    const second = await ctx.novelContextResolver.compile(agent, request)
+    expect(first.source.manifestId).toBe(second.source.manifestId)
+    expect(first.text).toContain(first.source.manifestId)
+    expect(first.source.references).toEqual(expect.arrayContaining([
+      expect.objectContaining({ assetId: 'chapter-context', projection: 'full', modelTextBytes: 18 }),
+      expect.objectContaining({ assetId: 'chapter-outline-context', projection: 'coordinate', modelTextBytes: 0 }),
+      expect.objectContaining({ assetId: 'brief-context', projection: 'coordinate', modelTextBytes: 0 }),
+      expect.objectContaining({ assetId: 'style-context', projection: 'coordinate', modelTextBytes: 0 }),
+    ]))
+    expect(first.text.match(/白港下雨了。/gu)).toHaveLength(1)
+
+    const minimalDuplicate = await ctx.novelContextResolver.compile(agent, {
+      policies: ['direct-turn'],
+      targets: [{
+        ...reference(revisionId), projection: 'coordinate', reason: 'target-asset', required: true,
+      }, {
+        ...reference(revisionId), projection: 'full', reason: 'pinned-asset', required: false,
+      }],
+    })
+    expect(minimalDuplicate.source.references).toHaveLength(1)
+    expect(minimalDuplicate.source.references[0]).toMatchObject({
+      assetId: 'chapter-context', projection: 'coordinate', reason: 'target-asset', modelTextBytes: 0,
+    })
+    expect(minimalDuplicate.text).not.toContain('白港下雨了。')
+
+    const twoSelections = await ctx.novelContextResolver.compile(agent, {
+      policies: ['direct-turn'],
+      targets: [0, 1].map(index => ({
+        ...reference(revisionId),
+        selector: {
+          kind: 'text-range' as const,
+          startUtf16: index,
+          endUtf16: index + 1,
+          quoteHash: `sha256:test-${index}`,
+        },
+        projection: 'coordinate' as const,
+        reason: 'explicit-material' as const,
+        required: true,
+      })),
+    })
+    expect(twoSelections.source.references).toHaveLength(2)
+
+    const tooSmall = await harness({ maxContextBytes: 8 })
+    await expect(tooSmall.ctx.novelContextResolver.compile(tooSmall.agent, {
+      policies: ['chapter-write'],
+      targets: [{
+        ...reference(tooSmall.revisionId),
+        projection: 'full', reason: 'target-asset', required: true,
+      }],
+    })).rejects.toMatchObject({ code: 'NOVEL_CONTEXT_BUDGET_EXCEEDED' })
+  })
+
+  it('resolves a live follow pointer to the latest Revision only when the prompt is compiled', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    await ctx.novelContextResolver.replaceWorkset(agent, {
+      version: 2,
+      projectId: ProjectId('project-context'),
+      items: [{
+        projectId: ProjectId('project-context'), assetId: AssetId('chapter-context'),
+        label: '第一章', mode: 'follow', origin: 'active-asset',
+      }],
+    })
+    const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
+    if (project === undefined) throw new Error('expected Novel Project')
+    const saved = await ctx.novelRepository.saveAssetContent(project, {
+      assetId: AssetId('chapter-context'),
+      baseRevisionId: revisionId,
+      content: { kind: 'manuscript', body: '这是当前最新正文。' },
+    })
+    const direct = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: '继续。' }] })
+    const entered = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step',
+      { messages: [direct], turn: 1, step: 1, signal: new AbortController().signal },
+      () => Promise.resolve({ kind: 'enter' as const, messages: [direct] }),
+    )
+    if (entered.kind !== 'enter') throw new Error('expected entered step')
+    expect(entered.messages[1]?.source).toMatchObject({
+      version: 3,
+      references: [{ assetId: 'chapter-context', revisionId: saved.revisionId, projection: 'coordinate' }],
+    })
+  })
+
+  it('uses declared Skill metadata instead of guessing prose intent for an explicit Skill turn', async () => {
+    const { ctx, agent } = await harness()
+    ctx.skills.register({
+      name: 'chapter-execution',
+      description: 'write a chapter',
+      content: 'Write only from frozen context.',
+      source: 'runtime',
+      metadata: { novelContextPolicy: 'chapter-write' },
+    })
+    await ctx.novelContextResolver.replaceWorkset(agent, {
+      version: 2,
+      projectId: ProjectId('project-context'),
+      items: [{
+        projectId: ProjectId('project-context'), assetId: AssetId('chapter-context'),
+        label: '第一章', mode: 'follow', origin: 'active-asset',
+      }],
+    })
+    const direct = createUserMessage({
+      source: { kind: 'user' }, content: [{ type: 'text', text: '/chapter-execution 继续本章。' }],
+    })
+    const entered = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step',
+      { messages: [direct], turn: 1, step: 1, signal: new AbortController().signal },
+      () => Promise.resolve({ kind: 'enter' as const, messages: [direct] }),
+    )
+    if (entered.kind !== 'enter') throw new Error('expected entered step')
+    const source = entered.messages[1]?.source
+    expect(source).toMatchObject({ version: 3, policies: ['chapter-write'] })
+    if (source?.kind !== 'novel-context' || source.version !== 3) throw new Error('expected V3 context')
+    expect(source.references.find(item => item.assetId === 'chapter-context'))
+      .toMatchObject({ projection: 'full' })
+    expect(source.references.find(item => item.assetId === 'chapter-outline-context'))
+      .toMatchObject({ projection: 'full' })
+  })
+
+  it('adds related material after a model-loaded Skill without duplicating already frozen prose', async () => {
+    const { ctx, agent, session, revisionId } = await harness()
+    ctx.skills.register({
+      name: 'chapter-execution', description: 'write a chapter', source: 'runtime',
+      content: 'Write only from frozen context.', metadata: { novelContextPolicy: 'chapter-write' },
+    })
+    const initial = await ctx.novelContextResolver.compile(agent, {
+      policies: ['direct-turn'],
+      targets: [{
+        ...reference(revisionId), origin: 'message', mode: 'explicit',
+        projection: 'full', reason: 'explicit-material', required: true,
+      }],
+    })
+    const callId = CallId('skill-context-call')
+    session.append('turn/start', { turn: 1 })
+    session.append('step/start', { turn: 1, step: 1 })
+    session.append('user/message', initial.additionalContext, { surfaceOp: 'append' })
+    session.append('tool/call', {
+      turn: 1, step: 1, callId, name: 'skill', arguments: '{"name":"chapter-execution"}',
+    })
+    session.append('tool/result', {
+      turn: 1, step: 1,
+      message: createToolResultMessage({ callId, content: [{ type: 'text', text: 'loaded' }], isError: false }),
+    }, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 1 })
+    const entered = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step',
+      { messages: [], turn: 1, step: 2, signal: new AbortController().signal },
+      () => Promise.resolve({ kind: 'enter' as const, messages: [] }),
+    )
+    if (entered.kind !== 'enter') throw new Error('expected entered step')
+    expect(entered.messages).toHaveLength(1)
+    const source = entered.messages[0]?.source
+    expect(source).toMatchObject({ version: 3, policies: ['chapter-write'] })
+    if (source?.kind !== 'novel-context' || source.version !== 3) throw new Error('expected V3 context')
+    expect(source.references.find(item => item.assetId === 'chapter-context'))
+      .toMatchObject({ projection: 'coordinate' })
+    expect(source.references.find(item => item.assetId === 'chapter-outline-context'))
+      .toMatchObject({ projection: 'full' })
+    const block = entered.messages[0]?.content[0]
+    const text = block?.type === 'text' ? block.text : ''
+    expect(text).not.toContain('白港下雨了。')
+    expect(text).toContain('先发现灯灭，再听见脚步。')
+
+    const repeatedCallId = CallId('skill-context-call-repeated')
+    session.append('step/start', { turn: 1, step: 2 })
+    session.append('user/message', entered.messages[0]!, { surfaceOp: 'append' })
+    session.append('tool/call', {
+      turn: 1, step: 2, callId: repeatedCallId, name: 'skill', arguments: '{"name":"chapter-execution"}',
+    })
+    session.append('tool/result', {
+      turn: 1, step: 2,
+      message: createToolResultMessage({
+        callId: repeatedCallId, content: [{ type: 'text', text: 'loaded again' }], isError: false,
+      }),
+    }, { surfaceOp: 'append' })
+    session.append('step/end', { turn: 1, step: 2 })
+    const repeated = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step',
+      { messages: [], turn: 1, step: 3, signal: new AbortController().signal },
+      () => Promise.resolve({ kind: 'enter' as const, messages: [] }),
+    )
+    if (repeated.kind !== 'enter') throw new Error('expected repeated entered step')
+    const repeatedBlock = repeated.messages[0]?.content[0]
+    expect(repeatedBlock?.type === 'text' ? repeatedBlock.text : '').not.toContain('白港下雨了。')
   })
 
   it('reads retained Revisions exactly, enforces budgets, and locks a Session to one project', async () => {
