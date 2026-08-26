@@ -13,7 +13,7 @@ const expectedPath = fileURLToPath(new URL('./novel-project-init-snapshots/sessi
 const refreshing = process.env.DSH_SNAPSHOT === 'refresh'
 
 describe('Novel Project initialization model snapshot', () => {
-  it('exposes the seven-tool roster and creates a complete chapter after initialization', async () => {
+  it('exposes the seven-tool roster and proposes prose for a blank chapter after initialization', async () => {
     let normalized = ''
     const result = await runLoaderSmoke({
       label: 'novel project initialization snapshot',
@@ -36,12 +36,13 @@ describe('Novel Project initialization model snapshot', () => {
         expect(manuscriptFiles).toHaveLength(1)
         const manuscript = await readFile(join(cwd, 'manuscript', manuscriptFiles[0]!), 'utf8')
         expect(manuscript).toContain('type: manuscript.chapter')
-        expect(manuscript).toContain('The harbor bell rang once.')
+        expect(manuscript).not.toContain('The harbor bell rang once.')
         const files = (await readdir(join(cwd, '.sessions'), { recursive: true })).filter(file => file.endsWith('.jsonl'))
         expect(files).toHaveLength(1)
         const source = await readFile(join(cwd, '.sessions', files[0]!), 'utf8')
         const header = JSON.parse(source.split('\n')[0]!) as { id: string }
         normalized = normalizeSessionSnapshot(source, { cwd, sessionIds: [SessionId(header.id)] })
+          .replace(/dsh-novel:[A-Za-z0-9_-]+/gu, 'dsh-novel:{{reference}}')
         if (refreshing) await writeFile(expectedPath, normalized)
         expect(normalized).toBe(await readFile(expectedPath, 'utf8'))
       },
@@ -49,7 +50,10 @@ describe('Novel Project initialization model snapshot', () => {
     expect(result.stderr.replace(/^\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\n$/u, '')).toBe('')
     expect(normalized).toContain('novel_initialize_project')
     expect(normalized).toContain('novel_create')
+    expect(normalized).toContain('novel_search')
+    expect(normalized).toContain('novel_propose_changes')
+    expect(normalized).toContain('insert-text')
     expect(normalized).toContain('already-initialized')
-    expect(normalized).toContain('NOVEL_PROJECT_INITIALIZE_AND_CHAPTER_CREATE_OK')
+    expect(normalized).toContain('NOVEL_PROJECT_INITIALIZE_CREATE_AND_INSERT_PROPOSE_OK')
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 })

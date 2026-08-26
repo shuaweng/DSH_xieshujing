@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-26-novel-new-book-bootstrap-skill.md
-2026-08-26-novel-new-book-bootstrap-skill.md: 89ff70e54759c38bce4c36bba28676791054022c
-2026-08-26-novel-new-book-bootstrap-skill.zh.md: e9194c62c4546c4dd208f9c02eb58974e530b9dd
+2026-08-26-novel-new-book-bootstrap-skill.md: 341b2103e0f3e318159541bf942ea7de7a7627e5
+2026-08-26-novel-new-book-bootstrap-skill.zh.md: 3b3d7a1f0f5fc7d6879477918a0abb0ffde363da

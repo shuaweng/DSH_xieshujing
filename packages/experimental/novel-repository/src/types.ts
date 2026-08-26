@@ -54,6 +54,13 @@ export interface ReplaceTextOperation {
   readonly replacement: string
 }
 
+/** Exact insertion into one retained manuscript Revision. */
+export interface InsertTextOperation {
+  readonly kind: 'insert-text'
+  readonly atUtf16: number
+  readonly text: string
+}
+
 /**
  * Merge-extensible authored Asset values keyed by their exact `novel.type` declaration.
  * Type packages augment this map and register matching runtime definitions.
@@ -63,7 +70,7 @@ export interface NovelAssetTypeMap {
     readonly content: ManuscriptChapterContent
     readonly selectionInput: TextRangeSelectionInput
     readonly selector: TextRangeSelector
-    readonly operation: ReplaceTextOperation
+    readonly operation: ReplaceTextOperation | InsertTextOperation
   }
 }
 

@@ -417,6 +417,28 @@ describe('Novel model tools', () => {
     expect(JSON.stringify(read.value)).toContain('风火轮已经照亮天门')
   })
 
+  it('proposes writing into an existing empty manuscript chapter', async () => {
+    const { ctx, agent } = await harness()
+    const created = await execute(ctx, agent, 'novel_create', {
+      type: 'manuscript.chapter',
+      title: '空白第一章',
+      content: { kind: 'manuscript', body: '' },
+    })
+    expect(created.isError).toBe(false)
+    if (created.isError) throw new Error('expected blank manuscript creation success')
+    const value = created.value as { assetId: string; revisionId: string }
+    const proposed = await execute(ctx, agent, 'novel_propose_changes', {
+      project_id: 'project-tool',
+      asset_id: value.assetId,
+      base_revision_id: value.revisionId,
+      operations: [{ kind: 'insert-text', atUtf16: 0, text: '鼓声从天门外传来。' }],
+      summary: '写入第一章正文',
+    })
+    expect(proposed.isError).toBe(false)
+    if (proposed.isError) throw new Error('expected insert-text proposal success')
+    expect(proposed.value).toMatchObject({ status: 'proposed', assetId: value.assetId })
+  })
+
   it('reads and proposes an exact freeform outline replacement through the generic tools', async () => {
     const { ctx, agent, outlinePath, outlineRevisionId } = await harness()
     const uri = encodeNovelReferenceUri({

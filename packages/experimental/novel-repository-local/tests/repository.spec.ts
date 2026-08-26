@@ -814,7 +814,8 @@ describe('LocalNovelRepository', () => {
     await writeFile(join(dir, 'manuscript', 'one.md'), chapter('chapter-one', 'One', 'body'))
     const ctx = await boot(dir)
     const novel = await project(ctx)
-    const [asset] = await ctx.novelRepository.listAssets(novel)
+    const [listed] = await ctx.novelRepository.listAssets(novel)
+    const asset = await ctx.novelRepository.readAsset(novel, listed!.asset.id, listed!.revisionId)
     const original = ctx.fs.writeText.bind(ctx.fs)
     ctx.fs.writeText = () => Promise.reject(new Error('disk offline'))
     await expect(ctx.novelRepository.saveAssetContent(novel, {
@@ -1049,6 +1050,38 @@ describe('LocalNovelRepository', () => {
       .toEqual({ kind: 'manuscript', body: '白港放晴了。' })
     await expect(ctx.novelRepository.applyChangeSet(novel, proposed.id, { sessionId: owner }))
       .resolves.toEqual(applied)
+  })
+
+  it('inserts prose into an empty retained chapter through a reviewable ChangeSet', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await writeFile(join(dir, 'novel.yaml'), manifest())
+    await writeFile(join(dir, 'manuscript', 'empty.md'), chapter('chapter-empty', '第一章', ''))
+    const ctx = await boot(dir)
+    const novel = await project(ctx)
+    const [listed] = await ctx.novelRepository.listAssets(novel)
+    const asset = await ctx.novelRepository.readAsset(novel, listed!.asset.id, listed!.revisionId)
+    const owner = SessionId('novel-owner')
+    const definition = ctx.novelAssetTypes.get('manuscript.chapter')
+    const operations = definition.prepareOperations(asset!, [{
+      kind: 'insert-text', atUtf16: 0, text: '天门之外，鼓声骤起。',
+    }])
+    const proposed = await ctx.novelRepository.proposeChangeSet(novel, {
+      assetId: asset!.asset.id,
+      baseRevisionId: asset!.revisionId,
+      operations,
+      actor: { kind: 'agent', sessionId: owner },
+      summary: '写入第一章正文',
+    })
+
+    expect(proposed.operations).toEqual([{
+      kind: 'insert-text', atUtf16: 0, text: '天门之外，鼓声骤起。',
+    }])
+    expect((await ctx.novelRepository.readAsset(novel, asset!.asset.id)).content)
+      .toEqual({ kind: 'manuscript', body: '' })
+    await ctx.novelRepository.applyChangeSet(novel, proposed.id, { sessionId: owner })
+    expect((await ctx.novelRepository.readAsset(novel, asset!.asset.id)).content)
+      .toEqual({ kind: 'manuscript', body: '天门之外，鼓声骤起。' })
   })
 
   it('rejects proposals idempotently and converts stale proposals into durable conflicts', async () => {

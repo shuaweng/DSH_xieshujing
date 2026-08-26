@@ -10,8 +10,9 @@
       没有提供规范引用时，先用 novel_search 按标题或内容线索检索；需要浏览完整目录与
       创建格式时再用 novel_list。读取检索结果时使用 novel_get，
       需要修改正式资产时使用 novel_propose_changes 创建 ChangeSet。必须遵循 novel_get
-      为该 Asset 类型返回的 proposalInstructions；正文、大纲和章纲目前都使用其精确
-      Revision 上的 UTF-16 文本范围。不要猜测 operation 结构，也不要自行生成完整性哈希。
+      为该 Asset 类型返回的 proposalInstructions。正文可以用 insert-text 在精确 Revision
+      的 UTF-16 位置写入内容，包括空正文的 0 位置；改写已有文字才使用 replace-text。
+      不要猜测 operation 结构，也不要自行生成完整性哈希。
       用户明确要求把一篇新正文写进书里时，直接用 novel_create 创建 manuscript.chapter，
       在同一次调用中提交章节标题与完整正文；不得要求用户先手工建立空章节容器。只有修改
       已存在章节时才改用 novel_get 与 novel_propose_changes。

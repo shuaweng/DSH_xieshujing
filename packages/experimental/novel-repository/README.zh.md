@@ -13,7 +13,7 @@
 - 已发现的 `NovelProjectSnapshot` 包含 schema `1`、稳定 `ProjectId`、作者可见标题、规范化项目与清单 target，以及规范化的具名内容根 target。
 - `listAssets()` 把作者文件协调为当前目录项，`searchAssets()` 通过提供方拥有的检索策略发现有边界的当前精确 Revision，`createAsset()` 在提供方拥有的路径创建已注册类型，`readAsset()` 读取当前或指定的已保留不可变 Revision，`listAssetRevisions()` 暴露有边界的 Revision 历史，`saveAssetContent()` 以版本保护方式保存完整类型化内容，`captureSelection()` 冻结由资产类型定义的语义选区。
 - `NovelAssetTypeMap` 可以通过声明合并扩展。每个匹配的 Host 定义拥有创建说明、可选语义父级规则或项目级单例 cardinality、精确作者类型解析/创建、模型投影、选区校验、保存物化、持久操作解码和 ChangeSet 物化；注册项必须唯一，并随调用方 effect 释放而移除。
-- 第一版内置 `manuscript.chapter`，并由独立策划包贡献自由的 `planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile`；同时提供精确 `sha256:` 内容哈希、不可变 Revision 父链、绑定 Revision 的 `SelectionRef`、类型化 `replace-text` 操作，以及携带目标 Asset 类型的持久单资产 ChangeSet。
+- 第一版内置 `manuscript.chapter`，并由独立策划包贡献自由的 `planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile`；同时提供精确 `sha256:` 内容哈希、不可变 Revision 父链、绑定 Revision 的 `SelectionRef`、类型化正文插入与精确替换操作，以及携带目标 Asset 类型的持久单资产 ChangeSet。
 - `proposeChangeSet()` 记录提案但不修改创作文件。`readChangeSet()`、`applyChangeSet()` 和 `rejectChangeSet()` 暴露明确审阅状态转换；应用权威是由获授权 Consumer 提供的 Session id。
 - `NovelAnalysisReport` 绑定一个 Project、Asset、精确 Revision 和报告种类。提供方暴露列出与 upsert 操作，因此成功重跑只替换某 Revision 的同类报告，而失败分析无法清除旧报告；各报告 payload 的语义归分析 Consumer 所有。
 - `RevisionFinalization` 保留用户对一个精确章节 Revision 的显式定稿决策及其最近 Agent 作者祖先；`NovelPreferenceCandidate` 保留有边界的草稿/定稿证据，并在用户显式采纳或拒绝前保持惰性。提取与审阅后应用语义归分析 Consumer 所有。
@@ -40,7 +40,7 @@ Service Definition 与项目值不会增加提示词或工具 schema token。
 ## 已知限制与暂缓事项
 
 - **内置五种资产类型**：内核安装 `manuscript.chapter`；策划包贡献 `planning.outline`、`planning.chapter-outline`，以及项目级唯一的 `book.brief` / `book.style-profile`。人物、灵感、关系、场景与视图定义均暂缓。
-- **每个 ChangeSet 一个操作**：当前文本 Asset 支持一个精确 `replace-text`，并拒绝自动重定位到较新的 Revision。
+- **每个 ChangeSet 一个操作**：正文支持一个精确 `insert-text` 或 `replace-text`；其他当前自由文本 Asset 支持一个精确 `replace-text`。所有类型都拒绝自动重定位到较新的 Revision。
 - **没有实时监听**：资产目录通过显式协调更新。Service 已提供有边界检索；文件监听与浏览器失效通知仍暂缓。
 - **仅定义层**：Remote 投影、工作台展示、Session Log 上下文和面向模型的 Novel 工具都属于独立 Consumer。
 - **通用报告信封**：Repository 校验身份、大小、来源与无损 JSON；分析器特定的 payload 校验归写入它的分析服务所有。

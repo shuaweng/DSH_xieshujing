@@ -75,6 +75,7 @@ export type {
   ProposeChangeSetRequest,
   PutNovelAnalysisReportRequest,
   PutNovelPreferenceCandidateRequest,
+  InsertTextOperation,
   ReplaceTextOperation,
   RevisionOrigin,
   RevisionFinalization,

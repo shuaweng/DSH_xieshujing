@@ -115,6 +115,9 @@ export const manuscriptChapterRenderer: NovelAssetRendererDefinition = {
     const chapter = manuscriptContent(before)
     const [operation] = manuscriptOperations(operations)
     if (operation === undefined || operations.length !== 1) return undefined
+    if (operation.kind === 'insert-text') {
+      return <div className={css.diff}><ins>{operation.text}</ins></div>
+    }
     return (
       <div className={css.diff}>
         <del>{chapter.body.slice(operation.selector.startUtf16, operation.selector.endUtf16)}</del>
@@ -176,15 +179,28 @@ function manuscriptContent(content: NovelWireValue): { kind: 'manuscript'; body:
   return { kind: 'manuscript', body: content['body'] }
 }
 
-interface ManuscriptWireOperation {
+interface ManuscriptReplaceWireOperation {
   readonly kind: 'replace-text'
   readonly selector: { readonly kind: 'text-range'; readonly startUtf16: number; readonly endUtf16: number }
   readonly replacement: string
 }
 
-function manuscriptOperations(operations: readonly NovelWireValue[]): ManuscriptWireOperation[] {
-  const decoded: ManuscriptWireOperation[] = []
+interface ManuscriptInsertWireOperation {
+  readonly kind: 'insert-text'
+  readonly atUtf16: number
+  readonly text: string
+}
+
+function manuscriptOperations(
+  operations: readonly NovelWireValue[],
+): Array<ManuscriptReplaceWireOperation | ManuscriptInsertWireOperation> {
+  const decoded: Array<ManuscriptReplaceWireOperation | ManuscriptInsertWireOperation> = []
   for (const operation of operations) {
+    if (isWireRecord(operation) && operation['kind'] === 'insert-text'
+      && typeof operation['atUtf16'] === 'number' && typeof operation['text'] === 'string') {
+      decoded.push({ kind: 'insert-text', atUtf16: operation['atUtf16'], text: operation['text'] })
+      continue
+    }
     if (!isWireRecord(operation) || operation['kind'] !== 'replace-text'
       || !isWireRecord(operation['selector']) || operation['selector']['kind'] !== 'text-range'
       || typeof operation['selector']['startUtf16'] !== 'number'
