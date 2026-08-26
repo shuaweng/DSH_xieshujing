@@ -1167,17 +1167,23 @@ describe('ChangeSetCard', () => {
   it('renders an insertion proposal for an empty chapter', async () => {
     const insertion = {
       ...changeSet(),
-      operations: [{ kind: 'insert-text', atUtf16: 0, text: '天门外鼓声骤起。' }],
+      operations: [
+        { kind: 'update-title', title: '第1章 华夏无神' },
+        { kind: 'insert-text', atUtf16: 0, text: '天门外鼓声骤起。' },
+      ],
     } as NovelChangeSetDescriptor
     const view = render(<ChangeSetCard
       block={settled()} sessionId={SID} toolName="novel_propose_changes" callId="call-1"
       openFile={vi.fn()}
       useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       useSession={vi.fn() as never} useProjection={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
-      read={async () => ({ changeSet: insertion, before: { kind: 'manuscript', body: '' } })}
+      read={async () => ({
+        changeSet: insertion, before: { kind: 'manuscript', body: '' }, beforeTitle: '未命名章节',
+      })}
       applyChange={vi.fn()} rejectChange={vi.fn()} refreshWorkbench={vi.fn()}
       renderers={renderers} t={t}
     />)
+    await waitFor(() => { expect(view.getByText('第1章 华夏无神')).toBeTruthy() })
     await waitFor(() => { expect(view.getByText('天门外鼓声骤起。')).toBeTruthy() })
   })
 

@@ -39,6 +39,6 @@ The tool catalog is stable for every Session using the Novel Workbench Preset, s
 ## Known Limitations and Deferred Work
 
 - **Lexical discovery only** — `novel_search` provides bounded title/model-text matching; semantic search, relations, Asset navigation/focus, and delegation tools are deferred. `novel_present` currently controls only the whole frame.
-- **One exact text operation** — chapters use one exact `insert-text` or `replace-text`, so an existing empty chapter can receive prose without a placeholder. Outline and chapter-outline types use one exact `replace-text`; multi-range and multi-asset ChangeSets are deferred.
+- **One title and one exact text operation** — a shipped text Asset may combine `update-title` with one body operation in the same proposal. Chapters use `insert-text` or `replace-text`, so an existing empty chapter can be named and receive prose atomically without a placeholder. Freeform planning and book-guidance types use `replace-text`; multi-range and multi-asset ChangeSets are deferred.
 - **No apply authority** — only the browser Remote can accept or reject a proposal; the model cannot commit it.
 - **No automatic retrieval** — search results are not silently inserted into model context; the Agent must choose an exact result and read it with `novel_get`.

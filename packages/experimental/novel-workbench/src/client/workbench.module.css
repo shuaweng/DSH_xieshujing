@@ -237,6 +237,7 @@
 .changeCard button { padding: 7px 12px; border: 1px solid var(--ds-color-border-subtle); border-radius: 7px; color: var(--ds-color-text-secondary); background: var(--ds-color-bg-primary); cursor: pointer; }
 .changeCard footer button:last-child { border-color: #4c84f4; color: white; background: #4c84f4; }
 .diff { display: grid; gap: 6px; margin: 10px 0; font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; }
+.diffTitle { display: grid; gap: 6px; }
 .diff del, .diff ins { padding: 8px; border-radius: 7px; text-decoration: none; }
 .diff del { background: color-mix(in srgb, #d14343 12%, transparent); }
 .diff ins { background: color-mix(in srgb, #2b9a66 14%, transparent); }

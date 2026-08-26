@@ -35,24 +35,28 @@ declare module '@deepseek-ai/dsh-experimental-novel-repository/types' {
       readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
       readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
       readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
+        | import('@deepseek-ai/dsh-experimental-novel-repository/types').UpdateTitleOperation
     }
     'planning.chapter-outline': {
       readonly content: ChapterOutlineContent
       readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
       readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
       readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
+        | import('@deepseek-ai/dsh-experimental-novel-repository/types').UpdateTitleOperation
     }
     'book.brief': {
       readonly content: BookBriefContent
       readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
       readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
       readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
+        | import('@deepseek-ai/dsh-experimental-novel-repository/types').UpdateTitleOperation
     }
     'book.style-profile': {
       readonly content: BookStyleProfileContent
       readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
       readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
       readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
+        | import('@deepseek-ai/dsh-experimental-novel-repository/types').UpdateTitleOperation
     }
   }
 }

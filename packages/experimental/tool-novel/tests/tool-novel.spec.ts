@@ -17,7 +17,10 @@ import NovelContextResolver, {
 } from '../../novel-context/src/index.ts'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
-import UserApproval, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
+import UserApproval, {
+  type ApprovalOutcome,
+  type ApprovalRequest,
+} from '@deepseek-ai/dsh-user-approval'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -207,7 +210,7 @@ describe('Novel model tools', () => {
 
   it('initializes a blank Session directory only after one explicit approval', async () => {
     const { ctx, agent, dir } = await blankHarness()
-    const prompted = vi.fn()
+    const prompted = vi.fn<(request: ApprovalRequest) => void>()
     ctx.on('approval/request', (request) => {
       prompted(request)
       return Promise.resolve<ApprovalOutcome>('allowed-once')
@@ -216,11 +219,18 @@ describe('Novel model tools', () => {
     const result = await execute(ctx, agent, 'novel_initialize_project', { title: '国运擂台' })
     expect(result).toMatchObject({
       isError: false,
-      value: { status: 'created', title: '国运擂台', manifestPath: expect.stringContaining('novel.yaml') },
     })
-    expect(prompted).toHaveBeenCalledWith(expect.objectContaining({
-      agent, toolName: 'novel_initialize_project', reason: expect.stringContaining('国运擂台'),
-    }))
+    const initialized = result.value as { manifestPath: string; status: string; title: string }
+    expect(initialized.status).toBe('created')
+    expect(initialized.title).toBe('国运擂台')
+    expect(initialized.manifestPath.endsWith('/novel.yaml')).toBe(true)
+    expect(prompted).toHaveBeenCalledTimes(1)
+    const request = prompted.mock.calls[0]![0]
+    expect(request.agent).toBe(agent)
+    expect(request.toolName).toBe('novel_initialize_project')
+    expect(request.reason).toBe(
+      'Initialize the current working directory as Novel Project “国运擂台”; existing files will be preserved.',
+    )
     expect(await readFile(join(dir, 'author-note.txt'), 'utf8')).toBe('保留我。')
     expect(await readFile(join(dir, 'novel.yaml'), 'utf8')).toContain('title: 国运擂台')
     expect(agent.session.events.map(event => event.type)).toContain('approval/asked')
@@ -421,7 +431,7 @@ describe('Novel model tools', () => {
     const { ctx, agent } = await harness()
     const created = await execute(ctx, agent, 'novel_create', {
       type: 'manuscript.chapter',
-      title: '空白第一章',
+      title: '未命名章节',
       content: { kind: 'manuscript', body: '' },
     })
     expect(created.isError).toBe(false)
@@ -431,12 +441,24 @@ describe('Novel model tools', () => {
       project_id: 'project-tool',
       asset_id: value.assetId,
       base_revision_id: value.revisionId,
-      operations: [{ kind: 'insert-text', atUtf16: 0, text: '鼓声从天门外传来。' }],
+      operations: [
+        { kind: 'update-title', title: '第1章 华夏无神' },
+        { kind: 'insert-text', atUtf16: 0, text: '鼓声从天门外传来。' },
+      ],
       summary: '写入第一章正文',
     })
     expect(proposed.isError).toBe(false)
     if (proposed.isError) throw new Error('expected insert-text proposal success')
     expect(proposed.value).toMatchObject({ status: 'proposed', assetId: value.assetId })
+    const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
+    if (project === undefined) throw new Error('expected Novel Project')
+    const retained = await ctx.novelRepository.readChangeSet(
+      project, ChangeSetId((proposed.value as { changeSetId: string }).changeSetId),
+    )
+    expect(retained.operations).toEqual([
+      { kind: 'update-title', title: '第1章 华夏无神' },
+      { kind: 'insert-text', atUtf16: 0, text: '鼓声从天门外传来。' },
+    ])
   })
 
   it('reads and proposes an exact freeform outline replacement through the generic tools', async () => {

@@ -14,8 +14,8 @@
 - `book.brief` 与 `book.style-profile` 是放在已声明 `planning` 内容根下、没有父级的自由 Markdown Asset。每种类型在项目中最多一份。概述保存作者确认的作品定位与全书事实边界；风格资产保存作者确认的文气与连载节奏要求。
 - 情绪目标、场面钥匙、钩子分布、15/35/35/15 节奏和起承转合只是工作台提供的可选引导。它们不是持久化字段，也不是校验要求。
 - 人类保存可以修改标题和完整正文。冻结选区复用精确 UTF-16 文本范围 selector，并通过 quote hash 绑定到一个已保留 Revision。
-- 四种类型都通过 ChangeSet 接受一个精确 `replace-text` 操作。类型定义会在物化前校验 offset 与 quote hash，并保留身份、父级和无关 Frontmatter。
-- Client contribution 把四种类型渲染为不受模板限制的写作表面，并展示精确文本 Diff。共享 Explorer 为两个项目级唯一指导 Asset 提供“本书”分组，并提供两层大纲导航；正文 Canvas 提供章节本地章纲侧栏。
+- 四种类型都通过 ChangeSet 接受一个精确 `replace-text` 操作，并可在同一 ChangeSet 中与一个 `update-title` 组合。类型定义会在一次原子物化前校验标题、offset 与 quote hash，并保留身份、父级和无关 Frontmatter。
+- Client contribution 对已有内容默认展示渲染后的 Markdown 阅读视图，并可明确切换到不受模板限制的源码编辑器。阅读视图只是保留源码的投影。它会展示精确文本与标题 Diff；共享 Explorer 为两个项目级唯一指导 Asset 提供“本书”分组和两层大纲导航，正文 Canvas 提供章节本地章纲侧栏。
 
 ```markdown
 ---
@@ -91,7 +91,7 @@ novel:
 
 ## 已知限制与延期工作
 
-- **基础 Markdown 编辑**：富 Markdown 装饰、Block、评论和作为可复用 Asset 管理的模板尚未实现。
+- **Markdown 源码编辑**：阅读视图会渲染标准 Markdown；富源码装饰、Block、评论和作为可复用 Asset 管理的模板尚未实现。
 - **单次精确替换**：多范围提案、自动 rebase 和结构合并尚未实现。
 - **只约束两层大纲**：幕、阶段或自定义层级暂时应写在自由 Markdown 内，等出现有证据的语义需求再升级。
 - **每章一个章纲**：备选方案与分支章纲尚未实现。

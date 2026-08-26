@@ -53,6 +53,7 @@ describe('Novel Project initialization model snapshot', () => {
     expect(normalized).toContain('novel_search')
     expect(normalized).toContain('novel_propose_changes')
     expect(normalized).toContain('insert-text')
+    expect(normalized).toContain('update-title')
     expect(normalized).toContain('already-initialized')
     expect(normalized).toContain('NOVEL_PROJECT_INITIALIZE_CREATE_AND_INSERT_PROPOSE_OK')
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)

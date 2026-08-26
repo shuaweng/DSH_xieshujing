@@ -1,7 +1,8 @@
 /** Freeform planning editors and exact text Diffs. */
 
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
+import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { NovelWireValue } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type {
   NovelAssetEditorProps,
@@ -54,12 +55,20 @@ function freeformRenderer(
       const value = decode(props.content)
       return <FreeformEditor {...props} body={value.body} contentOf={value.withBody} placeholder={placeholder} t={t} />
     },
-    renderDiff(before, operations) {
+    renderDiff(before, operations, beforeTitle) {
       const body = decode(before).body
-      const operation = textOperation(operations)
+      const decoded = textOperations(operations)
+      const title = decoded.find(operation => operation.kind === 'update-title')
+      const operation = decoded.find(operation => operation.kind === 'replace-text')
       return <div className={css.diff}>
-        <del aria-label={t('before')}>{body.slice(operation.start, operation.end)}</del>
-        <ins aria-label={t('after')}>{operation.replacement}</ins>
+        {title?.kind === 'update-title' && <div className={css.diffTitle}>
+          {beforeTitle !== undefined && <del aria-label={t('before')}>{beforeTitle}</del>}
+          <ins aria-label={t('after')}>{title.title}</ins>
+        </div>}
+        {operation?.kind === 'replace-text' && <>
+          <del aria-label={t('before')}>{body.slice(operation.start, operation.end)}</del>
+          <ins aria-label={t('after')}>{operation.replacement}</ins>
+        </>}
       </div>
     },
     describeSelection(selector) {
@@ -80,6 +89,7 @@ function FreeformEditor({
   readonly placeholder: string
   readonly t: OutlineTranslate
 }) {
+  const [editing, setEditing] = useState(!readOnly && body.trim() === '')
   const editor = useRef<HTMLTextAreaElement>(null)
   const captureSelection = (target: HTMLTextAreaElement) => {
     const startUtf16 = target.selectionStart
@@ -91,12 +101,19 @@ function FreeformEditor({
     editor.current.style.height = '0px'
     editor.current.style.height = `${Math.max(620, editor.current.scrollHeight)}px`
   }, [body])
-  return <section className={css.shell} aria-label={ariaLabel}>
-    <label className={css.titleField}>
-      <span>{t('outlineTitle')}</span>
-      <input value={title} readOnly={readOnly} onChange={(event) => { onTitleChange(event.target.value) }} />
-    </label>
-    <textarea
+  return <section className={css.shell} aria-label={ariaLabel} data-markdown-mode={editing ? 'edit' : 'read'}>
+    <header className={css.documentHeader}>
+      <label className={css.titleField}>
+        <span>{t('outlineTitle')}</span>
+        <input value={title} readOnly={readOnly || !editing}
+          onChange={(event) => { onTitleChange(event.target.value) }} />
+      </label>
+      {!readOnly && <button className={css.modeButton} type="button" aria-pressed={editing}
+        onClick={() => { setEditing(value => !value); onSelectionChange(undefined) }}>
+        {t(editing ? 'readMarkdown' : 'editMarkdown')}
+      </button>}
+    </header>
+    {editing ? <textarea
       ref={editor}
       className={css.editor}
       aria-label={t('freeformBody')}
@@ -108,7 +125,9 @@ function FreeformEditor({
       onSelect={(event) => { captureSelection(event.currentTarget) }}
       onKeyUp={(event) => { captureSelection(event.currentTarget) }}
       onPointerUp={(event) => { captureSelection(event.currentTarget) }}
-    />
+    /> : <article className={css.markdown} aria-label={t('markdownPreview')}>
+      <MarkdownText text={body} />
+    </article>}
   </section>
 }
 
@@ -144,18 +163,30 @@ function exactFreeformContent(
   return { body: value['body'], withBody: body => ({ kind, body }) }
 }
 
-function textOperation(operations: readonly NovelWireValue[]): { start: number; end: number; replacement: string } {
-  const [operation] = operations
-  if (operations.length !== 1 || !isRecord(operation) || operation['kind'] !== 'replace-text'
-    || !isRecord(operation['selector']) || typeof operation['selector']['startUtf16'] !== 'number'
-    || typeof operation['selector']['endUtf16'] !== 'number' || typeof operation['replacement'] !== 'string') {
-    throw new Error('novel planning renderer: incompatible operation')
+type FreeformWireOperation =
+  | { readonly kind: 'update-title'; readonly title: string }
+  | { readonly kind: 'replace-text'; readonly start: number; readonly end: number; readonly replacement: string }
+
+function textOperations(operations: readonly NovelWireValue[]): FreeformWireOperation[] {
+  const decoded: FreeformWireOperation[] = []
+  for (const operation of operations) {
+    if (isRecord(operation) && operation['kind'] === 'update-title' && typeof operation['title'] === 'string') {
+      decoded.push({ kind: 'update-title', title: operation['title'] })
+      continue
+    }
+    if (!isRecord(operation) || operation['kind'] !== 'replace-text'
+      || !isRecord(operation['selector']) || typeof operation['selector']['startUtf16'] !== 'number'
+      || typeof operation['selector']['endUtf16'] !== 'number' || typeof operation['replacement'] !== 'string') {
+      throw new Error('novel planning renderer: incompatible operation')
+    }
+    decoded.push({
+      kind: 'replace-text',
+      start: operation['selector']['startUtf16'],
+      end: operation['selector']['endUtf16'],
+      replacement: operation['replacement'],
+    })
   }
-  return {
-    start: operation['selector']['startUtf16'],
-    end: operation['selector']['endUtf16'],
-    replacement: operation['replacement'],
-  }
+  return decoded
 }
 
 function isRecord(value: unknown): value is { [key: string]: NovelWireValue } {

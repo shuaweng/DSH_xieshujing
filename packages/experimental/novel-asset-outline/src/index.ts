@@ -12,6 +12,7 @@ import {
   type NovelSelectionInput,
   type NovelSelector,
   type ReplaceTextOperation,
+  type UpdateTitleOperation,
   type TextRangeSelectionInput,
   type TextRangeSelector,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
@@ -67,7 +68,7 @@ export const planningOutlineTypeDefinition = {
   model: {
     description: 'A freeform Markdown book outline or volume outline. Its prose, headings, lists, and tables are author-defined.',
     creationInstructions: 'Create content {"kind":"outline","level":"book"|"volume","body":"<free Markdown>"}. A volume outline requires parent_asset_id naming a book outline; a book outline has no parent.',
-    proposalInstructions: 'Use one exact operation [{"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}]. Offsets address the free Markdown body returned by novel_get. Do not force goal/conflict/turn fields unless the author asks for that format.',
+    proposalInstructions: 'Rename with {"kind":"update-title","title":"..."}; rewrite free Markdown with {"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}. Submit either one operation or combine one of each in the same operations array. Offsets address the body returned by novel_get. Do not force goal/conflict/turn fields unless the author asks for that format.',
   },
   parse: parseOutline,
   create(request, path) {
@@ -116,7 +117,7 @@ export const chapterOutlineTypeDefinition = {
   model: {
     description: 'A freeform Markdown chapter plan bound to one manuscript chapter.',
     creationInstructions: 'Create content {"kind":"chapter-outline","body":"<free Markdown>"} with parent_asset_id naming the target manuscript.chapter. Emotion, hooks, rhythm, and four beats are optional writing methods, never required fields.',
-    proposalInstructions: 'Use one exact operation [{"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}]. Offsets address the free Markdown body returned by novel_get.',
+    proposalInstructions: 'Rename with {"kind":"update-title","title":"..."}; rewrite free Markdown with {"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}. Submit either one operation or combine one of each in the same operations array. Offsets address the body returned by novel_get.',
   },
   parse: parseChapterOutline,
   create(request, path) {
@@ -264,33 +265,43 @@ function freeformBehavior(
       return selected
     },
     prepareOperations(snapshot, value) {
-      if (!Array.isArray(value) || value.length !== 1) invalidChangeSet('operations must contain exactly one item')
-      const operation: unknown = value[0]
-      if (!isRecord(operation) || operation['kind'] !== 'replace-text'
-        || !Number.isSafeInteger(operation['startUtf16']) || !Number.isSafeInteger(operation['endUtf16'])
-        || typeof operation['replacement'] !== 'string') {
-        invalidChangeSet('model operation is not a valid replace-text input')
-      }
       const body = bodyOf(snapshot.content)
-      const startUtf16 = operation['startUtf16'] as number
-      const endUtf16 = operation['endUtf16'] as number
-      validateRange(body, startUtf16, endUtf16, 'ChangeSet')
-      const quote = body.slice(startUtf16, endUtf16)
-      return [{
-        kind: 'replace-text',
-        selector: {
-          kind: 'text-range', startUtf16, endUtf16,
-          quoteHash: contentHash(new TextEncoder().encode(quote)),
-        },
-        replacement: operation['replacement'],
-      }]
+      if (!Array.isArray(value)) invalidChangeSet('operations must be an array')
+      const prepared = value.map((operation: unknown): FreeformOperation => {
+        if (isRecord(operation) && operation['kind'] === 'update-title') {
+          if (typeof operation['title'] !== 'string') invalidChangeSet('model operation is not a valid update-title input')
+          return { kind: 'update-title', title: authoredString(
+            operation['title'], 'novel.title', snapshot.asset.projectRelativePath, 240,
+          ) }
+        }
+        if (!isRecord(operation) || operation['kind'] !== 'replace-text'
+          || !Number.isSafeInteger(operation['startUtf16']) || !Number.isSafeInteger(operation['endUtf16'])
+          || typeof operation['replacement'] !== 'string') {
+          invalidChangeSet('model operation is not supported by this freeform Asset')
+        }
+        const startUtf16 = operation['startUtf16'] as number
+        const endUtf16 = operation['endUtf16'] as number
+        validateRange(body, startUtf16, endUtf16, 'ChangeSet')
+        const quote = body.slice(startUtf16, endUtf16)
+        return {
+          kind: 'replace-text',
+          selector: {
+            kind: 'text-range', startUtf16, endUtf16,
+            quoteHash: contentHash(new TextEncoder().encode(quote)),
+          },
+          replacement: operation['replacement'],
+        }
+      })
+      return validateFreeformOperations(prepared)
     },
     decodeOperations(value) {
       return decodeOperations(value, kind)
     },
     materializeOperations(snapshot, operations) {
-      const [operation] = decodeOperations(operations, kind)
-      if (operation === undefined || operations.length !== 1) invalidChangeSet('operations must contain exactly one item')
+      const decoded = decodeOperations(operations, kind)
+      const title = decoded.find((operation): operation is UpdateTitleOperation => operation.kind === 'update-title')?.title
+      const operation = decoded.find((candidate): candidate is ReplaceTextOperation => candidate.kind === 'replace-text')
+      if (operation === undefined) return this.serializeContent(snapshot, snapshot.content, title)
       if (containsUnpairedSurrogate(operation.replacement)) invalidChangeSet('replacement contains an unpaired UTF-16 surrogate')
       const body = bodyOf(snapshot.content)
       const range = operation.selector
@@ -300,7 +311,7 @@ function freeformBehavior(
       }
       const nextBody = `${body.slice(0, range.startUtf16)}${operation.replacement}${body.slice(range.endUtf16)}`
       const next: NovelAssetContent = contentWithBody(kind, snapshot.content, nextBody)
-      return this.serializeContent(snapshot, next)
+      return this.serializeContent(snapshot, next, title)
     },
   }
 }
@@ -433,13 +444,37 @@ function replaceFrontmatterTitle(text: string, path: string, title: string): str
   return `${text.slice(0, yamlStart + start)}${stringify(clean).trimEnd()}${text.slice(yamlStart + end)}`
 }
 
-function decodeOperations(value: unknown, owner: string): readonly ReplaceTextOperation[] {
-  if (!Array.isArray(value) || value.length !== 1) invalidChangeSet('operations must contain exactly one item')
-  const operation: unknown = value[0]
-  if (!isRecord(operation) || operation['kind'] !== 'replace-text' || typeof operation['replacement'] !== 'string') {
-    invalidChangeSet(`operation is not supported by ${owner}`)
+type FreeformOperation = ReplaceTextOperation | UpdateTitleOperation
+
+function decodeOperations(value: unknown, owner: string): readonly FreeformOperation[] {
+  if (!Array.isArray(value)) invalidChangeSet('operations must be an array')
+  const decoded = value.map((operation: unknown): FreeformOperation => {
+    if (isRecord(operation) && operation['kind'] === 'update-title') {
+      if (typeof operation['title'] !== 'string') invalidChangeSet('update-title operation is invalid')
+      return { kind: 'update-title', title: operation['title'] }
+    }
+    if (!isRecord(operation) || operation['kind'] !== 'replace-text' || typeof operation['replacement'] !== 'string') {
+      invalidChangeSet(`operation is not supported by ${owner}`)
+    }
+    return {
+      kind: 'replace-text',
+      selector: decodeTextRangeSelector(operation['selector']),
+      replacement: operation['replacement'],
+    }
+  })
+  return validateFreeformOperations(decoded)
+}
+
+function validateFreeformOperations(operations: readonly FreeformOperation[]): readonly FreeformOperation[] {
+  if (operations.length < 1 || operations.length > 2) {
+    invalidChangeSet('freeform operations must contain one item, or one update-title plus one replace-text')
   }
-  return [{ kind: 'replace-text', selector: decodeTextRangeSelector(operation['selector']), replacement: operation['replacement'] }]
+  const titleCount = operations.filter(operation => operation.kind === 'update-title').length
+  const textCount = operations.length - titleCount
+  if (titleCount > 1 || textCount > 1) {
+    invalidChangeSet('freeform operations may contain at most one update-title and one replace-text')
+  }
+  return operations
 }
 
 function outlineContent(value: unknown): PlanningOutlineContent {
@@ -504,7 +539,7 @@ function freeformBookDefinition(config: {
     model: {
       description: config.description,
       creationInstructions: config.creationInstructions,
-      proposalInstructions: 'Use one exact operation [{"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}]. Offsets address the free Markdown body returned by novel_get. Modify only author-requested guidance; do not silently convert observations into durable project rules.',
+      proposalInstructions: 'Rename with {"kind":"update-title","title":"..."}; rewrite free Markdown with {"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}. Submit either one operation or combine one of each in the same operations array. Offsets address the body returned by novel_get. Modify only author-requested guidance; do not silently convert observations into durable project rules.',
     },
     parse: config.parse,
     create(request, path) {

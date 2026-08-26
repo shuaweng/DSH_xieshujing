@@ -40,7 +40,7 @@ Service Definition 与项目值不会增加提示词或工具 schema token。
 ## 已知限制与暂缓事项
 
 - **内置五种资产类型**：内核安装 `manuscript.chapter`；策划包贡献 `planning.outline`、`planning.chapter-outline`，以及项目级唯一的 `book.brief` / `book.style-profile`。人物、灵感、关系、场景与视图定义均暂缓。
-- **每个 ChangeSet 一个操作**：正文支持一个精确 `insert-text` 或 `replace-text`；其他当前自由文本 Asset 支持一个精确 `replace-text`。所有类型都拒绝自动重定位到较新的 Revision。
+- **每个 ChangeSet 最多一个标题操作与一个正文操作**：内置文本 Asset 可以针对同一精确 Revision，把一个 `update-title` 与一个正文操作组合。正文使用 `insert-text` 或 `replace-text`；其他当前自由文本 Asset 使用 `replace-text`。类型会原子物化这组操作，所有操作都拒绝自动重定位到较新的 Revision。
 - **没有实时监听**：资产目录通过显式协调更新。Service 已提供有边界检索；文件监听与浏览器失效通知仍暂缓。
 - **仅定义层**：Remote 投影、工作台展示、Session Log 上下文和面向模型的 Novel 工具都属于独立 Consumer。
 - **通用报告信封**：Repository 校验身份、大小、来源与无损 JSON；分析器特定的 payload 校验归写入它的分析服务所有。

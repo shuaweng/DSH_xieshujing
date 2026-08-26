@@ -61,6 +61,12 @@ export interface InsertTextOperation {
   readonly text: string
 }
 
+/** Exact authored-title update against one retained Asset Revision. */
+export interface UpdateTitleOperation {
+  readonly kind: 'update-title'
+  readonly title: string
+}
+
 /**
  * Merge-extensible authored Asset values keyed by their exact `novel.type` declaration.
  * Type packages augment this map and register matching runtime definitions.
@@ -70,7 +76,7 @@ export interface NovelAssetTypeMap {
     readonly content: ManuscriptChapterContent
     readonly selectionInput: TextRangeSelectionInput
     readonly selector: TextRangeSelector
-    readonly operation: ReplaceTextOperation | InsertTextOperation
+    readonly operation: ReplaceTextOperation | InsertTextOperation | UpdateTitleOperation
   }
 }
 

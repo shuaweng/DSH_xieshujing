@@ -34,6 +34,9 @@ export const zh = {
   freeformPlaceholder: '自由写作。可使用标题、列表、表格或任何适合这本书的方法……',
   bookBriefPlaceholder: '自由记录作品定位、读者承诺、主角、核心冲突、世界边界、长线方向与其他全书事实……',
   bookStyleProfilePlaceholder: '自由记录叙事声音、句式节奏、对白、信息释放、连载节奏、钩子、正向范例与明确禁忌……',
+  editMarkdown: '编辑',
+  readMarkdown: '阅读',
+  markdownPreview: 'Markdown 阅读视图',
   before: '修改前',
   after: '修改后',
 } as const
@@ -52,6 +55,9 @@ export const en: Record<OutlineLocaleKey, string> = {
   freeformPlaceholder: 'Write freely. Use headings, lists, tables, or any method that fits this book…',
   bookBriefPlaceholder: 'Freely record the premise, reader promise, protagonist, core conflict, world boundaries, long arc, and other book-wide facts…',
   bookStyleProfilePlaceholder: 'Freely record narrative voice, sentence rhythm, dialogue, information release, serial pacing, hooks, positive references, and explicit avoidances…',
+  editMarkdown: 'Edit',
+  readMarkdown: 'Read',
+  markdownPreview: 'Markdown reading view',
   before: 'Before',
   after: 'After',
 }

@@ -33,7 +33,7 @@ class NovelProjectInitMockAdapter extends LlmAdapter {
     if (textResult.includes('当前目录已经是小说项目《White Harbor》')) {
       const args = JSON.stringify({
         type: 'manuscript.chapter',
-        title: 'Chapter One',
+        title: 'Untitled Chapter',
         content: { kind: 'manuscript', body: '' },
       })
       yield { type: 'block-start', index: 0, blockType: 'tool-call' }
@@ -43,8 +43,8 @@ class NovelProjectInitMockAdapter extends LlmAdapter {
       yield { type: 'finish', reason: { kind: 'tool-calls' } }
       return
     }
-    if (textResult.includes('已创建 Chapter One（manuscript.chapter）')) {
-      const args = JSON.stringify({ query: 'Chapter One', types: ['manuscript.chapter'] })
+    if (textResult.includes('已创建 Untitled Chapter（manuscript.chapter）')) {
+      const args = JSON.stringify({ query: 'Untitled Chapter', types: ['manuscript.chapter'] })
       yield { type: 'block-start', index: 0, blockType: 'tool-call' }
       yield { type: 'tool-call-delta', index: 0, id: CallId('novel-search-call'), name: 'novel_search', argumentsDelta: args }
       yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: CallId('novel-search-call'), name: 'novel_search', arguments: args } }
@@ -52,14 +52,17 @@ class NovelProjectInitMockAdapter extends LlmAdapter {
       yield { type: 'finish', reason: { kind: 'tool-calls' } }
       return
     }
-    if (textResult.includes('"title":"Chapter One"')) {
+    if (textResult.includes('"title":"Untitled Chapter"')) {
       const [chapter] = JSON.parse(textResult) as Array<{ assetId: string; revisionId: string }>
       if (chapter === undefined) throw new Error('blank chapter search result was empty')
       const args = JSON.stringify({
         project_id: 'project-white-harbor',
         asset_id: chapter.assetId,
         base_revision_id: chapter.revisionId,
-        operations: [{ kind: 'insert-text', atUtf16: 0, text: 'The harbor bell rang once.\n' }],
+        operations: [
+          { kind: 'update-title', title: 'Chapter One' },
+          { kind: 'insert-text', atUtf16: 0, text: 'The harbor bell rang once.\n' },
+        ],
         summary: 'Write Chapter One',
       })
       yield { type: 'block-start', index: 0, blockType: 'tool-call' }

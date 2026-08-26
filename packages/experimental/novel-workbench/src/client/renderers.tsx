@@ -38,7 +38,7 @@ export interface NovelAssetRendererDefinition {
     countCharacters(content: NovelWireValue): number
   }
   renderEditor(props: NovelAssetEditorProps): ReactNode
-  renderDiff(before: NovelWireValue, operations: readonly NovelWireValue[]): ReactNode
+  renderDiff(before: NovelWireValue, operations: readonly NovelWireValue[], beforeTitle?: string): ReactNode
   describeSelection(selector: NovelWireValue): string
 }
 
@@ -111,17 +111,21 @@ export const manuscriptChapterRenderer: NovelAssetRendererDefinition = {
       onSelectionChange={onSelectionChange}
     />
   },
-  renderDiff(before, operations) {
+  renderDiff(before, operations, beforeTitle) {
     const chapter = manuscriptContent(before)
-    const [operation] = manuscriptOperations(operations)
-    if (operation === undefined || operations.length !== 1) return undefined
-    if (operation.kind === 'insert-text') {
-      return <div className={css.diff}><ins>{operation.text}</ins></div>
-    }
+    const decoded = manuscriptOperations(operations)
+    const title = decoded.find(operation => operation.kind === 'update-title')
+    const operation = decoded.find(operation => operation.kind !== 'update-title')
     return (
       <div className={css.diff}>
-        <del>{chapter.body.slice(operation.selector.startUtf16, operation.selector.endUtf16)}</del>
-        <ins>{operation.replacement}</ins>
+        {title?.kind === 'update-title' && <div className={css.diffTitle}>
+          {beforeTitle !== undefined && <del>{beforeTitle}</del>}<ins>{title.title}</ins>
+        </div>}
+        {operation?.kind === 'insert-text' && <ins>{operation.text}</ins>}
+        {operation?.kind === 'replace-text' && <>
+          <del>{chapter.body.slice(operation.selector.startUtf16, operation.selector.endUtf16)}</del>
+          <ins>{operation.replacement}</ins>
+        </>}
       </div>
     )
   },
@@ -191,11 +195,22 @@ interface ManuscriptInsertWireOperation {
   readonly text: string
 }
 
+interface ManuscriptTitleWireOperation {
+  readonly kind: 'update-title'
+  readonly title: string
+}
+
+type ManuscriptWireOperation = ManuscriptReplaceWireOperation | ManuscriptInsertWireOperation | ManuscriptTitleWireOperation
+
 function manuscriptOperations(
   operations: readonly NovelWireValue[],
-): Array<ManuscriptReplaceWireOperation | ManuscriptInsertWireOperation> {
-  const decoded: Array<ManuscriptReplaceWireOperation | ManuscriptInsertWireOperation> = []
+): ManuscriptWireOperation[] {
+  const decoded: ManuscriptWireOperation[] = []
   for (const operation of operations) {
+    if (isWireRecord(operation) && operation['kind'] === 'update-title' && typeof operation['title'] === 'string') {
+      decoded.push({ kind: 'update-title', title: operation['title'] })
+      continue
+    }
     if (isWireRecord(operation) && operation['kind'] === 'insert-text'
       && typeof operation['atUtf16'] === 'number' && typeof operation['text'] === 'string') {
       decoded.push({ kind: 'insert-text', atUtf16: operation['atUtf16'], text: operation['text'] })

@@ -39,6 +39,6 @@
 ## 已知限制与延期工作
 
 - **仅词法发现** — `novel_search` 提供有边界的标题/模型文本匹配；语义检索、relations、Asset 导航/聚焦与 delegation 工具尚未实现。`novel_present` 目前只控制整个 Frame。
-- **单个精确文本操作**：正文使用一个精确 `insert-text` 或 `replace-text`，因此已有空章节无需占位符即可写入。大纲与章纲类型使用一个精确 `replace-text`；多范围和多资产 ChangeSet 尚未实现。
+- **一个标题与一个精确文本操作**：内置文本 Asset 可以在同一提案中把 `update-title` 与一个正文操作组合。正文使用 `insert-text` 或 `replace-text`，因此已有空章节无需占位符即可原子命名并写入。自由策划与书本指导类型使用 `replace-text`；多范围和多资产 ChangeSet 尚未实现。
 - **没有应用权威** — 只有浏览器 Remote 可以接受或拒绝提案；模型不能提交修改。
 - **没有自动检索注入** — 检索结果不会偷偷进入模型上下文；Agent 必须选择精确结果并用 `novel_get` 读取。

@@ -76,6 +76,7 @@ export type {
   PutNovelAnalysisReportRequest,
   PutNovelPreferenceCandidateRequest,
   InsertTextOperation,
+  UpdateTitleOperation,
   ReplaceTextOperation,
   RevisionOrigin,
   RevisionFinalization,

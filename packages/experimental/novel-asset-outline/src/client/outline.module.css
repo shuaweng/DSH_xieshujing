@@ -8,13 +8,21 @@
   font-size: var(--novel-reader-size, 16px);
 }
 
-.titleField { display: grid; gap: 8px; margin-bottom: 26px; }
+.documentHeader { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: end; margin-bottom: 26px; }
+.titleField { display: grid; gap: 8px; }
 .titleField span { color: color-mix(in srgb, currentColor 58%, transparent); font-size: 12px; letter-spacing: .08em; }
 .titleField input {
   width: 100%; border: 0; border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent);
   padding: 0 0 14px; background: transparent; color: inherit; font: 600 26px/1.35 inherit; outline: none;
 }
 .titleField input:focus { border-bottom-color: color-mix(in srgb, currentColor 46%, transparent); }
+
+.modeButton {
+  min-width: 64px; margin-bottom: 10px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 999px; padding: 7px 15px; background: color-mix(in srgb, var(--novel-paper, #fff) 82%, transparent);
+  color: inherit; font: 500 13px/1 inherit; cursor: pointer;
+}
+.modeButton:hover { border-color: color-mix(in srgb, currentColor 34%, transparent); }
 
 .editor {
   display: block; width: 100%; min-height: 620px; resize: none; overflow: hidden; border: 0; outline: none;
@@ -24,7 +32,26 @@
 }
 .editor::placeholder { color: color-mix(in srgb, currentColor 34%, transparent); }
 
-.diff { display: grid; gap: 10px; }
+.markdown { min-height: 620px; line-height: 1.95; overflow-wrap: anywhere; }
+.markdown :global(.markdown-body) { color: inherit; font: inherit; }
+.markdown :global(h1), .markdown :global(h2), .markdown :global(h3) {
+  margin: 1.7em 0 .7em; color: inherit; line-height: 1.35; letter-spacing: -.01em;
+}
+.markdown :global(h1) { font-size: 1.85em; }
+.markdown :global(h2) { font-size: 1.45em; }
+.markdown :global(h3) { font-size: 1.2em; }
+.markdown :global(p), .markdown :global(ul), .markdown :global(ol), .markdown :global(blockquote) { margin: 0 0 1.1em; }
+.markdown :global(li) { margin: .35em 0; }
+.markdown :global(blockquote) {
+  border-left: 3px solid color-mix(in srgb, currentColor 20%, transparent); padding-left: 1.1em;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}
+.markdown :global(table) { width: 100%; border-collapse: collapse; margin: 1.4em 0; }
+.markdown :global(th), .markdown :global(td) {
+  border-bottom: 1px solid color-mix(in srgb, currentColor 14%, transparent); padding: .65em .8em; text-align: left;
+}
+
+.diff, .diffTitle { display: grid; gap: 10px; }
 .diff del, .diff ins { display: block; padding: 10px 12px; border-radius: 8px; white-space: pre-wrap; text-decoration: none; }
 .diff del { background: #fff0f0; color: #843f3f; }
 .diff ins { background: #eff9ef; color: #32613a; }

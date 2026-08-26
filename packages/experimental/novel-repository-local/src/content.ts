@@ -11,6 +11,7 @@ import {
   type InsertTextOperation,
   type ManuscriptChapterContent,
   type ReplaceTextOperation,
+  type UpdateTitleOperation,
   type TextRangeSelectionInput,
   type TextRangeSelector,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
@@ -205,7 +206,7 @@ export const manuscriptChapterTypeDefinition: NovelAssetTypeDefinition = {
   model: {
     description: 'A Markdown manuscript chapter addressed by exact UTF-16 body offsets.',
     creationInstructions: 'Create content {"kind":"manuscript","body":"<complete Markdown chapter prose>"} without parent_asset_id. When the author already supplied or requested prose, write the complete body in this call instead of asking them to create an empty chapter first.',
-    proposalInstructions: 'To write into an empty chapter or add text, use [{"kind":"insert-text","atUtf16":<integer>,"text":"..."}]. To rewrite existing text, use [{"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}]. Offsets address the exact body returned by novel_get; insert-text may use 0 for an empty body or the body length to append.',
+    proposalInstructions: 'To rename the chapter, use {"kind":"update-title","title":"..."}. To write into an empty chapter or add text, use {"kind":"insert-text","atUtf16":<integer>,"text":"..."}. To rewrite existing text, use {"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}. Submit one operation, or combine one update-title plus one text operation in the same operations array for one atomic ChangeSet. Offsets address the exact body returned by novel_get; insert-text may use 0 for an empty body or the body length to append.',
   },
   parse: parseChapter,
   create(request, path) {
@@ -281,64 +282,76 @@ export const manuscriptChapterTypeDefinition: NovelAssetTypeDefinition = {
     return selected
   },
   prepareOperations(snapshot, value) {
-    if (!Array.isArray(value) || value.length !== 1) invalidChangeSet('operations must contain exactly one item')
-    const operation: unknown = value[0]
+    if (!Array.isArray(value)) invalidChangeSet('operations must be an array')
     const body = chapterContent(snapshot.content).body
-    if (isRecord(operation) && operation['kind'] === 'insert-text') {
-      if (!Number.isSafeInteger(operation['atUtf16']) || typeof operation['text'] !== 'string') {
-        invalidChangeSet('model operation is not a valid insert-text input')
+    const prepared = value.map((operation: unknown): ManuscriptOperation => {
+      if (isRecord(operation) && operation['kind'] === 'update-title') {
+        if (typeof operation['title'] !== 'string') invalidChangeSet('model operation is not a valid update-title input')
+        return { kind: 'update-title', title: validatedChapterTitle(operation['title'], snapshot.asset.projectRelativePath) }
       }
-      const atUtf16 = validatedInsertionOffset(body, operation['atUtf16'] as number)
-      if (containsUnpairedSurrogate(operation['text'])) invalidChangeSet('inserted text contains an unpaired UTF-16 surrogate')
-      return [{ kind: 'insert-text', atUtf16, text: operation['text'] }]
-    }
-    if (
-      !isRecord(operation)
-      || operation['kind'] !== 'replace-text'
-      || !Number.isSafeInteger(operation['startUtf16'])
-      || !Number.isSafeInteger(operation['endUtf16'])
-      || typeof operation['replacement'] !== 'string'
-    ) invalidChangeSet('model operation is not a valid replace-text input')
-    const captured = this.captureSelection(snapshot, {
-      kind: 'text-range',
-      startUtf16: operation['startUtf16'] as number,
-      endUtf16: operation['endUtf16'] as number,
-    }, { contextUnits: 0, previewUnits: 1 })
-    return [{
-      kind: 'replace-text',
-      selector: textRangeSelector(captured.selector),
-      replacement: operation['replacement'],
-    }]
+      if (isRecord(operation) && operation['kind'] === 'insert-text') {
+        if (!Number.isSafeInteger(operation['atUtf16']) || typeof operation['text'] !== 'string') {
+          invalidChangeSet('model operation is not a valid insert-text input')
+        }
+        const atUtf16 = validatedInsertionOffset(body, operation['atUtf16'] as number)
+        if (containsUnpairedSurrogate(operation['text'])) invalidChangeSet('inserted text contains an unpaired UTF-16 surrogate')
+        return { kind: 'insert-text', atUtf16, text: operation['text'] }
+      }
+      if (!isRecord(operation) || operation['kind'] !== 'replace-text'
+        || !Number.isSafeInteger(operation['startUtf16']) || !Number.isSafeInteger(operation['endUtf16'])
+        || typeof operation['replacement'] !== 'string') {
+        invalidChangeSet('model operation is not supported by manuscript.chapter')
+      }
+      const captured = this.captureSelection(snapshot, {
+        kind: 'text-range',
+        startUtf16: operation['startUtf16'] as number,
+        endUtf16: operation['endUtf16'] as number,
+      }, { contextUnits: 0, previewUnits: 1 })
+      return {
+        kind: 'replace-text',
+        selector: textRangeSelector(captured.selector),
+        replacement: operation['replacement'],
+      }
+    })
+    return validatedManuscriptOperations(prepared)
   },
   decodeOperations(value) {
-    if (!Array.isArray(value) || value.length !== 1) invalidChangeSet('operations must contain exactly one item')
-    const operation: unknown = value[0]
-    if (isRecord(operation) && operation['kind'] === 'insert-text') {
-      if (!Number.isSafeInteger(operation['atUtf16']) || typeof operation['text'] !== 'string') {
-        invalidChangeSet('operation is not an insert-text operation')
+    if (!Array.isArray(value)) invalidChangeSet('operations must be an array')
+    const decoded = value.map((operation: unknown): ManuscriptOperation => {
+      if (isRecord(operation) && operation['kind'] === 'update-title') {
+        if (typeof operation['title'] !== 'string') invalidChangeSet('update-title operation is invalid')
+        return { kind: 'update-title', title: operation['title'] }
       }
-      return [{ kind: 'insert-text', atUtf16: operation['atUtf16'] as number, text: operation['text'] }]
-    }
-    if (!isRecord(operation) || operation['kind'] !== 'replace-text' || typeof operation['replacement'] !== 'string') {
-      invalidChangeSet('operation is not a replace-text operation')
-    }
-    return [{
-      kind: 'replace-text',
-      selector: decodeTextRangeSelector(operation['selector']),
-      replacement: operation['replacement'],
-    }]
+      if (isRecord(operation) && operation['kind'] === 'insert-text') {
+        if (!Number.isSafeInteger(operation['atUtf16']) || typeof operation['text'] !== 'string') {
+          invalidChangeSet('insert-text operation is invalid')
+        }
+        return { kind: 'insert-text', atUtf16: operation['atUtf16'] as number, text: operation['text'] }
+      }
+      if (!isRecord(operation) || operation['kind'] !== 'replace-text' || typeof operation['replacement'] !== 'string') {
+        invalidChangeSet('operation is not supported by manuscript.chapter')
+      }
+      return {
+        kind: 'replace-text',
+        selector: decodeTextRangeSelector(operation['selector']),
+        replacement: operation['replacement'],
+      }
+    })
+    return validatedManuscriptOperations(decoded)
   },
   materializeOperations(snapshot, operations) {
-    const [operation] = manuscriptOperations(operations)
-    if (operation === undefined || operations.length !== 1) invalidChangeSet('operations must contain exactly one item')
+    const decoded = manuscriptOperations(operations)
+    const title = decoded.find((operation): operation is UpdateTitleOperation => operation.kind === 'update-title')?.title
+    const operation = decoded.find((candidate): candidate is ReplaceTextOperation | InsertTextOperation => candidate.kind !== 'update-title')
     const body = chapterContent(snapshot.content).body
+    if (operation === undefined) return this.serializeContent(snapshot, { kind: 'manuscript', body }, title)
     if (operation.kind === 'insert-text') {
       if (containsUnpairedSurrogate(operation.text)) invalidChangeSet('inserted text contains an unpaired UTF-16 surrogate')
       const atUtf16 = validatedInsertionOffset(body, operation.atUtf16)
       return this.serializeContent(snapshot, {
         kind: 'manuscript',
         body: `${body.slice(0, atUtf16)}${operation.text}${body.slice(atUtf16)}`,
-      })
+      }, title)
     }
     if (containsUnpairedSurrogate(operation.replacement)) invalidChangeSet('replacement contains an unpaired UTF-16 surrogate')
     const { startUtf16, endUtf16, quoteHash } = operation.selector
@@ -357,7 +370,7 @@ export const manuscriptChapterTypeDefinition: NovelAssetTypeDefinition = {
     return this.serializeContent(snapshot, {
       kind: 'manuscript',
       body: `${body.slice(0, startUtf16)}${operation.replacement}${body.slice(endUtf16)}`,
-    })
+    }, title)
   },
 }
 
@@ -485,9 +498,15 @@ function decodeTextRangeSelector(value: unknown): TextRangeSelector {
   }
 }
 
-function manuscriptOperations(operations: unknown): readonly (ReplaceTextOperation | InsertTextOperation)[] {
+type ManuscriptOperation = ReplaceTextOperation | InsertTextOperation | UpdateTitleOperation
+
+function manuscriptOperations(operations: unknown): readonly ManuscriptOperation[] {
   if (!Array.isArray(operations)) invalidChangeSet('operations must be an array')
-  return operations.map((operation: unknown) => {
+  const decoded = operations.map((operation: unknown): ManuscriptOperation => {
+    if (isRecord(operation) && operation['kind'] === 'update-title') {
+      if (typeof operation['title'] !== 'string') invalidChangeSet('update-title operation is invalid')
+      return { kind: 'update-title', title: operation['title'] }
+    }
     if (isRecord(operation) && operation['kind'] === 'insert-text') {
       if (!Number.isSafeInteger(operation['atUtf16']) || typeof operation['text'] !== 'string') {
         invalidChangeSet('insert-text operation is invalid')
@@ -503,6 +522,19 @@ function manuscriptOperations(operations: unknown): readonly (ReplaceTextOperati
       replacement: operation['replacement'],
     }
   })
+  return validatedManuscriptOperations(decoded)
+}
+
+function validatedManuscriptOperations(operations: readonly ManuscriptOperation[]): readonly ManuscriptOperation[] {
+  if (operations.length < 1 || operations.length > 2) {
+    invalidChangeSet('manuscript operations must contain one item, or one update-title plus one text operation')
+  }
+  const titleCount = operations.filter(operation => operation.kind === 'update-title').length
+  const textCount = operations.length - titleCount
+  if (titleCount > 1 || textCount > 1) {
+    invalidChangeSet('manuscript operations may contain at most one update-title and one text operation')
+  }
+  return operations
 }
 
 function validatedInsertionOffset(body: string, offset: number): number {

@@ -287,7 +287,7 @@ export function apply(ctx: Context): void {
         ),
         'read ChangeSet base Revision',
       )
-      return { changeSet, before: base.content }
+      return { changeSet, before: base.content, beforeTitle: base.title }
     },
     applyChange: async (sessionId, changeSetId) => await unwrapRemote(
       remote.applyChangeSet(sessionId as SessionId, changeSetId as ChangeSetId),

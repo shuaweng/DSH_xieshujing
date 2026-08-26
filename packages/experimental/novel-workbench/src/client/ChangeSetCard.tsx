@@ -12,6 +12,7 @@ const NO_DECISION_EFFECT = (): void => {}
 export interface NovelChangeReview {
   changeSet: NovelChangeSetDescriptor
   before: NovelWireValue
+  beforeTitle?: string
 }
 
 export interface ChangeSetInjected {
@@ -70,7 +71,7 @@ export function ChangeSetCard({ block, sessionId, read, applyChange, rejectChang
   const changeSet = review?.changeSet
   const diff = changeSet === undefined || review === undefined
     ? undefined
-    : renderers.get(changeSet.assetType).renderDiff(review.before, changeSet.operations)
+    : renderers.get(changeSet.assetType).renderDiff(review.before, changeSet.operations, review.beforeTitle)
   return (
     <article className={css.changeCard} data-status={changeSet?.status}>
       <header><strong>{t('proposal')}</strong><span>{changeSet?.summary ?? changeSetId}</span></header>

@@ -19,7 +19,7 @@
 - 章节头部会列出带来源与时间戳的不可变 Revision。打开历史 Revision 时仍使用同一个 Renderer 和分析控件，但标题/正文只读；保存绝不会重写历史。
 - 仅章节拥有的审稿与 `NOAI` 动作位于底栏。两者都会为当前显示的精确 Revision 打开右侧抽屉：NOAI 运行确定性扫描，审稿则启动固定只读审稿人。每种成功报告在每个 Revision 上只保留一份，因此切换历史版本也会切换到对应报告。
 - 章节头部可以把屏幕上的精确 Revision 标记为定稿。满足条件的 Agent 草稿/作者定稿比较会打开偏好抽屉并展示前后证据；候选在作者采纳前不会改变任何内容，采纳后通过 ChangeSet 写入精确“本书风格”Revision，拒绝决策同样可审计。
-- `@deepseek-ai/dsh-experimental-novel-asset-outline` 独立贡献自由的 `planning.outline` 与 `planning.chapter-outline` Renderer。大纲和卷纲是不受模板限制的 Markdown 写作表面，支持精确文本选区与 Diff。正文底栏把用户提供的章纲图标放在皮肤控件左侧；点击会打开与当前章节一对一绑定的右侧抽屉，作者可自由写作、保存或把章纲选区引用给 Agent。情绪/钩子/节奏/起承转合实用起步模板只是可选按钮，插入后仍是普通可编辑 Markdown。
+- `@deepseek-ai/dsh-experimental-novel-asset-outline` 独立贡献自由的 `planning.outline` 与 `planning.chapter-outline` Renderer。书本指导和策划 Asset 默认展示渲染后的 Markdown 阅读视图，并可明确切换到不受模板限制、支持精确文本选区与 Diff 的源码编辑。一个 ChangeSet 可以同时预览一次标题变更和一次正文变更。正文底栏把用户提供的章纲图标放在皮肤控件左侧；点击会打开与当前章节一对一绑定的右侧抽屉，作者可自由写作、保存或把章纲选区引用给 Agent。情绪/钩子/节奏/起承转合实用起步模板只是可选按钮，插入后仍是普通可编辑 Markdown。
 - Agent 创建的 Asset 会返回可回放创建卡片并刷新权威 Explorer。人类与 Agent 创建都经过同一条类型化 Remote/Repository 链路，任何一方都不能自行发明文件路径。
 - 小说 Agent 可以用 `novel_present` 调用 `open-workbench` 或 `close-workbench`。其持久工具结果 metadata 与 Composer 开关驱动同一个浏览器本地 `ctx.layout` 选择；普通 Agent 回复文字绝不控制布局，展示动作也绝不修改 Asset。
 - “引用选区到 Agent”先保存脏的类型化草稿，保存失败即安全停止，然后冻结选区。Composer 只显示 `@[引用文字前十个字…]`；隐藏的 occurrence 保留完整规范 `dsh-novel:` mention，并在提交时把精确值序列化给 Agent。

@@ -14,8 +14,8 @@ This experimental Asset-type package contributes freeform planning and project-g
 - `book.brief` and `book.style-profile` are parentless, freeform Markdown Assets stored under the declared `planning` root. Each exact type is a project singleton. The brief carries author-confirmed book premise and canon boundaries; the style profile carries author-confirmed prose and serial-rhythm guidance.
 - Emotion targets, key scenes, hook distribution, a 15/35/35/15 rhythm, and four-beat structure are optional guidance exposed by the workbench. They are never persistence fields and never validation requirements.
 - Human saves can edit title and complete body. A frozen selection uses the shared exact UTF-16 text-range selector and binds its quote hash to one retained Revision.
-- All four types accept one exact `replace-text` operation per ChangeSet. The registered definition verifies offsets and quote hash before materialization and preserves identity, parent, and unrelated Frontmatter.
-- The Client contribution renders all four types as unconstrained writing surfaces and presents exact text Diffs. The shared explorer supplies a Book group for the two singleton guidance Assets and two-level outline navigation; the manuscript canvas supplies the chapter-local drawer.
+- All four types accept one exact `replace-text` operation and may combine it with one `update-title` in the same ChangeSet. The registered definition verifies the title, offsets, and quote hash before one atomic materialization and preserves identity, parent, and unrelated Frontmatter.
+- The Client contribution defaults existing content to a rendered Markdown reading view and switches explicitly to the unconstrained source editor. The reading view is only a projection of the retained source. It presents exact text and title Diffs; the shared explorer supplies a Book group for the two singleton guidance Assets and two-level outline navigation, while the manuscript canvas supplies the chapter-local drawer.
 
 ```markdown
 ---
@@ -91,7 +91,7 @@ Switching between Book, Volume, and Chapter Outline surfaces does not change the
 
 ## Known Limitations and Deferred Work
 
-- **Plain Markdown editing** — rich Markdown decoration, blocks, comments, and templates managed as reusable Assets are deferred.
+- **Markdown source editing** — the reading view renders standard Markdown, while rich source decoration, blocks, comments, and templates managed as reusable Assets are deferred.
 - **Single exact replacement** — multi-range proposals, automatic rebase, and structural merge are deferred.
 - **Two outline levels only** — nested acts or custom hierarchy levels should be expressed inside freeform Markdown until an evidence-backed semantic need appears.
 - **One Chapter Outline per chapter** — alternatives and branch plans are deferred.

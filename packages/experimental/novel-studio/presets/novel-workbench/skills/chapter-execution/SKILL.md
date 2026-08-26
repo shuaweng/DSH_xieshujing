@@ -14,7 +14,7 @@ novelContextPolicy: chapter-write
 
 1. 优先使用用户要求和本轮 Novel Context Manifest 已物化的选区、章节、章纲、概述、风格及固定资料；不得对其中已有的精确 Revision 重复调用 `novel_list`/`novel_get`。只有材料缺失或 Manifest 仅给坐标时，才用 `novel_get` 定点读取；目标未知时用 `novel_search`，创建前才用 `novel_list` 获取契约。
 2. 不默认读取整本书。续写通常只需当前章、上一章的必要承接、当前章纲和直接相关设定；更早正文只有在回收伏笔或核对连续性时才定点读取。
-3. 短试写或方案讨论直接回复聊天。用户明确要求落库的新章节用 `novel_create`，一次提交 `manuscript.chapter` 的标题与完整正文，不要求作者先创建空容器；已有章节的正式修改使用 `novel_propose_changes`。空章节写入或正文追加使用 `insert-text`，改写已有文字使用 `replace-text`，并严格采用 `novel_get` 返回的 operation 说明。
+3. 短试写或方案讨论直接回复聊天。用户明确要求落库的新章节用 `novel_create`，一次提交 `manuscript.chapter` 的标题与完整正文，不要求作者先创建空容器；已有章节的正式修改使用 `novel_propose_changes`。空章节写入或正文追加使用 `insert-text`，改写已有文字使用 `replace-text`，改章节名使用 `update-title`。对已存在的未命名空章节，应把 `update-title` 与 `insert-text` 合并在一个 ChangeSet 中，并严格采用 `novel_get` 返回的 operation 说明。
 4. ChangeSet 只是提案。没有 applied 结果，不得说“已经写入”或“已经修改”。项目没有概述或风格资产时照常执行，不得虚构；一次写作观察也不能自动沉淀为长期偏好。
 
 ## 执行前校准

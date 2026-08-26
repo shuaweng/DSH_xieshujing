@@ -40,7 +40,7 @@ The package does not change message ordering or reusable KV-cache prefixes.
 ## Known Limitations and Deferred Work
 
 - **Five shipped asset types** — the kernel installs `manuscript.chapter`; the planning package contributes `planning.outline`, `planning.chapter-outline`, and project-singleton `book.brief` / `book.style-profile`. Characters, ideas, relations, scenes, and view definitions are deferred.
-- **One operation per ChangeSet** — manuscripts support one exact `insert-text` or `replace-text`; other shipped freeform text Assets support one exact `replace-text`. All reject automatic relocation to a newer Revision.
+- **One title and one body operation per ChangeSet** — shipped text Assets may combine one `update-title` with one body operation against the same exact Revision. Manuscripts use `insert-text` or `replace-text`; other shipped freeform text Assets use `replace-text`. The type materializes the pair atomically, and all operations reject automatic relocation to a newer Revision.
 - **No live watching** — catalog reconciliation is explicit. The Service now exposes bounded search, while file watching and browser invalidation remain deferred.
 - **Definition only** — Remote projection, workbench presentation, Session-log context, and model-facing Novel tools belong to separate Consumers.
 - **Generic report envelope** — the Repository validates identity, size, provenance, and lossless JSON, while analyzer-specific payload validation belongs to the analysis service that writes it.

@@ -27,6 +27,9 @@ describe('freeform planning Client renderers', () => {
       onTitleChange,
       onSelectionChange,
     }))
+    expect(view.getByRole('heading', { name: '开端' })).toBeTruthy()
+    expect(view.queryByText('# 开端')).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: zh.editMarkdown }))
     const editor = view.getByLabelText(zh.freeformBody)
     fireEvent.change(editor, { target: { value: '# 开端\n\n任何结构都可以。' } })
     expect(onContentChange).toHaveBeenCalledWith({ kind: 'outline', level: 'book', body: '# 开端\n\n任何结构都可以。' })
@@ -51,10 +54,11 @@ describe('freeform planning Client renderers', () => {
         kind: 'replace-text',
         selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1, quoteHash: `sha256:${'a'.repeat(64)}` },
         replacement: '新',
-      }],
+      }, { kind: 'update-title', title: '新总纲' }],
+      '旧大纲',
     ))
-    expect(diff.getByLabelText(zh.before).textContent).toBe('旧')
-    expect(diff.getByLabelText(zh.after).textContent).toBe('新')
+    expect(diff.getAllByLabelText(zh.before).map(node => node.textContent)).toEqual(['旧大纲', '旧'])
+    expect(diff.getAllByLabelText(zh.after).map(node => node.textContent)).toEqual(['新总纲', '新'])
 
     const chapter = createChapterOutlineRenderer(t)
     const chapterView = render(chapter.renderEditor({
@@ -67,6 +71,7 @@ describe('freeform planning Client renderers', () => {
       onTitleChange: vi.fn(),
       onSelectionChange: vi.fn(),
     }))
+    fireEvent.click(chapterView.getByRole('button', { name: zh.editMarkdown }))
     const chapterEditor = chapterView.container.querySelector('textarea')
     expect(chapterEditor?.value).toBe('自由章纲')
   })
@@ -83,6 +88,8 @@ describe('freeform planning Client renderers', () => {
       onTitleChange: vi.fn(),
       onSelectionChange: vi.fn(),
     }))
+    expect(brief.getByLabelText(zh.markdownPreview).textContent).toContain('旧概述')
+    fireEvent.click(brief.getByRole('button', { name: zh.editMarkdown }))
     const briefEditor = brief.getByPlaceholderText(zh.bookBriefPlaceholder)
     fireEvent.change(briefEditor, { target: { value: '新概述' } })
     expect(onBriefChange).toHaveBeenCalledWith({ kind: 'book-brief', body: '新概述' })
@@ -97,6 +104,7 @@ describe('freeform planning Client renderers', () => {
       onTitleChange: vi.fn(),
       onSelectionChange: vi.fn(),
     }))
+    fireEvent.click(style.getByRole('button', { name: zh.editMarkdown }))
     expect(style.getByPlaceholderText(zh.bookStyleProfilePlaceholder)).toBeTruthy()
   })
 })
