@@ -20,7 +20,7 @@ import { NovelPresentationCard, type NovelPresentationInjected } from './NovelPr
 import { WorkbenchToggle, type WorkbenchToggleInjected } from './WorkbenchToggle.tsx'
 import { NovelFrame, type NovelFrameInjected } from './NovelFrame.tsx'
 import { ContextTray, type ContextTrayInjected } from './ContextTray.tsx'
-import { NovelContextFocusController } from './context-controller.ts'
+import { NovelContextFocusController, NovelProjectStatusController } from './context-controller.ts'
 import {
   manuscriptChapterRenderer,
   NovelAssetRendererRegistry,
@@ -92,6 +92,7 @@ export function apply(ctx: Context): void {
   const store = createNovelWorkbenchStore()
   const workbench = new NovelWorkbenchViewController()
   const contextFocus = new NovelContextFocusController()
+  const projectStatus = new NovelProjectStatusController()
   const refreshListeners = new Set<() => void>()
   const refreshWorkbench = (): void => { for (const listener of refreshListeners) listener() }
   const renderers = new NovelAssetRendererRegistry(ctx)
@@ -145,7 +146,7 @@ export function apply(ctx: Context): void {
     order: 5,
     locale: NS,
     inject: (sessionId): ContextTrayInjected => ({
-      hooks: { contextFocus },
+      hooks: { contextFocus, projectStatus },
       search: async request => await unwrapRemote(remote.search(sessionId, request), 'search Novel Assets'),
       replace: async workset => await unwrapRemote(
         remote.replaceContextWorkset(sessionId, workset),
@@ -162,8 +163,9 @@ export function apply(ctx: Context): void {
       renderers,
       load: async (sessionId) => {
         const project = await unwrapRemote(remote.discover(sessionId), 'discover Novel Project')
+        if (project === undefined) return { assets: [] }
         return {
-          ...(project === undefined ? {} : { project }),
+          project,
           assets: await unwrapRemote(remote.assets(sessionId), 'list Novel Assets'),
         }
       },
@@ -188,6 +190,10 @@ export function apply(ctx: Context): void {
     store,
     inject: (): CanvasInjected => ({
       renderers,
+      initialize: async (sessionId, title) => await unwrapRemote(
+        remote.initialize(sessionId, { title }),
+        'initialize Novel Project',
+      ),
       open: async (sessionId, assetId, revisionId) => await unwrapRemote(
         remote.asset(sessionId, assetId as AssetId, revisionId === undefined ? null : revisionId as RevisionId),
         'open Novel Asset',
@@ -262,6 +268,7 @@ export function apply(ctx: Context): void {
         if (!inserted) throw new Error('novel workbench: Composer rejected the SelectionRef insertion')
       },
       reportContextFocus: (value) => { contextFocus.set(value) },
+      reportProjectStatus: (value) => { projectStatus.set(value) },
     }),
   }, Canvas)
 
@@ -301,6 +308,12 @@ export function apply(ctx: Context): void {
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
     name: 'tool.call.toolview',
     key: 'novel_create',
+    locale: NS,
+    inject: (): CreatedAssetInjected => ({ refreshWorkbench }),
+  }, CreatedAssetCard))
+  ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
+    name: 'tool.call.toolview',
+    key: 'novel_initialize_project',
     locale: NS,
     inject: (): CreatedAssetInjected => ({ refreshWorkbench }),
   }, CreatedAssetCard))

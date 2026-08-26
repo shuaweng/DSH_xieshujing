@@ -24,7 +24,7 @@ import NovelRepository, {
   type SelectionRef,
   type TextRangeSelector,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
-import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs'
+import { FsTargetKey, type FileSystem, type FsTarget } from '@deepseek-ai/dsh-fs'
 import { describe, expect, it, vi } from 'vitest'
 import NovelRepositoryRemote from '../src/index.ts'
 import type { NovelContextWorksetDescriptor } from '../src/types.ts'
@@ -41,9 +41,27 @@ class StubNovelRepository extends NovelRepository {
   creations: CreateAssetRequest[] = []
   revisions: readonly AssetRevisionSummary[] = []
   reports: readonly NovelAnalysisReport[] = []
+  initializations: string[] = []
 
   override discoverProject(_root: FsTarget): Promise<NovelProjectSnapshot | undefined> {
     return Promise.resolve(this.project)
+  }
+
+  override initializeProject(root: FsTarget, request: { title: string }): Promise<NovelProjectSnapshot> {
+    this.initializations.push(request.title)
+    const project: NovelProjectSnapshot = {
+      schema: 1,
+      id: ProjectId('project-initialized'),
+      title: request.title.trim(),
+      root,
+      manifest: { targetKey: FsTargetKey('manifest'), displayPath: `${root.displayPath}/novel.yaml` },
+      contentRoots: {
+        manuscript: { targetKey: FsTargetKey('manuscript'), displayPath: `${root.displayPath}/manuscript` },
+        planning: { targetKey: FsTargetKey('planning'), displayPath: `${root.displayPath}/planning` },
+      },
+    }
+    this.project = project
+    return Promise.resolve(project)
   }
 
   override listAssets(): Promise<readonly AssetSummary[]> {
@@ -255,6 +273,30 @@ describe('NovelRepositoryRemote Host service', () => {
       testAgent('/plain-workspace'),
       new AbortController().signal,
     )).rejects.toMatchObject({ code: 'NOVEL_PROJECT_ROOT_INVALID' })
+
+    await remoteFiber.dispose()
+    await repositoryFiber.dispose()
+    disposeFs()
+  })
+
+  it('initializes exactly the addressed Session root and is idempotent once discovered', async () => {
+    const ctx = testContext()
+    const root = { targetKey: 'root', displayPath: '/new-book' } as FsTarget
+    const resolve = vi.fn<FileSystem['resolve']>().mockResolvedValue(root)
+    const disposeFs = ctx.provide('fs', { resolve } as unknown as FileSystem)
+    const repositoryFiber = ctx.plugin(StubNovelRepository)
+    await repositoryFiber
+    const repository = ctx.novelRepository as StubNovelRepository
+    const remoteFiber = ctx.plugin(NovelRepositoryRemote)
+    await remoteFiber
+
+    const agent = testAgent('/new-book')
+    await expect(ctx.novelRepositoryRemote.initialize(agent, { title: '  国运擂台  ' }, new AbortController().signal))
+      .resolves.toMatchObject({ id: 'project-initialized', title: '国运擂台', rootDisplayPath: '/new-book' })
+    await expect(ctx.novelRepositoryRemote.initialize(agent, { title: '忽略此标题' }, new AbortController().signal))
+      .resolves.toMatchObject({ id: 'project-initialized', title: '国运擂台' })
+    expect(repository.initializations).toEqual(['  国运擂台  '])
+    expect(resolve).toHaveBeenCalledWith('/new-book', expect.any(Object))
 
     await remoteFiber.dispose()
     await repositoryFiber.dispose()

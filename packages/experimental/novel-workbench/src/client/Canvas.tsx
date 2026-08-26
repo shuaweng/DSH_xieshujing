@@ -16,15 +16,17 @@ import type {
   NovelAssetDocument,
   NovelAssetRevisionDescriptor,
   NovelSelectionDescriptor,
+  NovelProjectDescriptor,
   SaveNovelAssetRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type { NovelAssetRendererRegistry } from './renderers.tsx'
 import type { NovelReaderFont, NovelReaderSkin, createNovelWorkbenchStore } from './store.ts'
-import type { NovelContextFocus } from './context-controller.ts'
+import type { NovelContextFocus, NovelProjectStatusFocus } from './context-controller.ts'
 import css from './workbench.module.css'
 
 export interface CanvasInjected {
   renderers: NovelAssetRendererRegistry
+  initialize: (sessionId: SessionId, title: string) => Promise<NovelProjectDescriptor>
   open: (sessionId: SessionId, assetId: string, revisionId?: string) => Promise<NovelAssetDocument>
   revisions: (sessionId: SessionId, assetId: string) => Promise<readonly NovelAssetRevisionDescriptor[]>
   analysisReports: (
@@ -46,6 +48,7 @@ export interface CanvasInjected {
   capture: (sessionId: SessionId, request: CaptureNovelSelectionRequest) => Promise<NovelSelectionDescriptor>
   appendReference: (sessionId: SessionId, reference: NovelSelectionDescriptor, label: string) => void
   reportContextFocus?: (value?: NovelContextFocus) => void
+  reportProjectStatus?: (value?: NovelProjectStatusFocus) => void
 }
 
 type CanvasProps = PropsRuntime<'novel.canvas'>
@@ -55,6 +58,7 @@ type CanvasProps = PropsRuntime<'novel.canvas'>
 
 const SKINS: readonly NovelReaderSkin[] = ['paper', 'warm', 'green', 'rose', 'blue', 'night']
 const ignoreContextFocus = (): void => {}
+const ignoreProjectStatus = (): void => {}
 const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 
 只写清楚本章要推进的一件核心事件。
@@ -91,10 +95,10 @@ const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 
 /** One exact-revision typed Asset editor with an optional chapter-local planning surface. */
 export function Canvas({
-  useSessions, useStore, actions, renderers, open, revisions, analysisReports, scanNoAi, reviewChapter,
+  useSessions, useStore, actions, renderers, initialize, open, revisions, analysisReports, scanNoAi, reviewChapter,
   finalizations, preferenceCandidates, finalizeChapter, acceptPreference, rejectPreference,
   create, save, capture, appendReference,
-  reportContextFocus = ignoreContextFocus, t,
+  reportContextFocus = ignoreContextFocus, reportProjectStatus = ignoreProjectStatus, t,
 }: CanvasProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
   const state = useStore(value => value)
@@ -115,6 +119,11 @@ export function Canvas({
   const analysisEpoch = useRef(0)
 
   useEffect(() => { setStatusHost(document.querySelector('[data-novel-status-host]')) }, [])
+
+  useEffect(() => {
+    reportProjectStatus(sessionId === undefined ? undefined : { sessionId, status: state.projectStatus })
+  }, [reportProjectStatus, sessionId, state.projectStatus])
+  useEffect(() => () => { reportProjectStatus(undefined) }, [reportProjectStatus])
 
   useEffect(() => {
     if (sessionId === undefined || state.project === undefined || state.document === undefined) {
@@ -303,6 +312,15 @@ export function Canvas({
     finally { setPreferenceBusy(false) }
   }
 
+  if (state.projectStatus === 'uninitialized') {
+    return <ProjectBootstrap
+      sessionId={sessionId}
+      initialize={initialize}
+      onInitialized={(project) => { actions.loaded(project, []); actions.refresh() }}
+      fail={actions.fail}
+      t={t}
+    />
+  }
   if (state.document === undefined || state.draft === undefined) {
     return <div className={css.empty}>{state.error ?? t('noChapter')}</div>
   }
@@ -413,6 +431,42 @@ export function Canvas({
       t={t}
     />}
   </div>
+}
+
+function ProjectBootstrap({ sessionId, initialize, onInitialized, fail, t }: {
+  readonly sessionId: SessionId | undefined
+  readonly initialize: CanvasInjected['initialize']
+  readonly onInitialized: (project: NovelProjectDescriptor) => void
+  readonly fail: (message: string) => void
+  readonly t: CanvasProps['t']
+}) {
+  const [title, setTitle] = useState('')
+  const [busy, setBusy] = useState(false)
+  const submit = async () => {
+    if (sessionId === undefined || title.trim() === '' || busy) return
+    setBusy(true)
+    try { onInitialized(await initialize(sessionId, title.trim())) }
+    catch (cause: unknown) { fail(errorMessage(cause)) }
+    finally { setBusy(false) }
+  }
+  return <section className={css.projectBootstrap} aria-labelledby="novel-project-bootstrap-title">
+    <div className={css.projectBootstrapBody}>
+      <span className={css.projectBootstrapMark} aria-hidden="true">✦</span>
+      <p className={css.projectBootstrapEyebrow}>{t('studio')}</p>
+      <h1 id="novel-project-bootstrap-title">{t('initializeProjectTitle')}</h1>
+      <p>{t('initializeProjectDescription')}</p>
+      <label>
+        <span>{t('projectTitleLabel')}</span>
+        <input value={title} autoFocus placeholder={t('projectTitlePlaceholder')}
+          onChange={(event) => { setTitle(event.target.value) }}
+          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} />
+      </label>
+      <button type="button" disabled={busy || title.trim() === ''} onClick={() => { void submit() }}>
+        {busy ? t('initializingProject') : t('initializeProject')}
+      </button>
+      <small>{t('initializeProjectSafety')}</small>
+    </div>
+  </section>
 }
 
 function ChapterOutlineDrawer({

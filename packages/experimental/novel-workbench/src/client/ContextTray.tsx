@@ -10,11 +10,15 @@ import type {
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type {} from '@deepseek-ai/dsh-experimental-novel-context/client'
 import type { NovelContextFocus } from './context-controller.ts'
+import type { NovelProjectStatusFocus } from './context-controller.ts'
 import { NOVEL_WORKBENCH_PRESET } from './constants.ts'
 import css from './ContextTray.module.css'
 
 export interface ContextTrayInjected {
-  hooks: { contextFocus: HostObservable<NovelContextFocus | undefined> }
+  hooks: {
+    contextFocus: HostObservable<NovelContextFocus | undefined>
+    projectStatus: HostObservable<NovelProjectStatusFocus | undefined>
+  }
   search: (request: SearchNovelAssetsRequest) => Promise<readonly NovelAssetSearchResult[]>
   replace: (workset: NovelContextWorksetDescriptor) => Promise<NovelContextWorksetDescriptor>
 }
@@ -25,11 +29,12 @@ type ContextTrayProps = PropsRuntime<'conversation.input.dock'>
 
 /** Human-visible controls for exact follow/pin references; model payload stays in the Session Log. */
 export function ContextTray({
-  sessionId, useSessions, useProjection, useContextFocus, search, replace, t,
+  sessionId, useSessions, useProjection, useContextFocus, useProjectStatus, search, replace, t,
 }: ContextTrayProps) {
   const preset = useSessions(state => state.byId[sessionId]?.agentPreset)
   const projected = useProjection('novelContextWorkset') as NovelContextWorksetDescriptor | null | undefined
   const focus = useContextFocus(value => value?.sessionId === sessionId ? value : undefined)
+  const projectStatus = useProjectStatus(value => value?.sessionId === sessionId ? value.status : 'loading')
   const [picker, setPicker] = useState(false)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<readonly NovelAssetSearchResult[]>([])
@@ -74,6 +79,14 @@ export function ContextTray({
   }, [focus, follow, pinned, preset, replace, workset?.version])
 
   if (preset !== NOVEL_WORKBENCH_PRESET) return null
+  if (projectStatus !== 'ready') {
+    return <div className={css.tray} data-novel-context-tray>
+      <span className={css.title}>{t('context')}</span>
+      <span className={css.follow}>{projectStatus === 'uninitialized'
+        ? t('contextProjectUninitialized')
+        : t('contextProjectUnavailable')}</span>
+    </div>
+  }
 
   const commit = async (items: NovelContextWorksetDescriptor['items']): Promise<void> => {
     const projectId = focus?.project.id ?? workset?.projectId

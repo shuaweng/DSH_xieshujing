@@ -22,6 +22,7 @@ const workbenchSkillNames = [
   'chapter-execution',
   'chapter-review',
   'dialogue-diagnostics',
+  'new-book-bootstrap',
   'outline-beat-design',
   'preference-learning',
   'rewrite-to-style',
@@ -32,6 +33,7 @@ const contextPolicies = {
   'chapter-execution': 'chapter-write',
   'chapter-review': 'chapter-review',
   'dialogue-diagnostics': 'selection-review',
+  'new-book-bootstrap': 'outline-edit',
   'outline-beat-design': 'outline-edit',
   'preference-learning': 'preference-learning',
   'rewrite-to-style': 'selection-rewrite',
@@ -111,7 +113,7 @@ describe('experimental Novel Studio bundle', () => {
       const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
       expect(body).toContain('不创建 ChangeSet')
     }
-    for (const name of ['outline-beat-design', 'chapter-execution', 'rewrite-to-style', 'scene-drive']) {
+    for (const name of ['new-book-bootstrap', 'outline-beat-design', 'chapter-execution', 'rewrite-to-style', 'scene-drive']) {
       const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
       expect(body).toContain('novel_propose_changes')
       expect(body).toMatch(/未 applied|未明确返回 applied|没有 applied 结果/)

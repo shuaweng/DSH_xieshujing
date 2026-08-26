@@ -9,6 +9,7 @@
 ## 行为
 
 - `NovelRepository.discoverProject()` 接收一个规范化的文件系统目录 target；只有该目录不存在 `novel.yaml` 时才返回 `undefined`。
+- `initializeProject()` 会先创建默认内容根目录，最后才发布作为激活标记的 `novel.yaml`。空标题、已存在清单以及内容根不是目录的冲突都会被拒绝，既不修改已有项目，也不覆盖损坏项目。
 - 已发现的 `NovelProjectSnapshot` 包含 schema `1`、稳定 `ProjectId`、作者可见标题、规范化项目与清单 target，以及规范化的具名内容根 target。
 - `listAssets()` 把作者文件协调为当前目录项，`searchAssets()` 通过提供方拥有的检索策略发现有边界的当前精确 Revision，`createAsset()` 在提供方拥有的路径创建已注册类型，`readAsset()` 读取当前或指定的已保留不可变 Revision，`listAssetRevisions()` 暴露有边界的 Revision 历史，`saveAssetContent()` 以版本保护方式保存完整类型化内容，`captureSelection()` 冻结由资产类型定义的语义选区。
 - `NovelAssetTypeMap` 可以通过声明合并扩展。每个匹配的 Host 定义拥有创建说明、可选语义父级规则或项目级单例 cardinality、精确作者类型解析/创建、模型投影、选区校验、保存物化、持久操作解码和 ChangeSet 物化；注册项必须唯一，并随调用方 effect 释放而移除。

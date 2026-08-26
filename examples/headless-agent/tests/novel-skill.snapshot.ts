@@ -26,7 +26,7 @@ describe('Novel Workbench Skill model snapshot', () => {
       binScript,
       libBinScript: binScript,
       configPath,
-      binArgs: [configPath, 'Rewrite the selected prose without changing its plot.'],
+      binArgs: [configPath, 'Start a new webnovel from this premise without drafting prose yet.'],
       tsconfigPath,
       env: { DSH_NOVEL_SKILL_PRESET_ROOT: presetRoot },
       inspect: async (cwd) => {
@@ -45,9 +45,9 @@ describe('Novel Workbench Skill model snapshot', () => {
     })
 
     expect(result.stderr).toBe('')
-    expect(normalized).toContain('rewrite-to-style')
-    expect(normalized).toContain('这是窄权限表达改写')
-    expect(normalized).toContain('book.style-profile')
+    expect(normalized).toContain('new-book-bootstrap')
+    expect(normalized).toContain('开书是创意共创')
+    expect(normalized).toContain('book.brief')
     expect(normalized).toContain('NOVEL_WORKBENCH_SKILL_OK')
     const records = result.stdout.trimEnd().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
     expect(records.at(-1)).toMatchObject({ type: 'result', output: 'NOVEL_WORKBENCH_SKILL_OK' })

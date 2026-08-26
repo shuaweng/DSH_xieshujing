@@ -27,6 +27,12 @@ export interface NovelProjectDescriptor {
   readonly contentRootDisplayPaths: Readonly<Record<string, string>>
 }
 
+/** Browser request to activate the addressed Session working directory. */
+export interface InitializeNovelProjectRequest {
+  /** Author-visible book title; the Host owns generated identity and layout. */
+  readonly title: string
+}
+
 /** One current browser navigation row. */
 export interface NovelAssetDescriptor {
   readonly id: AssetId

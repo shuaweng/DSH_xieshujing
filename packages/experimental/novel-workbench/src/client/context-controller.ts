@@ -14,6 +14,12 @@ export interface NovelContextFocus {
   readonly dirty: boolean
 }
 
+/** Project readiness shared with the Session-scoped context tray without mounting the root workbench store twice. */
+export interface NovelProjectStatusFocus {
+  readonly sessionId: SessionId
+  readonly status: 'loading' | 'uninitialized' | 'ready' | 'error'
+}
+
 /** Small observable bridge from the workbench canvas to the session-scoped Composer tray. */
 export class NovelContextFocusController {
   #snapshot: NovelContextFocus | undefined
@@ -33,6 +39,29 @@ export class NovelContextFocusController {
    */
   set(value: NovelContextFocus | undefined): void {
     const next = value === undefined ? undefined : structuredClone(value)
+    if (JSON.stringify(this.#snapshot) === JSON.stringify(next)) return
+    this.#snapshot = next
+    for (const listener of this.#listeners) listener()
+  }
+}
+
+/** Small observable bridge for project readiness only. */
+export class NovelProjectStatusController {
+  #snapshot: NovelProjectStatusFocus | undefined
+  readonly #listeners = new Set<() => void>()
+  /** Return the last detached project readiness fact for React external-store reads. */
+  readonly getSnapshot = (): NovelProjectStatusFocus | undefined => this.#snapshot
+  /** Subscribe one listener until its returned disposer is called. */
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.#listeners.add(listener)
+    return () => { this.#listeners.delete(listener) }
+  }
+  /**
+   * Publish the latest detached project readiness fact, or clear it with the owning surface.
+   * @param value - Latest Session project readiness, or undefined when no workbench reports it.
+   */
+  set(value: NovelProjectStatusFocus | undefined): void {
+    const next = value === undefined ? undefined : { ...value }
     if (JSON.stringify(this.#snapshot) === JSON.stringify(next)) return
     this.#snapshot = next
     for (const listener of this.#listeners) listener()

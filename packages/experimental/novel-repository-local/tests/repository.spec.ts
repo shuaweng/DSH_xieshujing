@@ -142,6 +142,41 @@ function manifest(overrides: string[] = []): string {
 }
 
 describe('LocalNovelRepository', () => {
+  it('initializes an existing folder as a minimal Novel Project without disturbing authored files', async () => {
+    const dir = await tempDir()
+    await writeFile(join(dir, 'notes.txt'), '作者原有资料。')
+    const ctx = await boot(dir)
+    const root = await ctx.fs.resolve('.')
+
+    await expect(ctx.novelRepository.discoverProject(root)).resolves.toBeUndefined()
+    const initialized = await ctx.novelRepository.initializeProject(root, { title: '  国运擂台  ' })
+
+    expect(initialized).toMatchObject({ schema: 1, title: '国运擂台' })
+    expect(initialized.id).toMatch(/^project-/u)
+    expect(await readFile(join(dir, 'notes.txt'), 'utf8')).toBe('作者原有资料。')
+    expect(await readdir(join(dir, 'manuscript'))).toContain('.gitkeep')
+    expect(await readdir(join(dir, 'planning'))).toContain('.gitkeep')
+    expect(parseProjectManifest(await readFile(join(dir, 'novel.yaml'), 'utf8'), 'novel.yaml'))
+      .toMatchObject({ title: '国运擂台', contentRoots: { manuscript: 'manuscript', planning: 'planning' } })
+    await expect(ctx.novelRepository.discoverProject(root)).resolves.toMatchObject({ id: initialized.id })
+    await expect(ctx.novelRepository.initializeProject(root, { title: '另一本书' }))
+      .rejects.toMatchObject({ code: 'NOVEL_PROJECT_ALREADY_INITIALIZED' })
+  })
+
+  it('rejects invalid initialization before publishing a manifest', async () => {
+    const dir = await tempDir()
+    const ctx = await boot(dir)
+    const root = await ctx.fs.resolve('.')
+    await expect(ctx.novelRepository.initializeProject(root, { title: '   ' }))
+      .rejects.toMatchObject({ code: 'NOVEL_PROJECT_INITIALIZATION_INVALID' })
+    await expect(readFile(join(dir, 'novel.yaml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+
+    await writeFile(join(dir, 'manuscript'), '这不是目录')
+    await expect(ctx.novelRepository.initializeProject(root, { title: '冲突测试' }))
+      .rejects.toMatchObject({ code: 'NOVEL_PROJECT_CONTENT_ROOT_CONFLICT' })
+    await expect(readFile(join(dir, 'novel.yaml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('enforces registered project-singleton Asset types for creation and authored scans', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))

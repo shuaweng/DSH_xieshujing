@@ -16,6 +16,7 @@ import NovelRepository, {
   AssetId,
   NovelRepositoryError,
   PreferenceCandidateId,
+  ProjectId,
   RevisionId,
   SelectionRefId,
   type Asset,
@@ -28,13 +29,13 @@ import NovelRepository, {
   type ChangeSet,
   type ChangeSetAuthorization,
   type CreateAssetRequest,
+  type InitializeNovelProjectRequest,
   type NovelProjectSnapshot,
   type NovelAnalysisReport,
   type NovelPreferenceCandidate,
   type PutNovelPreferenceCandidateRequest,
   type RevisionFinalization,
   type NovelSelectionInput,
-  type ProjectId,
   type ProposeChangeSetRequest,
   type PutNovelAnalysisReportRequest,
   type RevisionId as RevisionIdValue,
@@ -51,7 +52,7 @@ import {
 } from './content.ts'
 import { hitApplyFault } from './apply-fault.ts'
 import { NovelHistory, openHistory, type ApplyJournal } from './history.ts'
-import { parseProjectManifest } from './manifest.ts'
+import { parseProjectManifest, serializeProjectManifest } from './manifest.ts'
 
 const PROJECT_MANIFEST = 'novel.yaml'
 const HISTORY_PATH = '.novel/history.sqlite'
@@ -235,6 +236,92 @@ export class LocalNovelRepository extends NovelRepository {
       manifest: { ...manifest },
       contentRoots,
     }
+  }
+
+  override async initializeProject(
+    root: FsTarget,
+    request: InitializeNovelProjectRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<NovelProjectSnapshot> {
+    const rootInfo = await this.ctx.fs.stat(root, signal)
+    if (rootInfo?.type !== 'directory') {
+      throw new NovelRepositoryError(
+        `novel repository: project root "${root.displayPath}" is not a directory`,
+        'NOVEL_PROJECT_ROOT_INVALID',
+      )
+    }
+    const title = request.title.trim()
+    if (title.length === 0 || /[\u0000-\u001F\u007F]/u.test(title)) {
+      throw new NovelRepositoryError(
+        'novel repository: project title must contain visible text without control characters',
+        'NOVEL_PROJECT_INITIALIZATION_INVALID',
+      )
+    }
+
+    const cwd = this.ctx.fs.processPath(root)
+    const resolveOptions = signal === undefined ? { cwd } : { cwd, signal }
+    const markerInfo = await this.ctx.fs.lstat(PROJECT_MANIFEST, { cwd }, signal)
+    if (markerInfo !== undefined) {
+      throw new NovelRepositoryError(
+        `novel repository: project manifest already exists at "${join(cwd, PROJECT_MANIFEST)}"`,
+        'NOVEL_PROJECT_ALREADY_INITIALIZED',
+      )
+    }
+
+    // The filesystem service intentionally exposes atomic file publication but
+    // not an unguarded mkdir capability. A hidden create-only marker safely
+    // materializes each provider-owned root through the same sandboxed seam.
+    for (const path of ['manuscript', 'planning'] as const) {
+      const pathInfo = await this.ctx.fs.lstat(path, { cwd }, signal)
+      if (pathInfo !== undefined && pathInfo.type !== 'directory') {
+        throw new NovelRepositoryError(
+          `novel repository: cannot initialize because content root "${path}" is not a directory`,
+          'NOVEL_PROJECT_CONTENT_ROOT_CONFLICT',
+        )
+      }
+      if (pathInfo === undefined) {
+        const keep = await this.ctx.fs.resolve(`${path}/.gitkeep`, resolveOptions)
+        if (!this.ctx.fs.contains(root, keep)) {
+          throw new NovelRepositoryError(
+            `novel repository: content root "${path}" escapes the project root`,
+            'NOVEL_PROJECT_PATH_ESCAPE',
+          )
+        }
+        await this.ctx.fs.writeText(keep, '', { kind: 'createIfAbsent' }, signal, sandboxPolicy)
+      }
+    }
+
+    // Publish the manifest last: it is the activation commit marker. A crash
+    // before this point leaves only harmless empty roots and a retry is safe.
+    const manifest = await this.ctx.fs.resolve(PROJECT_MANIFEST, resolveOptions)
+    if (!this.ctx.fs.contains(root, manifest)) {
+      throw new NovelRepositoryError(
+        `novel repository: project manifest "${manifest.displayPath}" escapes the project root`,
+        'NOVEL_PROJECT_PATH_ESCAPE',
+      )
+    }
+    const text = serializeProjectManifest({
+      schema: 1,
+      id: ProjectId(`project-${randomUUID()}`),
+      title,
+      contentRoots: { manuscript: 'manuscript', planning: 'planning' },
+    })
+    if (new TextEncoder().encode(text).byteLength > this.config.manifestMaxBytes) {
+      throw new NovelRepositoryError(
+        `novel repository: generated project manifest exceeds ${this.config.manifestMaxBytes} bytes`,
+        'NOVEL_PROJECT_MANIFEST_TOO_LARGE',
+      )
+    }
+    await this.ctx.fs.writeText(manifest, text, { kind: 'createIfAbsent' }, signal, sandboxPolicy)
+    const initialized = await this.discoverProject(root, signal)
+    if (initialized === undefined) {
+      throw new NovelRepositoryError(
+        'novel repository: initialized project could not be rediscovered',
+        'NOVEL_PROJECT_INITIALIZATION_INVALID',
+      )
+    }
+    return initialized
   }
 
   override async listAssets(

@@ -8,6 +8,7 @@ This experimental Consumer gives a Novel Agent typed discovery/creation, exact-r
 
 ## Behavior
 
+- `novel_initialize_project` accepts the author-visible book title. An existing valid Novel Project returns unchanged; an absent project requires explicit user approval before the Repository creates default content roots and publishes `novel.yaml`. Invalid or existing manifests are never overwritten.
 - `novel_list` discovers the Novel Project at the owning Session working directory and returns its current typed Asset catalog with semantic parent ids, canonical exact-Revision `dsh-novel:` references, and every registered type's creation contract. It exposes identities and metadata, not authored content.
 - `novel_search` accepts a title/content clue, optional exact type allowlist, and bounded result count. It returns current exact-Revision references and excerpts; discovery alone does not inject or mutate an Asset.
 - `novel_create` accepts one registered type, title, optional semantic parent, and type-owned JSON content. The Repository generates the stable id and safe path, validates hierarchy rules, publishes the new authored file, and returns its exact first Revision. Creation results carry replayable `novel-asset-created` presentation metadata.
@@ -25,11 +26,11 @@ This experimental Consumer gives a Novel Agent typed discovery/creation, exact-r
 
 #### What the model sees
 
-The model sees the `novel_list`, `novel_search`, `novel_create`, `novel_get`, `novel_propose_changes`, and `novel_present` schemas plus a concise Novel-workbench tool section. Tool results distinguish discovery, durable creation, exact reads, proposal-only changes, and presentation-only frame actions; a proposal never claims that an existing file changed. A materially risky chapter candidate adds a short logged NOAI notice after the tool result.
+The model sees the `novel_initialize_project`, `novel_list`, `novel_search`, `novel_create`, `novel_get`, `novel_propose_changes`, and `novel_present` schemas plus a concise Novel-workbench tool section. Tool results distinguish initialization, discovery, durable creation, exact reads, proposal-only changes, and presentation-only frame actions; a proposal never claims that an existing file changed. A materially risky chapter candidate adds a short logged NOAI notice after the tool result.
 
 #### Token effect
 
-The fixed tool section and six schemas add a stable prompt cost. `novel_list` returns compact catalog metadata and creation instructions, `novel_search` returns bounded excerpts, `novel_get` result size follows the referenced text budget plus one numeric length, and creation/proposal/presentation results contain compact ids or status fields. Only a material chapter warning adds up to five deterministic findings.
+The fixed tool section and seven schemas add a stable prompt cost. Initialization returns only compact project identity and status fields; `novel_list` returns compact catalog metadata and creation instructions, `novel_search` returns bounded excerpts, `novel_get` result size follows the referenced text budget plus one numeric length, and creation/proposal/presentation results contain compact ids or status fields. Only a material chapter warning adds up to five deterministic findings.
 
 #### KV Cache effect
 

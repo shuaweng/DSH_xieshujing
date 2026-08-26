@@ -16,6 +16,7 @@ import type {
   AssetSearchResult,
   CaptureSelectionRequest,
   CreateAssetRequest,
+  InitializeNovelProjectRequest,
   ChangeSet,
   ChangeSetAuthorization,
   ChangeSetId,
@@ -52,6 +53,7 @@ export type {
   AssetSearchResult,
   CaptureSelectionRequest,
   CreateAssetRequest,
+  InitializeNovelProjectRequest,
   ChangeSet,
   ChangeSetAuthorization,
   ContentHash,
@@ -103,6 +105,27 @@ export abstract class NovelRepository extends Service {
    * @throws {NovelRepositoryError} when the root or present manifest is invalid or unsupported.
    */
   abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelProjectSnapshot | undefined>
+
+  /**
+   * Activate an existing directory as a Novel Project without overwriting authored files.
+   * @param _root - Canonical directory that will become the project root.
+   * @param _request - Minimal author input; the provider owns generated identity and layout.
+   * @param _signal - Optional cancellation for provider I/O.
+   * @param _sandboxPolicy - Optional per-call write policy for initialization publications.
+   * @returns the initialized and rediscovered project snapshot.
+   * @throws {NovelRepositoryError} when initialization is unsupported, invalid, or conflicts with existing paths.
+   */
+  initializeProject(
+    _root: FsTarget,
+    _request: InitializeNovelProjectRequest,
+    _signal?: AbortSignal,
+    _sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<NovelProjectSnapshot> {
+    return Promise.reject(new NovelRepositoryError(
+      'novel repository: the active provider does not support project initialization',
+      'NOVEL_PROJECT_INITIALIZATION_INVALID',
+    ))
+  }
 
   /**
    * Rebuild the current authored catalog and reconcile exact file bytes into immutable Revisions.

@@ -40,6 +40,7 @@ import type {
   NovelPreferenceCandidateDescriptor,
   NovelRevisionFinalizationDescriptor,
   FinalizeNovelChapterDescriptor,
+  InitializeNovelProjectRequest,
   DecideNovelPreferenceDescriptor,
   NovelProjectDescriptor,
   NovelAssetSearchResult,
@@ -61,6 +62,7 @@ export type {
   NovelPreferenceCandidateDescriptor,
   NovelRevisionFinalizationDescriptor,
   FinalizeNovelChapterDescriptor,
+  InitializeNovelProjectRequest,
   DecideNovelPreferenceDescriptor,
   NovelProjectDescriptor,
   NovelAssetSearchResult,
@@ -121,6 +123,33 @@ export class NovelRepositoryRemote extends TypertRemoteService {
   async discover(agent: Agent, signal: AbortSignal): Promise<NovelProjectDescriptor | undefined> {
     const project = await this.projectFor(agent, signal)
     if (project === undefined) return undefined
+    const descriptor = projectDescriptor(project)
+    assertResponseBytes(descriptor, this.descriptorMaxBytes, 'project descriptor')
+    return descriptor
+  }
+
+  /**
+   * Activate the addressed Session working directory after an explicit UI action.
+   * @param agent - addressed Agent whose exact Session directory becomes the project root.
+   * @param request - author-visible project input.
+   * @param signal - caller cancellation.
+   * @returns the existing or newly initialized browser-safe project descriptor.
+   * @throws {NovelRepositoryError} when the root, manifest, title, or default content roots are invalid.
+   */
+  @Remote('initialize')
+  async initialize(
+    agent: Agent,
+    request: InitializeNovelProjectRequest,
+    signal: AbortSignal,
+  ): Promise<NovelProjectDescriptor> {
+    const root = await this.rootFor(agent, signal)
+    const existing = await this.ctx.novelRepository.discoverProject(root, signal)
+    const project = existing ?? await this.ctx.novelRepository.initializeProject(
+      root,
+      request,
+      signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
     const descriptor = projectDescriptor(project)
     assertResponseBytes(descriptor, this.descriptorMaxBytes, 'project descriptor')
     return descriptor
@@ -568,6 +597,11 @@ export class NovelRepositoryRemote extends TypertRemoteService {
   }
 
   private async projectFor(agent: Agent, signal: AbortSignal): Promise<NovelProjectSnapshot | undefined> {
+    const root = await this.rootFor(agent, signal)
+    return await this.ctx.novelRepository.discoverProject(root, signal)
+  }
+
+  private async rootFor(agent: Agent, signal: AbortSignal) {
     const cwd = agent.session.header.cwd
     if (cwd === undefined) {
       throw new NovelRepositoryError(
@@ -575,8 +609,7 @@ export class NovelRepositoryRemote extends TypertRemoteService {
         'NOVEL_PROJECT_ROOT_INVALID',
       )
     }
-    const root = await this.ctx.fs.resolve(cwd, { signal })
-    return await this.ctx.novelRepository.discoverProject(root, signal)
+    return await this.ctx.fs.resolve(cwd, { signal })
   }
 
   private async requireProject(agent: Agent, signal: AbortSignal): Promise<NovelProjectSnapshot> {

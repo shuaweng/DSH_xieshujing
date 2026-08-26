@@ -89,6 +89,9 @@ export type RevisionOrigin = 'initial-scan' | 'user-edit' | 'agent-apply' | 'ext
 /** Stable error codes raised while locating or validating a Novel Project. */
 export type NovelRepositoryErrorCode =
   | 'NOVEL_PROJECT_ROOT_INVALID'
+  | 'NOVEL_PROJECT_INITIALIZATION_INVALID'
+  | 'NOVEL_PROJECT_ALREADY_INITIALIZED'
+  | 'NOVEL_PROJECT_CONTENT_ROOT_CONFLICT'
   | 'NOVEL_PROJECT_MANIFEST_INVALID'
   | 'NOVEL_PROJECT_MANIFEST_TOO_LARGE'
   | 'NOVEL_PROJECT_DESCRIPTOR_TOO_LARGE'
@@ -129,6 +132,12 @@ export interface NovelProjectSnapshot {
   readonly manifest: FsTarget
   /** Canonical content roots keyed by their manifest names. */
   readonly contentRoots: Readonly<Record<string, FsTarget>>
+}
+
+/** Minimal authored input for activating one existing directory as a Novel Project. */
+export interface InitializeNovelProjectRequest {
+  /** Author-visible book title; the provider owns ids, paths, and manifest layout. */
+  readonly title: string
 }
 
 /** One current authored asset discovered from the project files. */

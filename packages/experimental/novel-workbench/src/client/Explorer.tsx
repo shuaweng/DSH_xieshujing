@@ -45,7 +45,7 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
     let live = true
     void load(sessionId).then(async ({ project, assets }) => {
       if (!live) return
-      if (project === undefined) { actions.fail(t('noProject')); return }
+      if (project === undefined) { actions.uninitialized(); return }
       actions.loaded(project, assets)
       const target = assets.find(asset => asset.id === activeAssetId.current)
         ?? assets.find(asset => asset.type === 'manuscript.chapter')
@@ -112,37 +112,42 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
 
   return <div className={css.explorerInner}>
     <header className={css.brand}><strong>{t('studio')}</strong></header>
-    <div className={css.projectTitle}><strong>{state.project?.title ?? t('chapters')}</strong></div>
+    <div className={css.projectTitle}><strong>{state.project?.title ?? t('newProject')}</strong></div>
     {state.loading && <p className={css.muted}>{t('loading')}</p>}
     {state.error !== undefined && <p className={css.error}>{state.error}</p>}
-    <nav className={css.assetList}>
-      <BookGuidanceGroup
-        assets={guidance}
-        active={state.active}
-        creating={creating}
-        titleOf={titleOf}
-        openAsset={openAsset}
-        createAsset={createBookGuidance}
-        labels={{
-          title: t('bookGuidance'), items: t('assetUnit'), brief: t('bookBrief'), style: t('bookStyleProfile'),
-          addBrief: t('addBookBrief'), addStyle: t('addBookStyleProfile'),
-        }}
-      />
-      <AssetGroup title={t('chapters')} assets={manuscripts} active={state.active} unit={t('chapterUnit')}
-        titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
-      <OutlineGroup
-        roots={roots}
-        all={outlines}
-        active={state.active}
-        creating={creating}
-        titleOf={titleOf}
-        openAsset={openAsset}
-        createOutline={createOutline}
-        labels={{ outline: t('outline'), items: t('assetUnit'), addBook: t('addBookOutline'), addVolume: t('addVolumeOutline') }}
-      />
-      {other.length > 0 && <AssetGroup title={t('otherAssets')} assets={other} active={state.active} unit={t('assetUnit')}
-        titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />}
-    </nav>
+    {state.project === undefined && !state.loading && state.error === undefined
+      ? <div className={css.projectPending}><strong>{t('projectNotInitialized')}</strong><p>{t('projectNotInitializedSidebar')}</p></div>
+      : null}
+    {state.project !== undefined && <>
+      <nav className={css.assetList}>
+        <BookGuidanceGroup
+          assets={guidance}
+          active={state.active}
+          creating={creating}
+          titleOf={titleOf}
+          openAsset={openAsset}
+          createAsset={createBookGuidance}
+          labels={{
+            title: t('bookGuidance'), items: t('assetUnit'), brief: t('bookBrief'), style: t('bookStyleProfile'),
+            addBrief: t('addBookBrief'), addStyle: t('addBookStyleProfile'),
+          }}
+        />
+        <AssetGroup title={t('chapters')} assets={manuscripts} active={state.active} unit={t('chapterUnit')}
+          titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
+        <OutlineGroup
+          roots={roots}
+          all={outlines}
+          active={state.active}
+          creating={creating}
+          titleOf={titleOf}
+          openAsset={openAsset}
+          createOutline={createOutline}
+          labels={{ outline: t('outline'), items: t('assetUnit'), addBook: t('addBookOutline'), addVolume: t('addVolumeOutline') }}
+        />
+        {other.length > 0 && <AssetGroup title={t('otherAssets')} assets={other} active={state.active} unit={t('assetUnit')}
+          titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />}
+      </nav>
+    </>}
   </div>
 }
 

@@ -18,7 +18,7 @@ class NovelSkillMockAdapter extends LlmAdapter {
       if (toolNames.length !== 1 || toolNames[0] !== 'skill') {
         throw new Error(`unexpected keyless tool roster: ${toolNames.join(',')}`)
       }
-      const args = JSON.stringify({ name: 'rewrite-to-style' })
+      const args = JSON.stringify({ name: 'new-book-bootstrap' })
       yield { type: 'block-start', index: 0, blockType: 'tool-call' }
       yield {
         type: 'tool-call-delta',
@@ -46,11 +46,11 @@ class NovelSkillMockAdapter extends LlmAdapter {
       .filter(block => block.type === 'text')
       .map(block => block.text)
       .join('\n')
-    if (!loaded.includes('<skill_content name="rewrite-to-style">')) {
-      throw new Error('rewrite-to-style did not enter the model-visible tool result')
+    if (!loaded.includes('<skill_content name="new-book-bootstrap">')) {
+      throw new Error('new-book-bootstrap did not enter the model-visible tool result')
     }
-    if (!loaded.includes('这是窄权限表达改写')) {
-      throw new Error('rewrite-to-style body was not loaded from the Workbench catalog')
+    if (!loaded.includes('开书是创意共创')) {
+      throw new Error('new-book-bootstrap body was not loaded from the Workbench catalog')
     }
     const text = 'NOVEL_WORKBENCH_SKILL_OK'
     yield { type: 'block-start', index: 0, blockType: 'text' }

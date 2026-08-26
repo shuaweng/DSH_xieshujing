@@ -8,6 +8,7 @@
 
 ## 行为
 
+- `novel_initialize_project` 接收作者可见书名。已有合法 Novel Project 会原样返回；项目不存在时，必须先获得用户显式批准，Repository 才会创建默认内容根并发布 `novel.yaml`。非法或已存在的清单绝不会被覆盖。
 - `novel_list` 在所属 Session 工作目录发现 Novel Project，并返回带有语义父级 id、规范精确 Revision `dsh-novel:` 引用和各注册类型创建契约的当前类型化 Asset 目录。它只暴露身份和元数据，不返回作者内容。
 - `novel_search` 接收标题/内容线索、可选精确类型白名单和有边界的结果数量。它返回当前精确 Revision 引用与摘要；仅发现不会注入或修改 Asset。
 - `novel_create` 接收一个已注册类型、标题、可选语义父级和类型拥有的 JSON 内容。Repository 生成稳定 id 与安全路径、校验层级规则、发布新作者文件，并返回精确首个 Revision。创建结果携带可回放的 `novel-asset-created` 展示元数据。
@@ -25,11 +26,11 @@
 
 #### 模型看到什么
 
-模型看到 `novel_list`、`novel_search`、`novel_create`、`novel_get`、`novel_propose_changes` 与 `novel_present` Schema，以及简洁的小说工作台工具说明。工具结果会区分发现、持久创建、精确读取、仅提案修改与纯展示 Frame 动作；提案绝不声称已有文件已经改变。高风险章节候选会在工具结果之后加入一条简短、写入日志的 NOAI 通知。
+模型看到 `novel_initialize_project`、`novel_list`、`novel_search`、`novel_create`、`novel_get`、`novel_propose_changes` 与 `novel_present` Schema，以及简洁的小说工作台工具说明。工具结果会区分初始化、发现、持久创建、精确读取、仅提案修改与纯展示 Frame 动作；提案绝不声称已有文件已经改变。高风险章节候选会在工具结果之后加入一条简短、写入日志的 NOAI 通知。
 
 #### Token 影响
 
-固定工具说明和六个 Schema 带来稳定的 prompt 开销。`novel_list` 返回紧凑目录元数据与创建说明，`novel_search` 返回有边界摘要，`novel_get` 结果大小受引用文本预算约束并增加一个数值长度；创建/提案/展示结果只包含紧凑 id 或状态字段。只有达到阈值的章节提示会额外加入最多五条确定性问题。
+固定工具说明和七个 Schema 带来稳定的 prompt 开销。初始化只返回紧凑项目身份与状态字段；`novel_list` 返回紧凑目录元数据与创建说明，`novel_search` 返回有边界摘要，`novel_get` 结果大小受引用文本预算约束并增加一个数值长度；创建/提案/展示结果只包含紧凑 id 或状态字段。只有达到阈值的章节提示会额外加入最多五条确定性问题。
 
 #### KV Cache 影响
 

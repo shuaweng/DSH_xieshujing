@@ -29,7 +29,7 @@ import { NovelPresentationCard } from '../src/client/NovelPresentationCard.tsx'
 import { Explorer } from '../src/client/Explorer.tsx'
 import { Canvas, shortReferenceLabel } from '../src/client/Canvas.tsx'
 import { ContextTray, humanContextLabel } from '../src/client/ContextTray.tsx'
-import { NovelContextFocusController } from '../src/client/context-controller.ts'
+import { NovelContextFocusController, NovelProjectStatusController } from '../src/client/context-controller.ts'
 import { ChangeSetCard, type NovelChangeReview } from '../src/client/ChangeSetCard.tsx'
 import { createNovelWorkbenchStore } from '../src/client/store.ts'
 import { NovelWorkbenchViewController } from '../src/client/view-controller.ts'
@@ -79,6 +79,10 @@ const renderers = { get: () => manuscriptChapterRenderer } as never
 async function openStub(): Promise<NovelAssetDocument> { return chapter() }
 async function createStub(): Promise<NovelAssetDocument> { return chapter() }
 const canvasAnalysisStubs = {
+  initialize: async () => ({
+    schema: 1 as const, id: 'project-1' as never, title: '白港', rootDisplayPath: '/story',
+    manifestDisplayPath: '/story/novel.yaml', contentRootDisplayPaths: { manuscript: '/story/manuscript' },
+  }),
   revisions: async () => [],
   analysisReports: async () => [],
   scanNoAi: async () => analysisReport('noai-scan'),
@@ -405,6 +409,35 @@ describe('preset-scoped workbench activation', () => {
 })
 
 describe('Canvas', () => {
+  it('turns an uninitialized folder into a ready Novel Project from one quiet empty state', async () => {
+    const store = createNovelWorkbenchStore().create()
+    act(() => { store.actions.uninitialized() })
+    const initialized = {
+      schema: 1 as const, id: 'project-new' as never, title: '国运擂台', rootDisplayPath: '/story',
+      manifestDisplayPath: '/story/novel.yaml',
+      contentRootDisplayPaths: { manuscript: '/story/manuscript', planning: '/story/planning' },
+    }
+    const initialize = vi.fn(async () => initialized)
+    const view = render(<Canvas
+      {...canvasAnalysisStubs}
+      initialize={initialize}
+      open={openStub} create={createStub}
+      useStore={hookOf(store) as never} actions={store.actions}
+      useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
+    />)
+
+    expect(view.getByRole('heading', { name: zh.initializeProjectTitle })).toBeTruthy()
+    expect(view.queryByRole('alert')).toBeNull()
+    fireEvent.change(view.getByLabelText(zh.projectTitleLabel), { target: { value: '国运擂台' } })
+    fireEvent.click(view.getByRole('button', { name: zh.initializeProject }))
+
+    await waitFor(() => { expect(initialize).toHaveBeenCalledWith(SID, '国运擂台') })
+    await waitFor(() => { expect(store.getSnapshot()).toMatchObject({
+      projectStatus: 'ready', project: { id: 'project-new', title: '国运擂台' }, reload: 1,
+    }) })
+  })
+
   it('flushes a dirty draft before freezing and mentioning its exact Revision', async () => {
     const store = createNovelWorkbenchStore().create()
     act(() => {
@@ -780,9 +813,33 @@ describe('ContextTray', () => {
     manifestDisplayPath: '/story/novel.yaml', contentRootDisplayPaths: { manuscript: '/story/manuscript' },
   } as never
 
+  function statusHook(status: 'loading' | 'uninitialized' | 'ready' | 'error' = 'ready') {
+    const controller = new NovelProjectStatusController()
+    act(() => { controller.set({ sessionId: SID, status }) })
+    return hookOf(controller) as never
+  }
+
   it('shows compact human labels while keeping coordinates out of visible tray text', () => {
     expect(humanContextLabel('第一章 觉醒老爷爷')).toBe('第一章：觉醒老爷爷')
     expect(humanContextLabel('白港 · 全书大纲')).toBe('白港 · 全书大纲')
+  })
+
+  it('shows a neutral project hint and performs no context RPC before initialization', () => {
+    const search = vi.fn()
+    const replace = vi.fn()
+    const view = render(<ContextTray
+      session={{} as never} input={{} as never} sessionId={SID}
+      useSessions={useSessions as never} useProjection={() => null}
+      useContextFocus={hookOf(new NovelContextFocusController()) as never}
+      useProjectStatus={statusHook('uninitialized')}
+      search={search} replace={replace} t={t}
+      useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
+      useWorkspaces={vi.fn() as never}
+    />)
+    expect(view.getByText(zh.contextProjectUninitialized)).toBeTruthy()
+    expect(view.queryByText(`＋ ${zh.searchContext}`)).toBeNull()
+    expect(search).not.toHaveBeenCalled()
+    expect(replace).not.toHaveBeenCalled()
   })
 
   it('is preset-scoped and replaces live follow plus exact searched pinned worksets', async () => {
@@ -798,7 +855,7 @@ describe('ContextTray', () => {
     const view = render(<ContextTray
       session={{} as never} input={{} as never}
       sessionId={SID} useSessions={useSessions as never} useProjection={() => null}
-      useContextFocus={hookOf(focus) as never} search={search} replace={replace} t={t}
+      useContextFocus={hookOf(focus) as never} useProjectStatus={statusHook()} search={search} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       useWorkspaces={vi.fn() as never}
     />)
@@ -833,7 +890,7 @@ describe('ContextTray', () => {
         ids: [SID], byId: { [SID]: { id: SID, agentPreset: 'code' } }, current: SID,
         phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
       } as never)) as never}
-      useProjection={() => null} useContextFocus={hookOf(focus) as never}
+      useProjection={() => null} useContextFocus={hookOf(focus) as never} useProjectStatus={statusHook()}
       search={search} replace={replace} t={t} useSession={vi.fn() as never}
       useInput={vi.fn() as never} inputActions={{} as never} useWorkspaces={vi.fn() as never}
     />)
@@ -853,7 +910,7 @@ describe('ContextTray', () => {
     const view = render(<ContextTray
       session={{} as never} input={{} as never}
       sessionId={SID} useSessions={useSessions as never} useProjection={() => workset}
-      useContextFocus={hookOf(focus) as never} search={vi.fn()} replace={replace} t={t}
+      useContextFocus={hookOf(focus) as never} useProjectStatus={statusHook()} search={vi.fn()} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       useWorkspaces={vi.fn() as never}
     />)
@@ -917,7 +974,7 @@ describe('Explorer', () => {
       return { store, view }
     }
     const absent = await mountWith(async () => ({ assets: [] }))
-    await waitFor(() => { expect(absent.view.getByText(zh.noProject)).toBeTruthy() })
+    await waitFor(() => { expect(absent.view.getByText(zh.projectNotInitialized)).toBeTruthy() })
     absent.view.unmount()
     const error = await mountWith(async () => { throw new Error('load failed') })
     await waitFor(() => { expect(error.view.getByText('load failed')).toBeTruthy() })
@@ -1278,7 +1335,8 @@ describe('Novel workbench stores and browser assembly', () => {
     })
     act(() => { store.actions.reset() })
     expect(store.getSnapshot()).toEqual({
-      assets: [], dirty: false, readerSkin: 'night', readerFont: 'sans', readerFontSize: 28, loading: true, reload: 1,
+      projectStatus: 'loading', assets: [], dirty: false, readerSkin: 'night', readerFont: 'sans', readerFontSize: 28,
+      loading: true, reload: 1,
     })
 
     const frame = new NovelWorkbenchViewController()
@@ -1313,6 +1371,7 @@ describe('Novel workbench stores and browser assembly', () => {
     let failAsset = false
     const remote = {
       discover: vi.fn(async () => ({ ok: true as const, value: discoverValue })),
+      initialize: vi.fn(async () => ({ ok: true as const, value: project })),
       assets: vi.fn(async () => ({ ok: true as const, value: [asset] })),
       asset: vi.fn(async (
         _sid: unknown,
@@ -1381,7 +1440,7 @@ describe('Novel workbench stores and browser assembly', () => {
 
     const tray = slots.entries('conversation.input.dock').find(entry => entry.component === ContextTray)!
     const trayFace = (tray.inject as (sessionId: SessionId) => {
-      hooks: { contextFocus: NovelContextFocusController }
+      hooks: { contextFocus: NovelContextFocusController; projectStatus: NovelProjectStatusController }
       search: (request: unknown) => Promise<unknown>
       replace: (workset: NovelContextWorksetDescriptor) => Promise<unknown>
     })(SID)
@@ -1396,17 +1455,24 @@ describe('Novel workbench stores and browser assembly', () => {
     }
     const explorerFace = explorer()
     await expect(explorerFace.load(SID)).resolves.toMatchObject({ project, assets: [asset] })
+    const assetsCalls = remote.assets.mock.calls.length
     discoverValue = undefined
-    await expect(explorerFace.load(SID)).resolves.toEqual({ assets: [asset] })
+    await expect(explorerFace.load(SID)).resolves.toEqual({ assets: [] })
+    expect(remote.assets).toHaveBeenCalledTimes(assetsCalls)
     await expect(explorerFace.open(SID, 'asset-chapter-1')).resolves.toMatchObject({ title: '第一章' })
 
     const canvas = slots.entries('novel.canvas')[0]!.inject as () => {
+      initialize: (id: SessionId, title: string) => Promise<unknown>
       save: (id: SessionId, request: unknown) => Promise<unknown>
       capture: (id: SessionId, request: unknown) => Promise<unknown>
       appendReference: (id: SessionId, reference: NovelSelectionDescriptor, label: string) => void
       reportContextFocus: (value?: Parameters<NovelContextFocusController['set']>[0]) => void
+      reportProjectStatus: (value?: Parameters<NovelProjectStatusController['set']>[0]) => void
     }
     const canvasFace = canvas()
+    canvasFace.reportProjectStatus({ sessionId: SID, status: 'uninitialized' })
+    expect(trayFace.hooks.projectStatus.getSnapshot()).toEqual({ sessionId: SID, status: 'uninitialized' })
+    await expect(canvasFace.initialize(SID, '白港')).resolves.toMatchObject({ title: '白港' })
     canvasFace.reportContextFocus({ sessionId: SID, project: project as never, document: chapter(), dirty: false })
     expect(trayFace.hooks.contextFocus.getSnapshot()).toMatchObject({ sessionId: SID, document: { id: 'asset-chapter-1' } })
     await expect(canvasFace.save(SID, {})).resolves.toMatchObject({ revisionId: 'revision-2' })

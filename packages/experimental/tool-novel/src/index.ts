@@ -4,6 +4,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
+import type {} from '@deepseek-ai/dsh-user-approval'
 import {
   AssetId,
   ProjectId,
@@ -27,6 +28,8 @@ const PROMPT = `## Novel workbench tools
 Novel Assets are versioned authored material. When the user names an Asset but no
 canonical reference is available, use \`novel_list\` to discover the current Project
 and the exact creation formats, or \`novel_search\` when a title or content clue is known.
+When the user explicitly asks to start a new book and the Session directory is not yet
+a Novel Project, use \`novel_initialize_project\`; it requests approval before writing.
 Search only discovers exact current references; read chosen results with \`novel_get\`.
 Use \`novel_create\` for new typed Assets; never invent
 a file path. Use \`novel_get\` for exact retained Revisions and proposal instructions.
@@ -38,6 +41,74 @@ a proposal was applied.`
 /** Register creation, exact-read, and proposal-only Novel tools. */
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({ name: 'tool:novel', order: 111, text: PROMPT })
+
+  ctx.tools.register(defineTool({
+    name: 'novel_initialize_project',
+    description: 'Initialize the current Session working directory as a Novel Project after explicit user approval. Preserves existing files and creates only repository-owned project metadata and empty content roots.',
+    parameters: {
+      title: { type: 'string', required: true, description: 'Author-visible title of the book.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          status: { type: 'string', required: true, enum: ['created', 'already-initialized'] },
+          projectId: { type: 'string', required: true },
+          title: { type: 'string', required: true },
+          manifestPath: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: value.status === 'created'
+          ? `已初始化小说项目《${value.title}》。`
+          : `当前目录已经是小说项目《${value.title}》。`,
+      }],
+      presentationMeta: (_args, value) => ({
+        kind: 'novel-project-initialized',
+        status: value.status,
+        projectId: value.projectId,
+        title: value.title,
+      }),
+    },
+    async execute(args, exec) {
+      const { agent, root } = await requireNovelRoot(ctx, exec)
+      const existing = await ctx.novelRepository.discoverProject(root, exec.signal)
+      if (existing !== undefined) {
+        return {
+          status: 'already-initialized' as const,
+          projectId: existing.id,
+          title: existing.title,
+          manifestPath: existing.manifest.displayPath,
+        }
+      }
+      const approval = ctx.get('approval')
+      if (approval === undefined) throw new Error('Novel Project initialization requires an available approval service')
+      const outcome = await approval.request({
+        agent,
+        toolName: 'novel_initialize_project',
+        callId: exec.callId,
+        reason: `Initialize the current working directory as Novel Project “${args.title.trim()}”; existing files will be preserved.`,
+        signal: exec.signal,
+      })
+      if (outcome !== 'allowed-once') {
+        throw new Error(`Novel Project initialization was not approved (${outcome})`)
+      }
+      const project = await ctx.novelRepository.initializeProject(
+        root,
+        { title: args.title },
+        exec.signal,
+        ctx.sandboxPolicy.resolve({ session: agent.session }),
+      )
+      return {
+        status: 'created' as const,
+        projectId: project.id,
+        title: project.title,
+        manifestPath: project.manifest.displayPath,
+      }
+    },
+    presentCall: args => ({ card: 'generic', title: '初始化小说项目', kind: 'edit', rawInput: args.title }),
+  }))
 
   ctx.tools.register(defineTool({
     name: 'novel_present',
@@ -391,12 +462,17 @@ export function apply(ctx: Context): void {
 }
 
 async function requireProject(ctx: Context, exec: ToolRunContext) {
-  const agent = exec.agent
-  if (agent === undefined) throw new Error('Novel tools require an owning agent Session')
-  const cwd = agent.session.header.cwd
-  if (cwd === undefined) throw new Error('Novel tools require a Novel Project working directory')
-  const root = await ctx.fs.resolve(cwd, { cwd, signal: exec.signal })
+  const { agent, root } = await requireNovelRoot(ctx, exec)
   const project = await ctx.novelRepository.discoverProject(root, exec.signal)
   if (project === undefined) throw new Error('Novel tools require the Session working directory to be a Novel Project')
   return { agent, project }
+}
+
+async function requireNovelRoot(ctx: Context, exec: ToolRunContext) {
+  const agent = exec.agent
+  if (agent === undefined) throw new Error('Novel tools require an owning agent Session')
+  const cwd = agent.session.header.cwd
+  if (cwd === undefined) throw new Error('Novel tools require a working directory')
+  const root = await ctx.fs.resolve(cwd, { cwd, signal: exec.signal })
+  return { agent, root }
 }

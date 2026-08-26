@@ -43,6 +43,9 @@
 .projectTitle { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 18px 16px 10px; }
 .projectTitle strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .projectTitle small { flex: none; color: var(--novel-chrome-muted); font-size: 11px; }
+.projectPending { margin: 12px 14px; padding: 13px; border: 1px solid var(--novel-chrome-border); border-radius: 9px; background: color-mix(in srgb, var(--novel-chrome-strong) 62%, transparent); }
+.projectPending strong { display: block; color: var(--novel-chrome-text); font-size: 12px; }
+.projectPending p { margin: 6px 0 0; color: var(--novel-chrome-muted); font-size: 11px; line-height: 1.55; }
 .sectionTitle { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px 8px; color: var(--novel-chrome-text); font-size: 12px; font-weight: 650; }
 .sectionTitle small { color: var(--novel-chrome-muted); font-weight: 450; }
 .assetList { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 3px; overflow: auto; padding: 0 10px 50px; }
@@ -215,6 +218,18 @@
   .analysisDrawer { width: min(600px, 72%); }
 }
 .empty { display: grid; height: 100%; place-items: center; color: var(--ds-color-text-tertiary); }
+.projectBootstrap { display: grid; box-sizing: border-box; height: 100%; min-height: 0; padding: clamp(34px, 7vh, 84px) clamp(28px, 8vw, 110px); place-items: center; color: var(--novel-text); background: var(--novel-workspace-bg); }
+.projectBootstrapBody { display: flex; width: min(520px, 100%); flex-direction: column; align-items: flex-start; }
+.projectBootstrapMark { display: grid; width: 38px; height: 38px; margin-bottom: 34px; place-items: center; border: 1px solid var(--novel-chrome-border); border-radius: 999px; color: var(--novel-accent); background: var(--novel-chrome-strong); font-size: 15px; }
+.projectBootstrapEyebrow { margin: 0 0 10px !important; color: var(--novel-accent) !important; font-size: 11px !important; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.projectBootstrap h1 { margin: 0; color: var(--novel-text); font: 570 clamp(27px, 3vw, 38px)/1.25 'Songti SC', 'Noto Serif SC', ui-serif, serif; letter-spacing: -.025em; }
+.projectBootstrapBody > p { max-width: 480px; margin: 15px 0 30px; color: var(--novel-muted); font-size: 14px; line-height: 1.8; }
+.projectBootstrap label { display: flex; width: 100%; flex-direction: column; gap: 8px; color: var(--novel-chrome-text); font-size: 12px; font-weight: 650; }
+.projectBootstrap input { box-sizing: border-box; width: 100%; height: 46px; padding: 0 13px; border: 1px solid var(--novel-chrome-border); border-radius: 8px; outline: 0; color: var(--novel-chrome-text); background: var(--novel-chrome-strong); font: 15px/1.2 ui-sans-serif, system-ui, sans-serif; }
+.projectBootstrap input:focus { border-color: var(--novel-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--novel-accent) 14%, transparent); }
+.projectBootstrap button { margin-top: 14px; padding: 10px 17px; border: 1px solid var(--novel-accent); border-radius: 8px; color: var(--novel-accent-contrast); background: var(--novel-accent); font-size: 13px; font-weight: 650; cursor: pointer; }
+.projectBootstrap button:disabled { opacity: .45; cursor: default; }
+.projectBootstrap small { margin-top: 14px; color: var(--novel-muted); font-size: 11px; line-height: 1.6; }
 .error { color: var(--ds-color-text-error, #d14343); }
 .changeCard { margin: 7px 0; padding: 12px; border: 1px solid var(--ds-color-border-subtle); border-radius: 12px; background: var(--ds-color-bg-secondary); }
 .changeCard header { display: flex; flex-direction: column; gap: 4px; }

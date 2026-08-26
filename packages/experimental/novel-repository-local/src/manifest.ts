@@ -1,6 +1,6 @@
 /** Parse and validate the authored `novel.yaml` project declaration. */
 
-import { parseDocument } from 'yaml'
+import { parseDocument, stringify } from 'yaml'
 import {
   NovelRepositoryError,
   ProjectId,
@@ -15,6 +15,21 @@ export interface ParsedProjectManifest {
   readonly id: ProjectIdValue
   readonly title: string
   readonly contentRoots: Readonly<Record<string, string>>
+}
+
+/**
+ * Serialize the repository-owned version-one project manifest deterministically.
+ * @param value - Validated project identity, title, and content-root paths.
+ * @returns the complete YAML marker text written by project initialization.
+ */
+export function serializeProjectManifest(value: ParsedProjectManifest): string {
+  return stringify({
+    kind: 'novel-project',
+    schema: value.schema,
+    id: value.id,
+    title: value.title,
+    contentRoots: value.contentRoots,
+  }, { lineWidth: 0 })
 }
 
 /** Whether a parsed YAML value is a plain record candidate. */

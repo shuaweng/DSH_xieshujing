@@ -17,6 +17,7 @@ import NovelContextResolver, {
 } from '../../novel-context/src/index.ts'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
+import UserApproval, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -110,6 +111,29 @@ async function harness(): Promise<{
   }
 }
 
+async function blankHarness(): Promise<{ ctx: Context; agent: Agent; dir: string }> {
+  const dir = await mkdtemp(join(tmpdir(), 'dsh-tool-novel-blank-'))
+  cleanups.push(() => rm(dir, { recursive: true, force: true }))
+  await writeFile(join(dir, 'author-note.txt'), '保留我。')
+  const ctx = new Context()
+  await ctx.plugin(LocalFileSystem, { cwd: dir })
+  await ctx.plugin(SandboxPolicy, { mode: 'workspace-write', workspaceRoot: dir })
+  await ctx.plugin(NovelAssetTypeRegistry)
+  await ctx.plugin(NovelAssetOutline)
+  await ctx.plugin(LocalNovelRepository)
+  await ctx.plugin(SystemPrompt)
+  await ctx.plugin(UserApproval)
+  await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NovelContextResolver)
+  ctx.provide('novelAnalysis', { candidateWarning: vi.fn(() => undefined) } as never)
+  await ctx.plugin(ToolNovel)
+  cleanups.push(async () => { await ctx.fiber.dispose() })
+  const id = SessionId('tool-novel-blank-agent')
+  const session = Session.create(id, [], { version: 0, id, createdAt: 0, cwd: dir })
+  session.append('turn/start', { turn: 1 })
+  return { ctx, agent: { id, session, ctx } as Agent, dir }
+}
+
 function execute(ctx: Context, agent: Agent | undefined, name: string, args: unknown) {
   return ctx.tools.execute({
     callId: CallId(`novel-call-${++callNumber}`),
@@ -124,9 +148,12 @@ describe('Novel model tools', () => {
   it('registers discovery, exact-read, and proposal tools with explicit proposal guidance', async () => {
     const { ctx, agent } = await harness()
     expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('novel_')).sort())
-      .toEqual(['novel_create', 'novel_get', 'novel_list', 'novel_present', 'novel_propose_changes', 'novel_search'])
+      .toEqual(['novel_create', 'novel_get', 'novel_initialize_project', 'novel_list', 'novel_present', 'novel_propose_changes', 'novel_search'])
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.ctx })
     expect(renderPrompt(assembly)).toContain('never means the file changed')
+
+    await expect(execute(ctx, agent, 'novel_initialize_project', { title: 'Ignored' }))
+      .resolves.toMatchObject({ isError: false, value: { status: 'already-initialized', title: 'Tool Project' } })
 
     const present = ctx.tools.get('novel_present')!
     expect(present.presentCall?.({ intent: 'open-workbench' })).toEqual({
@@ -176,6 +203,28 @@ describe('Novel model tools', () => {
     })).toEqual({
       card: 'generic', title: '提出小说修改', kind: 'edit', rawInput: '摘要',
     })
+  })
+
+  it('initializes a blank Session directory only after one explicit approval', async () => {
+    const { ctx, agent, dir } = await blankHarness()
+    const prompted = vi.fn()
+    ctx.on('approval/request', (request) => {
+      prompted(request)
+      return Promise.resolve<ApprovalOutcome>('allowed-once')
+    })
+
+    const result = await execute(ctx, agent, 'novel_initialize_project', { title: '国运擂台' })
+    expect(result).toMatchObject({
+      isError: false,
+      value: { status: 'created', title: '国运擂台', manifestPath: expect.stringContaining('novel.yaml') },
+    })
+    expect(prompted).toHaveBeenCalledWith(expect.objectContaining({
+      agent, toolName: 'novel_initialize_project', reason: expect.stringContaining('国运擂台'),
+    }))
+    expect(await readFile(join(dir, 'author-note.txt'), 'utf8')).toBe('保留我。')
+    expect(await readFile(join(dir, 'novel.yaml'), 'utf8')).toContain('title: 国运擂台')
+    expect(agent.session.events.map(event => event.type)).toContain('approval/asked')
+    expect(agent.session.events.map(event => event.type)).toContain('approval/decided')
   })
 
   it('discovers the current project and returns canonical exact-Revision references', async () => {

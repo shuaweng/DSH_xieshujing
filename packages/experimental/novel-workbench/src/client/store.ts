@@ -15,6 +15,7 @@ export type NovelReaderFont = 'song' | 'kai' | 'sans'
 
 /** Shared chapter, draft, selection, and loading state for Novel workbench surfaces. */
 export interface NovelWorkbenchState {
+  projectStatus: 'loading' | 'uninitialized' | 'ready' | 'error'
   project?: NovelProjectDescriptor
   assets: readonly NovelAssetDescriptor[]
   document?: NovelAssetDocument
@@ -34,6 +35,7 @@ export interface NovelWorkbenchState {
 type Actions = {
   reset: (draft: NovelWorkbenchState) => void
   loaded: (draft: NovelWorkbenchState, project: NovelProjectDescriptor, assets: readonly NovelAssetDescriptor[]) => void
+  uninitialized: (draft: NovelWorkbenchState) => void
   assetCreated: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   open: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   saved: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
@@ -54,6 +56,7 @@ type Actions = {
 export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchState, Actions> {
   return defineStore({
     init: (): NovelWorkbenchState => ({
+      projectStatus: 'loading',
       assets: [],
       dirty: false,
       readerSkin: 'paper',
@@ -64,6 +67,7 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
     }),
     actions: {
       reset: (draft) => {
+        draft.projectStatus = 'loading'
         delete draft.project
         delete draft.document
         delete draft.titleDraft
@@ -75,10 +79,23 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
         draft.loading = true
       },
       loaded: (draft, project, assets) => {
+        draft.projectStatus = 'ready'
         draft.project = project
         draft.assets = [...assets]
         draft.loading = false
         delete draft.error
+      },
+      uninitialized: (draft) => {
+        draft.projectStatus = 'uninitialized'
+        draft.loading = false
+        delete draft.project
+        delete draft.document
+        delete draft.titleDraft
+        delete draft.draft
+        delete draft.selection
+        delete draft.error
+        draft.assets = []
+        draft.dirty = false
       },
       assetCreated: (draft, document) => {
         const descriptor = descriptorOf(document)
@@ -117,7 +134,7 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       setReaderSkin: (draft, skin) => { draft.readerSkin = skin },
       setReaderFont: (draft, font) => { draft.readerFont = font },
       setReaderFontSize: (draft, size) => { draft.readerFontSize = Math.min(28, Math.max(14, Math.round(size))) },
-      fail: (draft, message) => { draft.loading = false; draft.error = message },
+      fail: (draft, message) => { draft.projectStatus = 'error'; draft.loading = false; draft.error = message },
       refresh: (draft) => { draft.reload += 1 },
     },
   })
