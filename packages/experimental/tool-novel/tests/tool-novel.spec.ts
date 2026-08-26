@@ -393,6 +393,30 @@ describe('Novel model tools', () => {
     expect(assets).toContainEqual(expect.objectContaining({ title: '第一卷卷纲', parentAssetId: 'outline-tool' }))
   })
 
+  it('creates a complete manuscript chapter without a separate container step', async () => {
+    const { ctx, agent } = await harness()
+    const created = await execute(ctx, agent, 'novel_create', {
+      type: 'manuscript.chapter',
+      title: '第二章 三坛海会大神',
+      content: { kind: 'manuscript', body: '少年抬头时，风火轮已经照亮天门。\n' },
+    })
+
+    expect(created.isError).toBe(false)
+    if (created.isError) throw new Error('expected manuscript novel_create success')
+    expect(created.value).toMatchObject({
+      projectId: 'project-tool',
+      type: 'manuscript.chapter',
+      title: '第二章 三坛海会大神',
+    })
+    expect(created.meta).toMatchObject({ kind: 'novel-asset-created', assetType: 'manuscript.chapter' })
+
+    const reference = (created.value as { reference: string }).reference
+    const read = await execute(ctx, agent, 'novel_get', { references: [reference] })
+    expect(read.isError).toBe(false)
+    if (read.isError) throw new Error('expected created chapter read success')
+    expect(JSON.stringify(read.value)).toContain('风火轮已经照亮天门')
+  })
+
   it('reads and proposes an exact freeform outline replacement through the generic tools', async () => {
     const { ctx, agent, outlinePath, outlineRevisionId } = await harness()
     const uri = encodeNovelReferenceUri({

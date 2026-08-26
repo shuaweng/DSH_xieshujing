@@ -18,6 +18,8 @@ Skill 只把已确认结果映射到当前已经注册的工作台 Asset：项�
 
 创建过程采用渐进方式，而不是受固定脚手架门禁约束。默认有用的起点是概述、作者已经确认时的风格资产与一份书纲，但作者可以更早落稿或只创建更少 Asset。修改前，Agent 会报告准备创建的 Asset 集合并等待确认。它通过 `novel_list` 检查创建规则，通过 `novel_search` 与 `novel_get` 发现并复用既有 Asset，只用 `novel_create` 创建新 Asset，并只通过绑定精确 Revision 的 `novel_propose_changes` 提案修改既有 Asset。
 
+内置 `manuscript.chapter` 类型负责直接创建章节标题与完整 Markdown 正文。Agent 与浏览器中的“新建章节”操作共用同一条通用 Repository 创建路径。作者要求把一篇新正文写进书里时，Agent 会在一次 `novel_create` 调用中创建完整章节，而不是要求作者先建立空容器。修改已有章节仍然必须提交绑定精确 Revision 的 ChangeSet 提案。
+
 Skill 声明现有 `outline-edit` 上下文策略。该策略可以加入所引用大纲的确定父级与概述，而不会安装一份始终存在的开书上下文包。因此空白但已初始化的项目不会增加作者文本，已有项目则可以从精确的当前 Asset 继续开书。
 
 项目初始化是一个由浏览器与 Agent 工具共用的 Repository 操作。它校验非空作品名与现有 Session 根目录，拒绝现有 `novel.yaml` 或非目录的 `manuscript`/`planning` 冲突，通过受 sandbox 约束的仅创建写入建立缺失的最小内容根，并最后发布 `novel.yaml` 作为激活标记。它永不删除或替换已有作者文件。浏览器把 manifest 缺失表示为中性的作品名表单，并在项目就绪前禁止 Asset/上下文调用。`novel_initialize_project` 只在用户明确要求且通过一次性批准后向模型暴露同一操作；已完成的工具卡会刷新已打开工作台。
@@ -39,5 +41,7 @@ Skill 判断作者何时明确要求开书，并可以调用 `novel_initialize_p
 ## Consequences
 
 作者可以调用一个工作台原生方法，从设想推进到可用的全书指导与规划 Asset，无需自行了解 Asset Schema。Agent 保留旧 Preset 最有价值的创意引导，同时每份持久化结果都能在工作台中看见、版本化并由工具寻址。
+
+作者也可以从正文分组创建一个可编辑的空章节，而 Agent 可以用一次操作把用户要求的新章节完整落库。两者只是同一份类型创建契约的不同呈现，并非浏览器与模型各自维护的实现。
 
 空 Session 目录现在是可恢复的产品状态，而不是 Repository 错误：作者可以从工作台表单初始化，也可以批准 Agent 的初始化调用。已有非法 manifest 仍会显示错误，且永不会被静默覆盖。模型可见 Skill 目录与无密钥 loader 快照已经包含新方法，Novel 工具目录与提示则公布需批准的初始化路径。

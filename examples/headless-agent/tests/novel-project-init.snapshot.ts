@@ -13,7 +13,7 @@ const expectedPath = fileURLToPath(new URL('./novel-project-init-snapshots/sessi
 const refreshing = process.env.DSH_SNAPSHOT === 'refresh'
 
 describe('Novel Project initialization model snapshot', () => {
-  it('exposes the seven-tool roster and returns the dedicated initialization receipt', async () => {
+  it('exposes the seven-tool roster and creates a complete chapter after initialization', async () => {
     let normalized = ''
     const result = await runLoaderSmoke({
       label: 'novel project initialization snapshot',
@@ -32,6 +32,11 @@ describe('Novel Project initialization model snapshot', () => {
         ].join('\n'))
       },
       inspect: async (cwd) => {
+        const manuscriptFiles = (await readdir(join(cwd, 'manuscript'))).filter(file => file.endsWith('.md'))
+        expect(manuscriptFiles).toHaveLength(1)
+        const manuscript = await readFile(join(cwd, 'manuscript', manuscriptFiles[0]!), 'utf8')
+        expect(manuscript).toContain('type: manuscript.chapter')
+        expect(manuscript).toContain('The harbor bell rang once.')
         const files = (await readdir(join(cwd, '.sessions'), { recursive: true })).filter(file => file.endsWith('.jsonl'))
         expect(files).toHaveLength(1)
         const source = await readFile(join(cwd, '.sessions', files[0]!), 'utf8')
@@ -41,9 +46,10 @@ describe('Novel Project initialization model snapshot', () => {
         expect(normalized).toBe(await readFile(expectedPath, 'utf8'))
       },
     })
-    expect(result.stderr).toBe('')
+    expect(result.stderr.replace(/^\(node:\d+\) ExperimentalWarning: SQLite is an experimental feature and might change at any time\n\(Use `node --trace-warnings \.\.\.` to show where the warning was created\)\n$/u, '')).toBe('')
     expect(normalized).toContain('novel_initialize_project')
+    expect(normalized).toContain('novel_create')
     expect(normalized).toContain('already-initialized')
-    expect(normalized).toContain('NOVEL_PROJECT_INITIALIZE_OK')
+    expect(normalized).toContain('NOVEL_PROJECT_INITIALIZE_AND_CHAPTER_CREATE_OK')
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 })

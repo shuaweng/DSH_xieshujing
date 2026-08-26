@@ -963,6 +963,32 @@ describe('Explorer', () => {
     expect(view.getByText('第二章').closest('button')?.getAttribute('data-active')).toBe('true')
   })
 
+  it('creates a blank chapter from the manuscript group and opens it for editing', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const created = chapter({
+      id: 'asset-new-chapter' as never,
+      title: zh.newChapterTitle,
+      projectRelativePath: 'manuscript/new-chapter.md',
+      content: { kind: 'manuscript', body: '' },
+    })
+    const create = vi.fn(async () => created)
+    const view = render(<Explorer
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
+      renderers={renderers} load={async () => ({ project: { title: '国运擂台' } as never, assets: [] })}
+      open={vi.fn()} create={create} onRefresh={() => () => {}} t={t}
+    />)
+
+    await waitFor(() => { expect(view.getByText(`＋ ${zh.addChapter}`)).toBeTruthy() })
+    fireEvent.click(view.getByText(`＋ ${zh.addChapter}`))
+    await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
+      type: 'manuscript.chapter',
+      title: zh.newChapterTitle,
+      content: { kind: 'manuscript', body: '' },
+    }) })
+    expect(store.getSnapshot().document?.id).toBe(created.id)
+    expect(view.getByText(zh.newChapterTitle)).toBeTruthy()
+  })
+
   it('shows absent-project and load/open failures, including non-Error failures', async () => {
     async function mountWith(load: () => Promise<never> | Promise<{ assets: never[] }>, open = vi.fn()) {
       const store = createNovelWorkbenchStore().create()

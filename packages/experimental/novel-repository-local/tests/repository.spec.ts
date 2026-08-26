@@ -227,6 +227,32 @@ describe('LocalNovelRepository', () => {
     expect(listed.some(item => item.asset.id === created.asset.id)).toBe(true)
   })
 
+  it('creates a complete manuscript chapter through the built-in Asset definition', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await writeFile(join(dir, 'novel.yaml'), manifest())
+    const ctx = await boot(dir)
+    const novel = await project(ctx)
+
+    const created = await ctx.novelRepository.createAsset(novel, {
+      type: 'manuscript.chapter',
+      title: '第一章 华夏无神',
+      content: { kind: 'manuscript', body: '哪吒踏火而来。\n' },
+      actor: { kind: 'agent', sessionId: SessionId('session-agent') },
+    })
+
+    expect(created.asset.projectRelativePath).toMatch(/^manuscript\/asset_.+\.md$/u)
+    expect(created.content).toEqual({ kind: 'manuscript', body: '哪吒踏火而来。\n' })
+    expect(await readFile(join(dir, created.asset.projectRelativePath), 'utf8')).toContain('哪吒踏火而来。')
+    await expect(ctx.novelRepository.createAsset(novel, {
+      type: 'manuscript.chapter',
+      title: '错误父级',
+      parentId: created.asset.id,
+      content: { kind: 'manuscript', body: '' },
+      actor: { kind: 'agent', sessionId: SessionId('session-agent') },
+    })).rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
+  })
+
   it('discovers a second registered Asset type without repository type branches', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))

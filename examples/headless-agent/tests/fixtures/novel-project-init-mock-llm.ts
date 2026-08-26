@@ -11,7 +11,7 @@ const EXPECTED_TOOLS = [
   'novel_search',
 ]
 
-/** Deterministic adapter proving the real initialization schema and result enter one model turn. */
+/** Deterministic adapter proving initialization and complete chapter creation enter one model turn. */
 class NovelProjectInitMockAdapter extends LlmAdapter {
   async * stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     const result = options.messages.flatMap(message => message.content)
@@ -30,10 +30,23 @@ class NovelProjectInitMockAdapter extends LlmAdapter {
       return
     }
     const textResult = result.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
-    if (!textResult.includes('当前目录已经是小说项目《White Harbor》')) {
-      throw new Error('initialization receipt was not model-visible')
+    if (textResult.includes('当前目录已经是小说项目《White Harbor》')) {
+      const args = JSON.stringify({
+        type: 'manuscript.chapter',
+        title: 'Chapter One',
+        content: { kind: 'manuscript', body: 'The harbor bell rang once.\n' },
+      })
+      yield { type: 'block-start', index: 0, blockType: 'tool-call' }
+      yield { type: 'tool-call-delta', index: 0, id: CallId('novel-chapter-call'), name: 'novel_create', argumentsDelta: args }
+      yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: CallId('novel-chapter-call'), name: 'novel_create', arguments: args } }
+      yield { type: 'usage', usage: { inputTokens: 15, outputTokens: 4 } }
+      yield { type: 'finish', reason: { kind: 'tool-calls' } }
+      return
     }
-    const text = 'NOVEL_PROJECT_INITIALIZE_OK'
+    if (!textResult.includes('已创建 Chapter One（manuscript.chapter）')) {
+      throw new Error('complete chapter creation receipt was not model-visible')
+    }
+    const text = 'NOVEL_PROJECT_INITIALIZE_AND_CHAPTER_CREATE_OK'
     yield { type: 'block-start', index: 0, blockType: 'text' }
     yield { type: 'text-delta', index: 0, text }
     yield { type: 'block-end', index: 0, block: { type: 'text', text } }

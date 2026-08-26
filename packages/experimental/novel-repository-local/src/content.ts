@@ -203,9 +203,25 @@ export const manuscriptChapterTypeDefinition: NovelAssetTypeDefinition = {
   extensions: ['.md'],
   model: {
     description: 'A Markdown manuscript chapter addressed by exact UTF-16 body offsets.',
+    creationInstructions: 'Create content {"kind":"manuscript","body":"<complete Markdown chapter prose>"} without parent_asset_id. When the author already supplied or requested prose, write the complete body in this call instead of asking them to create an empty chapter first.',
     proposalInstructions: 'Use operations [{"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}]. Offsets must select a non-empty range from novel_get.',
   },
   parse: parseChapter,
+  create(request, path) {
+    if (request.parentId !== undefined) invalidAsset(path, 'manuscript chapter must not declare novel.parent')
+    const chapter = chapterContent(request.content)
+    if (containsUnpairedSurrogate(chapter.body)) invalidAsset(path, 'chapter body contains an unpaired UTF-16 surrogate')
+    const frontmatter = stringify({
+      novel: {
+        schema: 1,
+        id: request.id,
+        type: 'manuscript.chapter',
+        title: validatedChapterTitle(request.title, path),
+      },
+    }).trimEnd()
+    const serializedUtf8 = new TextEncoder().encode(`---\n${frontmatter}\n---\n${chapter.body}`)
+    return { serializedUtf8, parsed: parseChapter(serializedUtf8, path) }
+  },
   serializeContent(snapshot, content, title) {
     const chapter = chapterContent(content)
     if (containsUnpairedSurrogate(chapter.body)) invalidAsset(snapshot.asset.projectRelativePath, 'chapter body contains an unpaired UTF-16 surrogate')
@@ -323,13 +339,7 @@ export const manuscriptChapterTypeDefinition: NovelAssetTypeDefinition = {
 
 /** Replace only the parsed `novel.title` scalar so author comments and key order remain byte-stable. */
 function replaceFrontmatterTitle(text: string, path: string, title: string): string {
-  if (title.trim().length === 0 || title.trim() !== title) {
-    invalidAsset(path, 'novel.title must be a non-empty string without surrounding whitespace')
-  }
-  if (title.length > 240) invalidAsset(path, 'novel.title must contain at most 240 UTF-16 code units')
-  if (containsControlCharacter(title) || containsUnpairedSurrogate(title)) {
-    invalidAsset(path, 'novel.title contains invalid characters')
-  }
+  const validatedTitle = validatedChapterTitle(title, path)
   const firstNewline = text.indexOf('\n')
   const closing = firstNewline < 0 ? undefined : closingFrontmatter(text, firstNewline + 1)
   if (firstNewline < 0 || closing === undefined) invalidAsset(path, 'the YAML Frontmatter is not closed')
@@ -341,8 +351,19 @@ function replaceFrontmatterTitle(text: string, path: string, title: string): str
   const titleNode = document.getIn(['novel', 'title'], true)
   if (!isScalar(titleNode) || titleNode.range == null) invalidAsset(path, 'novel.title must be a scalar string')
   const [start, end] = titleNode.range
-  const serializedTitle = stringify(title).trimEnd()
+  const serializedTitle = stringify(validatedTitle).trimEnd()
   return `${text.slice(0, yamlStart + start)}${serializedTitle}${text.slice(yamlStart + end)}`
+}
+
+function validatedChapterTitle(title: string, path: string): string {
+  if (title.trim().length === 0 || title.trim() !== title) {
+    invalidAsset(path, 'novel.title must be a non-empty string without surrounding whitespace')
+  }
+  if (title.length > 240) invalidAsset(path, 'novel.title must contain at most 240 UTF-16 code units')
+  if (containsControlCharacter(title) || containsUnpairedSurrogate(title)) {
+    invalidAsset(path, 'novel.title contains invalid characters')
+  }
+  return title
 }
 
 /**

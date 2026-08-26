@@ -95,6 +95,23 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
       setCreating(false)
     }
   }
+  const createChapter = async () => {
+    if (sessionId === undefined || creating) return
+    setCreating(true)
+    try {
+      const document = await create(sessionId, {
+        type: 'manuscript.chapter',
+        title: t('newChapterTitle'),
+        content: { kind: 'manuscript', body: '' },
+      })
+      actions.assetCreated(document)
+      actions.open(document)
+    } catch (error: unknown) {
+      actions.fail(errorMessage(error))
+    } finally {
+      setCreating(false)
+    }
+  }
 
   let characterCount: number | undefined
   if (state.document !== undefined && state.draft !== undefined) {
@@ -133,7 +150,8 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
           }}
         />
         <AssetGroup title={t('chapters')} assets={manuscripts} active={state.active} unit={t('chapterUnit')}
-          titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />
+          titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')}
+          creating={creating} addLabel={t('addChapter')} createAsset={createChapter} />
         <OutlineGroup
           roots={roots}
           all={outlines}
@@ -232,7 +250,9 @@ function AssetButton({ asset, active, title, openAsset, details }: {
     onClick={() => { openAsset(asset.id) }}><span>{title}</span>{details === undefined ? null : <small>{details}</small>}</button>
 }
 
-function AssetGroup({ title, assets, active, unit, titleOf, openAsset, characterCount, characters }: {
+function AssetGroup({
+  title, assets, active, unit, titleOf, openAsset, characterCount, characters, creating, addLabel, createAsset,
+}: {
   readonly title: string
   readonly assets: readonly NovelAssetDescriptor[]
   readonly active: string | undefined
@@ -241,9 +261,16 @@ function AssetGroup({ title, assets, active, unit, titleOf, openAsset, character
   readonly openAsset: (assetId: string) => void
   readonly characterCount: number | undefined
   readonly characters: string
+  readonly creating?: boolean
+  readonly addLabel?: string
+  readonly createAsset?: () => Promise<void>
 }) {
   return <details className={css.assetGroup} open>
     <summary><strong>{title}</strong><small>{assets.length} {unit}</small></summary>
+    {addLabel !== undefined && createAsset !== undefined
+      ? <div className={css.outlineActions}><button type="button" disabled={creating}
+        onClick={() => { void createAsset() }}>＋ {addLabel}</button></div>
+      : null}
     <div className={css.assetGroupItems}>{assets.map((asset) => {
       const details = asset.id === active && characterCount !== undefined
         ? `${characterCount.toLocaleString()} ${characters}`

@@ -12,6 +12,9 @@
       需要修改正式资产时使用 novel_propose_changes 创建 ChangeSet。必须遵循 novel_get
       为该 Asset 类型返回的 proposalInstructions；正文、大纲和章纲目前都使用其精确
       Revision 上的 UTF-16 文本范围。不要猜测 operation 结构，也不要自行生成完整性哈希。
+      用户明确要求把一篇新正文写进书里时，直接用 novel_create 创建 manuscript.chapter，
+      在同一次调用中提交章节标题与完整正文；不得要求用户先手工建立空章节容器。只有修改
+      已存在章节时才改用 novel_get 与 novel_propose_changes。
 
       本书概述 book.brief 与本书风格 book.style-profile 是项目级唯一指导资产。处理全书
       方向、大纲和正文执行时，按任务读取现有 book.brief；处理落稿、改写、对白和文风

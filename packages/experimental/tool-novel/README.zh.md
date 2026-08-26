@@ -11,7 +11,7 @@
 - `novel_initialize_project` 接收作者可见书名。已有合法 Novel Project 会原样返回；项目不存在时，必须先获得用户显式批准，Repository 才会创建默认内容根并发布 `novel.yaml`。非法或已存在的清单绝不会被覆盖。
 - `novel_list` 在所属 Session 工作目录发现 Novel Project，并返回带有语义父级 id、规范精确 Revision `dsh-novel:` 引用和各注册类型创建契约的当前类型化 Asset 目录。它只暴露身份和元数据，不返回作者内容。
 - `novel_search` 接收标题/内容线索、可选精确类型白名单和有边界的结果数量。它返回当前精确 Revision 引用与摘要；仅发现不会注入或修改 Asset。
-- `novel_create` 接收一个已注册类型、标题、可选语义父级和类型拥有的 JSON 内容。Repository 生成稳定 id 与安全路径、校验层级规则、发布新作者文件，并返回精确首个 Revision。创建结果携带可回放的 `novel-asset-created` 展示元数据。
+- `novel_create` 接收一个已注册类型、标题、可选语义父级和类型拥有的 JSON 内容。新的 `manuscript.chapter` 会在同一次调用中携带完整正文，并且没有语义父级。Repository 生成稳定 id 与安全路径、校验层级规则、发布新作者文件，并返回精确首个 Revision。创建结果携带可回放的 `novel-asset-created` 展示元数据。
 - `novel_get` 接收规范引用，只读取已保留 Revision，并返回 Asset 类型、该类型注册的提案说明和精确模型投影。
 - `novel_propose_changes` 接收一个精确 Asset、基础 Revision、类型定义的 operation 信封和摘要。已注册 Host 定义会校验并补全这些操作，再由 Repository 持久创建单资产 `ChangeSet`；绝不应用提案。
 - 章节提案持久化后，Novel 分析服务会在内存中物化其候选并运行确定性 NOAI 规则。达到阈值的问题会作为有边界的 deferred model context 返回，因此 Agent 必须在回复前承认可能的模板化语言热点；该反馈随 turn 写入日志，绝不创建或应用第二份提案。

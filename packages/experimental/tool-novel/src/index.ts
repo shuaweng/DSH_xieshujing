@@ -31,8 +31,10 @@ and the exact creation formats, or \`novel_search\` when a title or content clue
 When the user explicitly asks to start a new book and the Session directory is not yet
 a Novel Project, use \`novel_initialize_project\`; it requests approval before writing.
 Search only discovers exact current references; read chosen results with \`novel_get\`.
-Use \`novel_create\` for new typed Assets; never invent
-a file path. Use \`novel_get\` for exact retained Revisions and proposal instructions.
+Use \`novel_create\` for new typed Assets; never invent a file path. A newly requested
+chapter is created directly as \`manuscript.chapter\` with its complete prose body in
+the same call; never ask the author to create an empty chapter container first. Use
+\`novel_get\` for exact retained Revisions and proposal instructions.
 Use \`novel_propose_changes\` for existing Asset changes; it only creates a ChangeSet
 for user review and never means the file changed. Use \`novel_present\` only to open or
 close the Novel workbench when that presentation helps the current task. Do not claim

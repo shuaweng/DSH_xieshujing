@@ -18,11 +18,21 @@
 {"type":"tool/result","data":{"turn":1,"step":1,"message":{"source":{"kind":"tool","callId":"novel-init-call"},"content":[{"type":"tool-result","toolCallId":"novel-init-call","content":[{"type":"text","text":"当前目录已经是小说项目《White Harbor》。"}],"isError":false}],"role":"user","id":"{{sessionId}}"},"meta":{"kind":"novel-project-initialized","status":"already-initialized","projectId":"project-white-harbor","title":"White Harbor"}},"sourceEventSeqs":[15],"surfaceOp":"append"}
 {"type":"step/end","data":{"turn":1,"step":1}}
 {"type":"step/start","data":{"turn":1,"step":2}}
-{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-start","index":0,"blockType":"text"}}}
-{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"text-delta","index":0,"text":"NOVEL_PROJECT_INITIALIZE_OK"}}}
-{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-end","index":0,"block":{"type":"text","text":"NOVEL_PROJECT_INITIALIZE_OK"}}}}
-{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"usage","usage":{"inputTokens":9,"outputTokens":3}}}}
-{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"finish","reason":{"kind":"stop"}}}}
-{"type":"assistant/message","data":{"turn":1,"step":2,"message":{"role":"assistant","content":[{"type":"text","text":"NOVEL_PROJECT_INITIALIZE_OK"}],"source":{"kind":"model","provider":"novel-project-init-mock","model":"novel-project-init-mock"},"id":"{{sessionId}}"},"usage":{"inputTokens":9,"outputTokens":3}},"sourceEventSeqs":[19,20,21,22,23],"surfaceOp":"append"}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-start","index":0,"blockType":"tool-call"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"tool-call-delta","index":0,"id":"novel-chapter-call","name":"novel_create","argumentsDelta":"{\"type\":\"manuscript.chapter\",\"title\":\"Chapter One\",\"content\":{\"kind\":\"manuscript\",\"body\":\"The harbor bell rang once.\\n\"}}"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"block-end","index":0,"block":{"type":"tool-call","id":"novel-chapter-call","name":"novel_create","arguments":"{\"type\":\"manuscript.chapter\",\"title\":\"Chapter One\",\"content\":{\"kind\":\"manuscript\",\"body\":\"The harbor bell rang once.\\n\"}}"}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"usage","usage":{"inputTokens":15,"outputTokens":4}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":2,"chunk":{"type":"finish","reason":{"kind":"tool-calls"}}}}
+{"type":"assistant/message","data":{"turn":1,"step":2,"message":{"role":"assistant","content":[{"type":"tool-call","id":"novel-chapter-call","name":"novel_create","arguments":"{\"type\":\"manuscript.chapter\",\"title\":\"Chapter One\",\"content\":{\"kind\":\"manuscript\",\"body\":\"The harbor bell rang once.\\n\"}}"}],"source":{"kind":"model","provider":"novel-project-init-mock","model":"novel-project-init-mock"},"id":"{{sessionId}}"},"usage":{"inputTokens":15,"outputTokens":4}},"sourceEventSeqs":[19,20,21,22,23],"surfaceOp":"append"}
+{"type":"tool/call","data":{"turn":1,"step":2,"callId":"novel-chapter-call","name":"novel_create","arguments":"{\"type\":\"manuscript.chapter\",\"title\":\"Chapter One\",\"content\":{\"kind\":\"manuscript\",\"body\":\"The harbor bell rang once.\\n\"}}"}}
+{"type":"tool/result","data":{"turn":1,"step":2,"message":{"source":{"kind":"tool","callId":"novel-chapter-call"},"content":[{"type":"tool-result","toolCallId":"novel-chapter-call","content":[{"type":"text","text":"已创建 Chapter One（manuscript.chapter），Revision revision_{{sessionId}}。"}],"isError":false}],"role":"user","id":"{{sessionId}}"},"meta":{"kind":"novel-asset-created","projectId":"project-white-harbor","assetId":"asset_{{sessionId}}","revisionId":"revision_{{sessionId}}","assetType":"manuscript.chapter","title":"Chapter One"}},"sourceEventSeqs":[25],"surfaceOp":"append"}
 {"type":"step/end","data":{"turn":1,"step":2}}
+{"type":"step/start","data":{"turn":1,"step":3}}
+{"type":"assistant/chunk","data":{"turn":1,"step":3,"chunk":{"type":"block-start","index":0,"blockType":"text"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":3,"chunk":{"type":"text-delta","index":0,"text":"NOVEL_PROJECT_INITIALIZE_AND_CHAPTER_CREATE_OK"}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":3,"chunk":{"type":"block-end","index":0,"block":{"type":"text","text":"NOVEL_PROJECT_INITIALIZE_AND_CHAPTER_CREATE_OK"}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":3,"chunk":{"type":"usage","usage":{"inputTokens":9,"outputTokens":3}}}}
+{"type":"assistant/chunk","data":{"turn":1,"step":3,"chunk":{"type":"finish","reason":{"kind":"stop"}}}}
+{"type":"assistant/message","data":{"turn":1,"step":3,"message":{"role":"assistant","content":[{"type":"text","text":"NOVEL_PROJECT_INITIALIZE_AND_CHAPTER_CREATE_OK"}],"source":{"kind":"model","provider":"novel-project-init-mock","model":"novel-project-init-mock"},"id":"{{sessionId}}"},"usage":{"inputTokens":9,"outputTokens":3}},"sourceEventSeqs":[29,30,31,32,33],"surfaceOp":"append"}
+{"type":"step/end","data":{"turn":1,"step":3}}
 {"type":"turn/end","data":{"turn":1,"reason":{"kind":"completed"}}}

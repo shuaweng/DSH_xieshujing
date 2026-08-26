@@ -35,7 +35,7 @@ novelContextPolicy: outline-edit
 - `book.style-profile`：自由 Markdown，只记录作者明确确认的叙事距离、句法节奏、对白、信息释放、网文章奏、正向参照与禁用表达。讨论中的风格猜测不能直接写入。
 - `planning.outline`：书纲或卷纲的自由 Markdown。书纲处理全书方向；卷纲必须以书纲为 parent。保留作者自己的段落、列表、表格或 beat 结构。
 - `planning.chapter-outline`：需要先有对应 `manuscript.chapter`，并以该章节为 parent。只在作者决定规划具体章节时创建。
-- `manuscript.chapter`：只有作者明确要求落首章、试写开篇或先建立章节容器时才创建；默认在规划资产完成后停下。
+- `manuscript.chapter`：只有作者明确要求落首章或试写开篇时才创建；创建时在同一次 `novel_create` 调用中提交章节标题与完整正文，不让作者先建立空章节容器。默认在规划资产完成后停下。
 
 人物、地点、灵感、伏笔和开放问题在没有专属 Asset 类型时，先作为概述或大纲中的自由文本章节保存，不发明工具不支持的类型，也不退回旧版平行文件和账本体系。
 
