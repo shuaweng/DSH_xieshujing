@@ -161,7 +161,7 @@ describe('NovelAnalysis', () => {
     const { ctx, agent, revisionId, provider } = await harness()
     const report = await ctx.novelAnalysis.scanChapter(agent, AssetId('chapter-analysis'), revisionId)
     expect(report).toMatchObject({
-      kind: 'noai-scan', revisionId, analyzerVersion: 'noai-rules/1',
+      kind: 'noai-scan', revisionId, analyzerVersion: 'noai-rules/2',
       sourceSessionId: agent.id, data: { version: 1, sampleLevel: 'insufficient', riskScore: 0 },
     })
     expect(provider.requests).toEqual([])

@@ -8,8 +8,8 @@ This experimental Host service owns exact-Revision chapter analysis and explicit
 
 ## Behavior
 
-- `scanChapter()` reads one retained `manuscript.chapter` Revision, runs bounded deterministic rules without a model, and upserts one `noai-scan` report for that exact Revision.
-- `reviewChapter()` asks the Novel Context Compiler for the closed `chapter-review` policy. The compiler freezes the requested chapter, deterministically related Chapter Outline / Book guidance, and the current workset under one exact V3 Manifest before the service starts a fresh one-shot Subagent with a read-only persona, `maxDepth: 1`, only the `skill` tool, and a strict structured-output schema.
+- `scanChapter()` reads one retained `manuscript.chapter` Revision, runs bounded deterministic rules without a model, and upserts one `noai-scan` report for that exact Revision. The workbench rules are adapted from the maintained Novel preset guard and cover repeated exposition/emphasis, templated transitions and rhythm, abstract emotion, generic imagery/scenery, POV/camera leakage, Markdown residue, promotional vocabulary, and related explainable patterns while preserving exact editable offsets.
+- `reviewChapter()` runs only after an explicit Start review or rerun action, then asks the Novel Context Compiler for the closed `chapter-review` policy. The compiler freezes the requested chapter, deterministically related Chapter Outline / Book guidance, and the current workset under one exact V3 Manifest before the service starts a fresh one-shot Subagent with a read-only persona, `maxDepth: 1`, only the `skill` tool, and a strict structured-output schema.
 - The reviewer loads the package-owned `chapter-review` Skill and scores plot, causality, character, pacing, hook, and style with evidence-bound findings. Authored material is explicitly marked untrusted and cannot widen worker authority.
 - A report is written only after the worker completes and the service validates every field and bound. A failed rerun leaves the previous successful `(project, asset, revision, kind)` report intact; a successful rerun replaces that one row.
 - `candidateWarning()` materializes a proposed chapter ChangeSet in memory and runs the same deterministic scanner. Material risk returns bounded advisory text for the caller to add to the current model turn; it does not persist a report or create another ChangeSet.
@@ -22,7 +22,7 @@ This experimental Host service owns exact-Revision chapter analysis and explicit
 
 #### What the model sees
 
-Only the dedicated reviewer sees the V3 Manifest compiled for the exact-Revision chapter and its deterministic related Assets. Only the dedicated preference worker sees the Manifest containing the exact Agent draft, exact user-final Revision, and exact current Book Style Profile. Both workers have fixed read-only personas, only the `skill` tool, and strict output contracts. The root Agent sees deterministic candidate warnings only when a proposed chapter crosses the configured threshold.
+Only the dedicated reviewer sees the V3 Manifest compiled for the exact-Revision chapter and its deterministic related Assets. Only the dedicated preference worker sees the Manifest containing the exact Agent draft, exact user-final Revision, and exact current Book Style Profile. Both workers have fixed read-only personas, only the `skill` tool, and strict output contracts. Reports stay out of ordinary prompt context; the root Agent can explicitly retrieve persisted review/NOAI reports for an exact chapter Revision through `novel_get_analysis`. It sees deterministic candidate warnings automatically only when a proposed chapter crosses the configured threshold.
 
 #### Token effect
 

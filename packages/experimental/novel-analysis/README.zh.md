@@ -8,8 +8,8 @@
 
 ## 行为
 
-- `scanChapter()` 读取一个已保留的 `manuscript.chapter` Revision，无需模型即可运行有边界的确定性规则，并为该精确 Revision upsert 一份 `noai-scan` 报告。
-- `reviewChapter()` 请求 Novel Context Compiler 的闭集 `chapter-review` 策略。编译器先把目标章节、确定关联的章纲/全书指导和当前工作集冻结进一份精确 V3 Manifest，再由服务启动一个全新 one-shot Subagent，使用只读 persona、`maxDepth: 1`、仅 `skill` 工具和严格的结构化输出 Schema。
+- `scanChapter()` 读取一个已保留的 `manuscript.chapter` Revision，无需模型即可运行有边界的确定性规则，并为该精确 Revision upsert 一份 `noai-scan` 报告。工作台规则从持续维护的小说 Preset guard 中适配，覆盖重复解释/强调、模板化转折与节奏、抽象情绪、泛化意象/景物、POV/镜头越权、Markdown 残留、宣传腔等可解释模式，同时保留可编辑的精确 offset。
+- `reviewChapter()` 只会在作者明确点击“开始审查”或重跑后执行，再请求 Novel Context Compiler 的闭集 `chapter-review` 策略。编译器先把目标章节、确定关联的章纲/全书指导和当前工作集冻结进一份精确 V3 Manifest，再由服务启动一个全新 one-shot Subagent，使用只读 persona、`maxDepth: 1`、仅 `skill` 工具和严格的结构化输出 Schema。
 - 审稿人加载包内 `chapter-review` Skill，并从情节、因果、人物、节奏、钩子和文风六个维度评分，问题必须绑定证据。作者材料被明确标为不可信内容，不能扩大 worker 权限。
 - 只有 worker 正常完成并且服务校验全部字段和边界后，报告才会写入。因此失败的重跑会保留旧的成功 `(project, asset, revision, kind)` 报告；成功重跑只替换这一行。
 - `candidateWarning()` 在内存中物化章节 ChangeSet 候选并运行同一确定性扫描。达到风险阈值时，它为调用方返回有边界的提示文字以加入当前模型 turn；它既不持久化报告，也不创建第二个 ChangeSet。
@@ -22,7 +22,7 @@
 
 #### 模型看到什么
 
-只有专用审稿 Subagent 会看到为精确 Revision 章节及其确定关联 Asset 编译的 V3 Manifest；只有专用偏好 worker 会看到包含精确 Agent 草稿、精确用户定稿和当前精确“本书风格”的 Manifest。两者都使用固定只读 persona、仅 `skill` 工具与严格输出契约。只有章节提案越过配置阈值时，根 Agent 才会看到确定性的候选提示。
+只有专用审稿 Subagent 会看到为精确 Revision 章节及其确定关联 Asset 编译的 V3 Manifest；只有专用偏好 worker 会看到包含精确 Agent 草稿、精确用户定稿和当前精确“本书风格”的 Manifest。两者都使用固定只读 persona、仅 `skill` 工具与严格输出契约。报告不会进入普通 Prompt 上下文；根 Agent 可以通过 `novel_get_analysis` 显式读取精确章节 Revision 的持久审查/NOAI 报告。只有章节提案越过配置阈值时，根 Agent 才会自动看到确定性的候选提示。
 
 #### Token 影响
 

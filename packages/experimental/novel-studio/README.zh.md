@@ -10,7 +10,7 @@
 
 - 应在现有 base 与 Web App 组合包之后加入本 bundle。它会先插入 Host Asset 类型注册表、独立的自由策划/全书指导 Host/Client contribution 与 `novel-repository-local`，随后加入 context、绑定 Revision 的分析服务、Remote、独立 Client adapter 和 `novel-workbench`。
 - 普通 `ui-layout` 始终是唯一根与布局服务拥有者。Novel Workbench 通过按 selector 路由的 `shell.workbench` chain 贡献按 preset 限定的 `novel` surface，因此原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染与 Session service 仍保持权威。
-- 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含需用户批准的 `novel_initialize_project`、`novel_list`、`novel_search`、`novel_create`、`novel_get`、`novel_propose_changes` 与 `novel_present`；不包含通用 shell 或文件系统修改工具。
+- 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含需用户批准的 `novel_initialize_project`、`novel_list`、`novel_search`、`novel_create`、`novel_get`、显式只读的 `novel_get_analysis`、`novel_propose_changes` 与 `novel_present`；不包含通用 shell 或文件系统修改工具。
 - 同一 Preset 通过标准按需 `skill` 工具挂载九个包内自包含写作/审稿 Skill：新书启动、大纲/beat 设计、章节执行、文风改写、文风审查、场景推进、对白诊断、精确 Revision 章节审稿与草稿/定稿偏好提取。每个 Skill 声明一个闭集 `novelContextPolicy`；Skill 可以教授方法并选择有边界的上下文策略，但不能扩大 Novel 工具权限。
 - 绑定 Revision 的分析服务为工作台提供确定性 NOAI 扫描、固定 one-shot 审稿人和固定 one-shot 偏好 worker。两者都只收到冻结的有界材料、`skill` 工具与严格 Schema，且不拥有 Asset 修改权限；只有面向用户的 Host 流程可以保留定稿，并通过 ChangeSet 应用已采纳候选。
 - `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
@@ -44,11 +44,11 @@ pnpm dsh --profile novel-studio --port 3080
 
 #### 模型看到的内容
 
-根模型看到 Novel persona、七个稳定 Novel 工具 Schema、标准 `skill` loader 及其紧凑九 Skill 目录，以及一份为当前显式任务编译的精确 V3 Context Manifest。普通 Turn 只保留显式材料和可见 Context Tray 坐标；被选中的写章、大纲、改写或审稿 Skill 只能按其闭集策略加入确定的类型关系，例如章纲、本书概述或本书风格。这些 Asset 只在当前请求进入上下文，不是隐藏常驻内容。审稿与满足条件的显式定稿分别把单独编译的冻结材料交给专用子 Agent；浏览器布局状态永远不会进入模型上下文。
+根模型看到 Novel persona、八个稳定 Novel 工具 Schema、标准 `skill` loader 及其紧凑九 Skill 目录，以及一份为当前显式任务编译的精确 V3 Context Manifest。普通 Turn 只保留显式材料和可见 Context Tray 坐标；持久分析报告不会自动注入，作者询问时根 Agent 可通过 `novel_get_analysis` 读取绑定精确章节 Revision 的报告。被选中的写章、大纲、改写或审稿 Skill 只能按其闭集策略加入确定的类型关系，例如章纲、本书概述或本书风格。这些 Asset 只在当前请求进入上下文，不是隐藏常驻内容。审稿与满足条件的显式定稿分别把单独编译的冻结材料交给专用子 Agent；浏览器布局状态永远不会进入模型上下文。
 
 #### Token 影响
 
-Preset 会加入 persona、七个 Novel Schema、一个 Skill Schema 与紧凑 Skill 目录摘要。只有被调用时，Skill 正文与策略选中的创作文本才会增加本次请求 token。精确重复项会折叠；可选关联文本达到编译预算后降级为坐标，而不是截断或永久注入。NOAI 按钮扫描不消耗 token；章节审稿和满足条件的显式定稿各使用一个有边界的子 Agent 请求。
+Preset 会加入 persona、八个 Novel Schema、一个 Skill Schema 与紧凑 Skill 目录摘要。只有被调用时，Skill 正文、显式读取的报告与策略选中的创作文本才会增加本次请求 token。精确重复项会折叠；可选关联文本达到编译预算后降级为坐标，而不是截断或永久注入。NOAI 按钮扫描不消耗 token；明确开始的章节审稿和满足条件的显式定稿各使用一个有边界的子 Agent 请求。
 
 #### KV Cache 影响
 

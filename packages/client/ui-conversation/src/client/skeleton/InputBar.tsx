@@ -287,6 +287,15 @@ export function InputBar({
     })
   }
 
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    const selection = input?.selection
+    if (el === null || selection === undefined || document.activeElement !== el) return
+    if (el.selectionStart === selection.start && el.selectionEnd === selection.end) return
+    el.setSelectionRange(selection.start, selection.end)
+    revealSelectionFocus(el)
+  }, [input?.selectionRestoreRevision])
+
   // Wheel chaining on the draft scrollport, one lifetime (it is never
   // unmounted — the inert state renders the same element disabled). While the
   // capped box can still move in this direction, keep the native scroll; only
@@ -446,6 +455,7 @@ export function InputBar({
     // selectionStart is number|null in lib.dom; the type-aware lint program narrows it.
     // oxlint-disable-next-line typescript/no-unnecessary-condition
     keyboard.track(next, e.target.selectionStart ?? next.length)
+    keyboard.reportSelection(selectionOf(e.target))
   }
 
   const onCopyOrCut = (e: React.ClipboardEvent<HTMLTextAreaElement>, cut: boolean): void => {
@@ -540,7 +550,7 @@ export function InputBar({
     // Any caret/selection gesture ends a live paste attempt (the machine
     // cannot observe DOM selection). Cheap no-op when none is live.
     if (keyboard !== undefined && keyboard.snapshot.paste !== undefined) keyboard.invalidatePaste()
-    void e
+    keyboard?.reportSelection(selectionOf(e.currentTarget))
   }
 
   // Button presses steal focus from the textarea; suppress at mousedown so

@@ -249,21 +249,12 @@ export function apply(ctx: Context): void {
         const conversation = ctx.get('conversation')
         if (conversation === undefined) throw new Error('novel workbench: conversation service is unavailable')
         const input = conversation.input.for(scoped)
-        let snapshot = input.state.getSnapshot()
-        if (snapshot.draft !== '' && !/\s$/u.test(snapshot.draft)) {
-          input.setDraft(`${snapshot.draft} `)
-          snapshot = input.state.getSnapshot()
-        }
         const display = `@${label}`
-        const inserted = input.insertReference({
+        const inserted = input.insertReferenceAtSelection({
           source: NOVEL_SELECTION_REFERENCE_SOURCE,
           ref: encodeComposerReference({ mention: reference.mention, clipboardText: display }),
           label,
           clipboardText: display,
-        }, {
-          start: snapshot.draft.length,
-          end: snapshot.draft.length,
-          draftRev: snapshot.draftRev,
         })
         if (!inserted) throw new Error('novel workbench: Composer rejected the SelectionRef insertion')
       },

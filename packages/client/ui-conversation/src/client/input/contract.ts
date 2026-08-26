@@ -33,6 +33,8 @@ export interface InputTarget {
 export interface SessionInput extends InputTarget {
   /** Single write path for draft text (all mutation rides machine events). */
   setDraft(text: string): void
+  /** Insert one structured reference at the live textarea selection retained for this Session. */
+  insertReferenceAtSelection(ref: ReferenceInsert): boolean
   /** Append ordered browser-owned image ids; busy admission phases refuse. */
   addImages(ids: readonly DraftAttachmentId[]): boolean
   /** Remove one browser-owned image id; busy admission phases refuse. */
@@ -100,6 +102,8 @@ export interface InputNotice {
 export interface ComposerKeyboard {
   /** Live machine state for event-handler reads (render reads go through useInput). */
   readonly snapshot: InputState
+  /** Report the live textarea selection for external structured-reference insertion. */
+  reportSelection(selection: EditSelection): void
   /** Draft write with the DOM-observed edit shape (narrows occurrence math). */
   setDraft(text: string, editRange?: EditRange): void
   /** Submit with an explicit delivery mode resolved by the keyboard policy. */
@@ -216,6 +220,10 @@ export interface InputState {
   readonly imageIds: readonly DraftAttachmentId[]
   /** Monotonic draft revision (span CAS compares against this). */
   readonly draftRev: number
+  /** Live DOM selection when the composer is mounted; absent in the pure input machine. */
+  readonly selection?: EditSelection
+  /** Changes only when an external insertion asks the mounted composer to restore that selection. */
+  readonly selectionRestoreRevision?: number
   readonly phase: 'plain' | 'adjudicating' | 'claimed' | 'submitting'
   /** Present exactly while claimed/submitting (claim snapshot during flight; submit closure withheld). */
   readonly claim?: { readonly token: string; readonly hint?: string; readonly images?: boolean }

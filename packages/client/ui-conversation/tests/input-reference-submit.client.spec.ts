@@ -33,6 +33,24 @@ function chip(shell: SessionInputShell): void {
 }
 
 describe('reference submission', () => {
+  it('inserts an external reference at the live composer selection', () => {
+    const shell = new SessionInputShell({
+      actx: {} as ClientContext,
+      defaultSink: vi.fn(),
+      commandImages,
+    })
+    shell.setDraft('前文后文')
+    shell.reportSelection({ start: 2, end: 2 })
+    expect(shell.insertReferenceAtSelection({
+      source: 'reference', ref: mention, label: 'Research', clipboardText: mention,
+    })).toBe(true)
+    expect(shell.snapshot).toMatchObject({
+      draft: '前文@Research 后文',
+      selection: { start: 12, end: 12 },
+      occurrences: [{ source: 'reference', offset: 2, length: 9 }],
+    })
+  })
+
   it('mirrors canonical reference text so a persisted draft remains resolvable after remount', async () => {
     const mirror = vi.fn()
     const first = new SessionInputShell({

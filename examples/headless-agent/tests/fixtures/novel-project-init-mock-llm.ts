@@ -4,6 +4,7 @@ import { CallId, LlmAdapter, type GenerateOptions, type StreamChunk } from '@dee
 const EXPECTED_TOOLS = [
   'novel_create',
   'novel_get',
+  'novel_get_analysis',
   'novel_initialize_project',
   'novel_list',
   'novel_present',
@@ -53,8 +54,25 @@ class NovelProjectInitMockAdapter extends LlmAdapter {
       return
     }
     if (textResult.includes('"title":"Untitled Chapter"')) {
-      const [chapter] = JSON.parse(textResult) as Array<{ assetId: string; revisionId: string }>
+      const [chapter] = JSON.parse(textResult) as Array<{ reference: string }>
       if (chapter === undefined) throw new Error('blank chapter search result was empty')
+      const args = JSON.stringify({ references: [chapter.reference], kinds: ['chapter-review'] })
+      yield { type: 'block-start', index: 0, blockType: 'tool-call' }
+      yield { type: 'tool-call-delta', index: 0, id: CallId('novel-analysis-call'), name: 'novel_get_analysis', argumentsDelta: args }
+      yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: CallId('novel-analysis-call'), name: 'novel_get_analysis', arguments: args } }
+      yield { type: 'usage', usage: { inputTokens: 18, outputTokens: 3 } }
+      yield { type: 'finish', reason: { kind: 'tool-calls' } }
+      return
+    }
+    if (textResult === '[]') {
+      const searchResult = options.messages.flatMap(message => message.content)
+        .filter(block => block.type === 'tool-result')
+        .flatMap(block => block.content)
+        .filter(block => block.type === 'text')
+        .map(block => block.text)
+        .find(text => text.includes('"title":"Untitled Chapter"'))
+      const [chapter] = JSON.parse(searchResult ?? '[]') as Array<{ assetId: string; revisionId: string }>
+      if (chapter === undefined) throw new Error('blank chapter search result was not retained')
       const args = JSON.stringify({
         project_id: 'project-white-harbor',
         asset_id: chapter.assetId,

@@ -17,7 +17,7 @@ import type {
   PasteComponent, QueuedMessage, SessionInput, SubmitAttempt,
 } from './contract.ts'
 import type { InputSubmitMode } from '../contract/composer-submission.ts'
-import { InputMachine, projectClipboard } from './machine.ts'
+import { InputMachine, projectClipboard, referenceDraftText } from './machine.ts'
 
 /** Popup face the shell needs (dismissal only; typed structurally to avoid a value import). */
 export interface PopupDismissFace {
@@ -97,6 +97,8 @@ export class SessionInputShell implements SessionInput {
   // Real wall clock: the typing-run merge window must actually expire in
   // production (the machine's no-clock default is a constant for pure tests).
   private readonly core = new InputMachine({ now: () => Date.now() })
+  private selection: EditSelection = { start: 0, end: 0 }
+  private selectionRestoreRevision = 0
   private noticeSeq = 0
   private lastMirroredDraft = ''
   private imageIds: readonly DraftAttachmentId[] = []
@@ -121,6 +123,25 @@ export class SessionInputShell implements SessionInput {
    */
   setDraft(text: string, editRange?: EditRange): void {
     this.run(this.core.dispatch({ type: 'draft-changed', draft: text, ...(editRange !== undefined ? { editRange } : {}) }))
+  }
+
+  /** Insert one reference at the last selection reported by the mounted composer. */
+  insertReferenceAtSelection(ref: ReferenceInsert): boolean {
+    const snapshot = this.snapshot
+    const start = Math.min(this.selection.start, snapshot.draft.length)
+    const end = Math.min(Math.max(start, this.selection.end), snapshot.draft.length)
+    const before = snapshot.draftRev
+    const tail = snapshot.draft.slice(end)
+    const gap = tail.length === 0 || tail[0] !== ' ' ? 1 : 0
+    this.run(this.core.dispatch({
+      type: 'insert-ref', reference: ref, span: { start, end, draftRev: before },
+    }))
+    if (this.snapshot.draftRev === before) return false
+    const caret = start + referenceDraftText(ref).length + gap
+    this.selection = { start: caret, end: caret }
+    this.selectionRestoreRevision += 1
+    this.publish()
+    return true
   }
 
   /** Append ordered image ids unless an admission transaction is locked. */
@@ -401,6 +422,19 @@ export class SessionInputShell implements SessionInput {
   }
 
   /**
+   * Retain the live DOM selection without changing the draft or its undo history.
+   * @param selection - current textarea selection in draft UTF-16 coordinates.
+   */
+  reportSelection(selection: EditSelection): void {
+    const length = this.core.state.draft.length
+    const start = Math.min(Math.max(0, selection.start), length)
+    const end = Math.min(Math.max(start, selection.end), length)
+    if (start === this.selection.start && end === this.selection.end) return
+    this.selection = { start, end }
+    this.publish()
+  }
+
+  /**
    * Bind the draft persistence mirror (chat store write). Adopt-on-bind: the
    * store draft may hold a persisted value from a previous mount; the caller
    * seeds it via setDraft BEFORE binding, and afterwards every machine-adopted
@@ -590,7 +624,13 @@ export class SessionInputShell implements SessionInput {
 
   private compose(): InputState {
     const core = this.core.state
-    return { ...core, imageIds: this.imageIds, queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE }
+    return {
+      ...core,
+      imageIds: this.imageIds,
+      selection: this.selection,
+      ...(this.selectionRestoreRevision === 0 ? {} : { selectionRestoreRevision: this.selectionRestoreRevision }),
+      queue: this.deps.queue?.getSnapshot() ?? EMPTY_QUEUE,
+    }
   }
 
   private publish(): void {

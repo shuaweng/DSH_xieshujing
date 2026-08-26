@@ -258,22 +258,10 @@ export function Canvas({
     finally { setAnalysisBusy(false) }
   }
 
-  const openChapterReview = async () => {
+  const openChapterReview = () => {
     if (sessionId === undefined || state.document === undefined || state.document.type !== 'manuscript.chapter') return
     setAnalysisMode('chapter-review')
     setAnalysisError(undefined)
-    setAnalysisBusy(true)
-    try {
-      const document = await persist()
-      if (document === undefined) return
-      const existing = await analysisReports(sessionId, document.id, document.revisionId)
-      analysisEpoch.current += 1
-      setReports(existing)
-      if (existing.some(report => report.kind === 'chapter-review')) return
-      const report = await reviewChapter(sessionId, document.id, document.revisionId)
-      setReports(previous => [...previous.filter(item => item.kind !== 'chapter-review'), report])
-    } catch (cause: unknown) { setAnalysisError(errorMessage(cause)) }
-    finally { setAnalysisBusy(false) }
   }
 
   const markFinal = async () => {
@@ -339,7 +327,7 @@ export function Canvas({
     analysisMode={analysisMode} analysisBusy={analysisBusy}
     openChapterOutline={() => { setChapterOutlineOpen(true) }}
     runNoAi={() => { void runAnalysis('noai-scan') }}
-    runReview={() => { void openChapterReview() }}
+    runReview={() => { openChapterReview() }}
     setSkin={actions.setReaderSkin} setFont={actions.setReaderFont} setFontSize={actions.setReaderFontSize} t={t}
   />
   return <div className={css.editorShell} data-reader-shell="">
@@ -588,13 +576,16 @@ function AnalysisDrawer({ kind, revisionId, report, busy, error, rerun, close, t
       <header className={css.analysisHeader}>
         <div><strong>{t(kind === 'chapter-review' ? 'chapterReview' : 'noAiScan')}</strong>
           <small>{t('boundRevision')} · {shortRevisionId(revisionId)}</small></div>
-        <div><button type="button" disabled={busy} onClick={rerun}>{busy ? t('analyzing') : t('rerunAnalysis')}</button>
+        <div>{report !== undefined && <button type="button" disabled={busy} onClick={rerun}>{busy ? t('analyzing') : t('rerunAnalysis')}</button>}
           <button type="button" onClick={close}>{t('collapseChapterOutline')} ›</button></div>
       </header>
       {error !== undefined && <p className={css.chapterOutlineError} role="alert">{error}</p>}
       <div className={css.analysisBody}>
         {busy && report === undefined && <p className={css.analysisEmpty}>{t('analyzing')}</p>}
-        {!busy && report === undefined && error === undefined && <p className={css.analysisEmpty}>{t('noAnalysisReport')}</p>}
+        {!busy && report === undefined && error === undefined && <div className={css.analysisEmpty}>
+          <p>{t(kind === 'chapter-review' ? 'reviewReady' : 'noAnalysisReport')}</p>
+          {kind === 'chapter-review' && <button type="button" onClick={rerun}>{t('startReview')}</button>}
+        </div>}
         {report !== undefined && <>
           <div className={css.analysisMeta}><span>{new Date(report.generatedAt).toLocaleString()}</span>
             <span>{report.analyzerVersion}</span></div>

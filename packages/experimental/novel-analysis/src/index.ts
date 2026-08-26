@@ -25,7 +25,7 @@ import { scanNoAi, type NoAiScanOptions, type NoAiScanReport } from './noai.ts'
 
 export * from './noai.ts'
 
-const NOAI_ANALYZER_VERSION = 'noai-rules/1'
+const NOAI_ANALYZER_VERSION = 'noai-rules/2'
 const REVIEW_ANALYZER_VERSION = 'chapter-review/1'
 const PREFERENCE_EXTRACTOR_VERSION = 'final-preference/1'
 const DEFAULT_MIN_CHARACTERS = 300

@@ -151,7 +151,7 @@ describe('Novel model tools', () => {
   it('registers discovery, exact-read, and proposal tools with explicit proposal guidance', async () => {
     const { ctx, agent } = await harness()
     expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('novel_')).sort())
-      .toEqual(['novel_create', 'novel_get', 'novel_initialize_project', 'novel_list', 'novel_present', 'novel_propose_changes', 'novel_search'])
+      .toEqual(['novel_create', 'novel_get', 'novel_get_analysis', 'novel_initialize_project', 'novel_list', 'novel_present', 'novel_propose_changes', 'novel_search'])
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.ctx })
     expect(renderPrompt(assembly)).toContain('never means the file changed')
 
@@ -425,6 +425,39 @@ describe('Novel model tools', () => {
     expect(read.isError).toBe(false)
     if (read.isError) throw new Error('expected created chapter read success')
     expect(JSON.stringify(read.value)).toContain('风火轮已经照亮天门')
+  })
+
+  it('reads persisted analysis only for the requested exact chapter Revision', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
+    if (project === undefined) throw new Error('expected Novel Project')
+    await ctx.novelRepository.putAnalysisReport(project, {
+      assetId: AssetId('chapter-tool'),
+      revisionId,
+      kind: 'chapter-review',
+      analyzerVersion: 'chapter-review/1',
+      generatedAt: '2026-08-27T00:00:00.000Z',
+      data: { overallScore: 72, verdict: '章末钩子偏弱' },
+      sourceSessionId: agent.id,
+    })
+    const reference = encodeNovelReferenceUri({
+      projectId: ProjectId('project-tool'), assetId: AssetId('chapter-tool'), revisionId, label: 'Tool Chapter',
+    })
+
+    const result = await execute(ctx, agent, 'novel_get_analysis', {
+      references: [reference], kinds: ['chapter-review'],
+    })
+    if (result.isError) throw new Error(`expected analysis read success: ${JSON.stringify(result)}`)
+    expect(result.value).toEqual({ reports: [{
+      projectId: 'project-tool',
+      assetId: 'chapter-tool',
+      revisionId,
+      title: 'Tool Chapter',
+      kind: 'chapter-review',
+      analyzerVersion: 'chapter-review/1',
+      generatedAt: '2026-08-27T00:00:00.000Z',
+      dataJson: JSON.stringify({ overallScore: 72, verdict: '章末钩子偏弱' }),
+    }] })
   })
 
   it('proposes writing into an existing empty manuscript chapter', async () => {

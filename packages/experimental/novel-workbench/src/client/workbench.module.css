@@ -168,7 +168,11 @@
 .analysisHeader button:disabled { opacity: .45; cursor: progress; }
 .finalBadge { padding: 2px 7px; border-radius: 999px; color: var(--novel-accent); background: color-mix(in srgb, var(--novel-accent) 10%, transparent); font-size: 10px; font-weight: 650; }
 .analysisBody { min-height: 0; flex: 1; overflow: auto; padding: 22px 24px 48px; }
-.analysisEmpty { margin: 30px 0; color: var(--novel-chrome-muted); text-align: center; }
+.analysisEmpty { display: grid; max-width: 360px; gap: 16px; justify-items: center; margin: 56px auto 0; color: var(--novel-chrome-muted); text-align: center; }
+.analysisEmpty p { margin: 0; font-size: 13px; line-height: 1.75; }
+.analysisEmpty button { padding: 9px 18px; border: 1px solid var(--novel-accent); border-radius: 7px; color: white; background: var(--novel-accent); box-shadow: 0 5px 14px color-mix(in srgb, var(--novel-accent) 18%, transparent); cursor: pointer; }
+.analysisEmpty button:hover { filter: brightness(.96); }
+.analysisEmpty button:disabled { opacity: .5; cursor: progress; }
 .analysisMeta { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 15px; color: var(--novel-chrome-muted); font-size: 10px; }
 .preferenceNotice { padding: 14px; border: 1px solid var(--novel-chrome-border); border-radius: 9px; color: var(--novel-chrome-muted); background: var(--novel-chrome-strong); line-height: 1.65; }
 .preferenceSummary { margin: 0 0 12px; font-size: 15px; }

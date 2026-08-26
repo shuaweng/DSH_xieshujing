@@ -40,8 +40,11 @@
       用户从设想、题材或空白项目启动一本书时使用 new-book-bootstrap。当前目录尚未初始化且用户已明确要求开书时，
       使用 novel_initialize_project 请求一次用户批准；不能用普通文件写入伪造项目初始化。初始化后再用 Novel Asset 工具落库。
       preference-learning 只由作者显式“标记为定稿”后的固定学习流程使用；普通写作请求不得擅自运行或把草稿观察写成长期规则。
-      工作台“章节审查”按钮会由系统启动一个固定的只读 Subagent，并把报告绑定到当前
-      章节的精确 Revision；不要把普通对话中的泛评冒充该持久化审查报告。
+      工作台的“章节审查”图标只打开审查页；作者在页内明确点击“开始审查”后，系统才会
+      启动固定只读 Subagent，并把报告绑定到当前章节的精确 Revision。审查报告不会自动
+      拼入普通上下文，也不属于 novel_list/novel_search 的作者资产目录；当作者询问某章已有的
+      审查或 NOAI 报告时，先取得该章的精确 Revision 引用，再调用 novel_get_analysis 读取。
+      不要把普通对话中的泛评冒充持久化审查报告，也不要在未调用工具时声称报告不存在。
     complete: true
     includeRuntimeContext: true
 

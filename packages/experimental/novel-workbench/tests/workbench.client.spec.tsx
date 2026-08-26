@@ -738,8 +738,10 @@ describe('Canvas', () => {
     fireEvent.click(within(noAi).getByText(`${zh.collapseChapterOutline} ›`))
 
     fireEvent.click(view.getByRole('button', { name: zh.chapterReview }))
-    await waitFor(() => { expect(reviewChapter).toHaveBeenCalledWith(SID, saved.id, saved.revisionId) })
     const review = view.getByRole('dialog', { name: zh.chapterReview })
+    expect(reviewChapter).not.toHaveBeenCalled()
+    fireEvent.click(within(review).getByRole('button', { name: zh.startReview }))
+    await waitFor(() => { expect(reviewChapter).toHaveBeenCalledWith(SID, saved.id, saved.revisionId) })
     expect(within(review).getByText('72')).toBeTruthy()
     expect(within(review).getByText('推进清楚，但章末钩子偏弱。')).toBeTruthy()
   })
@@ -1529,24 +1531,19 @@ describe('Novel workbench stores and browser assembly', () => {
     expect(() => { canvasFace.appendReference(SID, selection(), '[新句]') }).toThrow(/no browser scope/u)
     sessionScope.value = {}
     expect(() => { canvasFace.appendReference(SID, selection(), '[新句]') }).toThrow(/conversation service is unavailable/u)
-    let draft = ''
+    let draft = '前后'
     let draftRev = 0
-    const setDraft = vi.fn((value: string) => { draft = value; draftRev += 1 })
-    const insertReference = vi.fn((reference: ReferenceInsert, span: { start: number; end: number; draftRev: number }) => {
-      if (span.draftRev !== draftRev) return false
-      draft = `${draft.slice(0, span.start)}@${reference.label} ${draft.slice(span.end)}`
+    const insertReferenceAtSelection = vi.fn((reference: ReferenceInsert) => {
+      draft = `${draft.slice(0, 1)}@${reference.label} ${draft.slice(1)}`
       draftRev += 1
       return true
     })
     ctx.provide('conversation', {
-      input: { for: () => ({ state: { getSnapshot: () => ({ draft, draftRev }) }, setDraft, insertReference }) },
+      input: { for: () => ({ state: { getSnapshot: () => ({ draft, draftRev }) }, insertReferenceAtSelection }) },
     } as never)
     canvasFace.appendReference(SID, selection(), '[新句]')
-    draft = 'four'
-    draftRev += 1
-    canvasFace.appendReference(SID, selection(), '[新句]')
-    expect(setDraft.mock.calls.map(call => call[0])).toEqual(['four '])
-    const inserted = insertReference.mock.calls[0]![0]
+    expect(draft).toBe('前@[新句] 后')
+    const inserted = insertReferenceAtSelection.mock.calls[0]![0]
     expect(inserted).toMatchObject({ source: 'novel-selection', label: '[新句]', clipboardText: '@[新句]' })
     if (referenceSource?.codec === undefined) throw new Error('Novel reference source was not registered')
     await expect(referenceSource.codec.serialize(inserted.ref, new AbortController().signal)).resolves.toBe(selection().mention)

@@ -13,7 +13,7 @@ const expectedPath = fileURLToPath(new URL('./novel-project-init-snapshots/sessi
 const refreshing = process.env.DSH_SNAPSHOT === 'refresh'
 
 describe('Novel Project initialization model snapshot', () => {
-  it('exposes the seven-tool roster and proposes prose for a blank chapter after initialization', async () => {
+  it('exposes the eight-tool roster and proposes prose for a blank chapter after initialization', async () => {
     let normalized = ''
     const result = await runLoaderSmoke({
       label: 'novel project initialization snapshot',
@@ -51,6 +51,7 @@ describe('Novel Project initialization model snapshot', () => {
     expect(normalized).toContain('novel_initialize_project')
     expect(normalized).toContain('novel_create')
     expect(normalized).toContain('novel_search')
+    expect(normalized).toContain('novel_get_analysis')
     expect(normalized).toContain('novel_propose_changes')
     expect(normalized).toContain('insert-text')
     expect(normalized).toContain('update-title')

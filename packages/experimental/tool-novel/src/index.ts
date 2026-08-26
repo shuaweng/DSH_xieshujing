@@ -10,6 +10,7 @@ import {
   ProjectId,
   RevisionId,
   type NovelAssetContent,
+  type NovelAnalysisReportKind,
   type NovelAssetType,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type {} from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
@@ -31,6 +32,8 @@ and the exact creation formats, or \`novel_search\` when a title or content clue
 When the user explicitly asks to start a new book and the Session directory is not yet
 a Novel Project, use \`novel_initialize_project\`; it requests approval before writing.
 Search only discovers exact current references; read chosen results with \`novel_get\`.
+Use \`novel_get_analysis\` when the author asks about a persisted chapter review or
+NOAI report; reports are read explicitly and are not hidden prompt context.
 Use \`novel_create\` for new typed Assets; never invent a file path. A newly requested
 chapter is created directly as \`manuscript.chapter\` with its complete prose body in
 the same call; never ask the author to create an empty chapter container first. Use
@@ -269,6 +272,70 @@ export function apply(ctx: Context): void {
       }
     },
     presentCall: args => ({ card: 'generic', title: '读取小说资产', kind: 'read', rawInput: args.references }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'novel_get_analysis',
+    description: 'Read persisted chapter-review or NOAI reports for exact retained chapter Revision references. Reports are derived analysis, not authored Assets or automatic prompt context.',
+    parameters: {
+      references: { type: 'array', required: true, items: { type: 'string' }, description: 'Canonical dsh-novel: chapter Revision URIs from novel_list, novel_search, or the current context.' },
+      kinds: { type: 'array', items: { type: 'string', enum: ['chapter-review', 'noai-scan'] }, description: 'Optional report-kind allowlist.' },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          reports: {
+            type: 'array', required: true,
+            items: {
+              type: 'object', additionalProperties: false,
+              properties: {
+                projectId: { type: 'string', required: true },
+                assetId: { type: 'string', required: true },
+                revisionId: { type: 'string', required: true },
+                title: { type: 'string', required: true },
+                kind: { type: 'string', required: true, enum: ['chapter-review', 'noai-scan'] },
+                analyzerVersion: { type: 'string', required: true },
+                generatedAt: { type: 'string', required: true },
+                dataJson: { type: 'string', required: true },
+              },
+            },
+          },
+        },
+      },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value.reports) }],
+    },
+    async execute(args, exec) {
+      if (!exec.agent) throw new Error('novel_get_analysis requires an owning agent Session')
+      if (args.references.length === 0) throw new Error('novel_get_analysis requires at least one reference')
+      const resolved = await ctx.novelContextResolver.resolveReferences(
+        exec.agent, args.references.map(value => decodeNovelReferenceUri(value)), exec.signal,
+      )
+      const catalog = await ctx.novelRepository.listAssets(
+        resolved.project, exec.signal, ctx.sandboxPolicy.resolve({ session: exec.agent.session }),
+      )
+      const titles = new Map(catalog.map(summary => [summary.asset.id, summary.title]))
+      const kinds = args.kinds === undefined
+        ? undefined
+        : new Set(args.kinds as NovelAnalysisReportKind[])
+      const groups = await Promise.all(resolved.references.map(async (reference) => {
+        const reports = await ctx.novelRepository.listAnalysisReports(
+          resolved.project, reference.input.assetId, reference.input.revisionId, exec.signal,
+        )
+        return reports.filter(report => kinds?.has(report.kind) ?? true).map(report => ({
+          projectId: report.projectId,
+          assetId: report.assetId,
+          revisionId: report.revisionId,
+          title: titles.get(reference.input.assetId) ?? reference.input.assetId,
+          kind: report.kind,
+          analyzerVersion: report.analyzerVersion,
+          generatedAt: report.generatedAt,
+          dataJson: JSON.stringify(report.data),
+        }))
+      }))
+      return { reports: groups.flat() }
+    },
+    presentCall: args => ({ card: 'generic', title: '读取小说分析报告', kind: 'read', rawInput: args.references }),
   }))
 
   ctx.tools.register(defineTool({

@@ -42,7 +42,7 @@
 | `@deepseek-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`、`ctx.systemPrompt`、`a live continuable in-process child Agent` | `tool/call`、`tool/result`、`a user-role message in the direct parent session` | - | 按可继续的进程内子级注册，而非全局注册，因此该 schema 仅在这种子级内部可见，并且不受其全局 `toolFilter` 影响。同一份贡献还会安装子级作用域的 `tool:report` 系统提示词 section，本目录不渲染该 section。面向父级的 `send_message` 工具单独安装。 |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `followup_task`、`interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 这 10 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
-| `@deepseek-ai/dsh-experimental-tool-novel` | `novel_create`、`novel_get`、`novel_list`、`novel_present`、`novel_propose_changes`、`novel_search` | `ctx.tools`、`ctx.systemPrompt`、`ctx.novelContextResolver`、`ctx.novelAnalysis`、`ctx.novelRepository`、`ctx.novelAssetTypes`、`ctx.fs`、`ctx.sandboxPolicy`、`ctx.subagents`、`an owning Agent Session at execution time` | `tool/call`、`durable proposal-only ChangeSet from novel_propose_changes`、`deferred NOAI candidate feedback in the Session log`、`tool/result` | - | Novel Studio Preset 提供 6 个稳定工具，但不提供通用文件系统修改能力。`novel_list` 发现类型化 Asset 及其创建格式，`novel_search` 返回有边界的词法匹配，`novel_create` 安全创建已注册的 Asset 类型，`novel_get` 解析精确保留 Revision，`novel_propose_changes` 只创建可审阅 ChangeSet，`novel_present` 则在不触碰作者文件的前提下改变工作台展示。 |
+| `@deepseek-ai/dsh-experimental-tool-novel` | `novel_create`、`novel_get`、`novel_get_analysis`、`novel_initialize_project`、`novel_list`、`novel_present`、`novel_propose_changes`、`novel_search` | `ctx.tools`、`ctx.systemPrompt`、`ctx.novelContextResolver`、`ctx.novelAnalysis`、`ctx.novelRepository`、`ctx.novelAssetTypes`、`ctx.fs`、`ctx.sandboxPolicy`、`ctx.subagents`、`an owning Agent Session at execution time` | `tool/call`、`durable proposal-only ChangeSet from novel_propose_changes`、`deferred NOAI candidate feedback in the Session log`、`tool/result` | - | Novel Studio Preset 提供 8 个稳定工具，但不提供通用文件系统修改能力。`novel_list` 发现类型化 Asset 及其创建格式，`novel_search` 返回有边界的词法匹配，`novel_create` 安全创建已注册的 Asset 类型，`novel_get` 解析精确保留 Revision，`novel_get_analysis` 显式读取绑定 Revision 的派生报告，`novel_propose_changes` 只创建可审阅 ChangeSet，`novel_present` 则在不触碰作者文件的前提下改变工作台展示。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
@@ -2099,6 +2099,62 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 来源：[`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
 
+### `novel_get_analysis`
+
+读取绑定于精确保留章节 Revision 的持久化章节审查或 NOAI 报告。报告是派生分析，不属于作者 Asset，也不会自动进入 Prompt 上下文。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "references": {
+      "type": "array",
+      "description": "Canonical dsh-novel: chapter Revision URIs from novel_list, novel_search, or the current context.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "kinds": {
+      "type": "array",
+      "description": "Optional report-kind allowlist.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "chapter-review",
+          "noai-scan"
+        ]
+      }
+    }
+  },
+  "required": [
+    "references"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
+
+### `novel_initialize_project`
+
+在用户明确批准后，把当前 Session 工作目录初始化为 Novel Project。它会保留已有文件，只创建 Repository 拥有的项目元数据和空内容根。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Author-visible title of the book."
+    }
+  },
+  "required": [
+    "title"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
+
 ### `novel_list`
 
 列出当前 Session 的 Novel Project、类型化 Asset、精确引用及已注册的创建格式。
@@ -2217,7 +2273,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 来源：[`packages/experimental/tool-novel/src/index.ts`](../packages/experimental/tool-novel/src/index.ts)
 
-Novel Studio Preset 提供 6 个稳定工具，但不提供通用文件系统修改能力。`novel_list` 发现类型化 Asset 及其创建格式，`novel_search` 返回有边界的词法匹配，`novel_create` 安全创建已注册的 Asset 类型，`novel_get` 解析精确保留 Revision，`novel_propose_changes` 只创建可审阅 ChangeSet，`novel_present` 则在不触碰作者文件的前提下改变工作台展示。
+Novel Studio Preset 提供 8 个稳定工具，但不提供通用文件系统修改能力。`novel_list` 发现类型化 Asset 及其创建格式，`novel_search` 返回有边界的词法匹配，`novel_create` 安全创建已注册的 Asset 类型，`novel_get` 解析精确保留 Revision，`novel_get_analysis` 显式读取绑定 Revision 的派生报告，`novel_propose_changes` 只创建可审阅 ChangeSet，`novel_present` 则在不触碰作者文件的前提下改变工作台展示。
 
 
 <a id="deepseek-aidsh-tool-todo"></a>
