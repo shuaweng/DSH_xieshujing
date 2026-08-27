@@ -1,8 +1,8 @@
 # Agent Note: Novel Asset order
 
-English | [中文](2026-08-27-novel-asset-order.zh.md)
-
 Status: implemented
+
+English | [中文](2026-08-27-novel-asset-order.zh.md)
 
 ## Problem
 

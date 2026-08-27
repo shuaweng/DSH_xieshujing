@@ -38,8 +38,19 @@ export function createBookStyleProfileRenderer(t: OutlineTranslate): NovelAssetR
   )
 }
 
+/** Create the project-singleton confirmed Story State renderer. */
+export function createBookStoryStateRenderer(t: OutlineTranslate): NovelAssetRendererDefinition {
+  return freeformRenderer(
+    'book.story-state',
+    t('bookStoryStateEditor'),
+    t('bookStoryStatePlaceholder'),
+    bookStoryStateContent,
+    t,
+  )
+}
+
 function freeformRenderer(
-  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile',
+  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile' | 'book.story-state',
   label: string,
   placeholder: string,
   decode: (value: NovelWireValue) => {
@@ -153,9 +164,13 @@ function bookStyleProfileContent(value: NovelWireValue): { body: string; withBod
   return exactFreeformContent(value, 'book-style-profile')
 }
 
+function bookStoryStateContent(value: NovelWireValue): { body: string; withBody: (body: string) => NovelWireValue } {
+  return exactFreeformContent(value, 'book-story-state')
+}
+
 function exactFreeformContent(
   value: NovelWireValue,
-  kind: 'book-brief' | 'book-style-profile',
+  kind: 'book-brief' | 'book-style-profile' | 'book-story-state',
 ): { body: string; withBody: (body: string) => NovelWireValue } {
   if (!isRecord(value) || value['kind'] !== kind || typeof value['body'] !== 'string') {
     throw new Error(`novel planning renderer: incompatible ${kind} content`)

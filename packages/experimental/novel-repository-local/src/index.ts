@@ -16,6 +16,7 @@ import NovelRepository, {
   AssetId,
   NovelRepositoryError,
   PreferenceCandidateId,
+  StoryStateCandidateId,
   ProjectId,
   RevisionId,
   SelectionRefId,
@@ -33,7 +34,9 @@ import NovelRepository, {
   type NovelProjectSnapshot,
   type NovelAnalysisReport,
   type NovelPreferenceCandidate,
+  type NovelStoryStateCandidate,
   type PutNovelPreferenceCandidateRequest,
+  type PutNovelStoryStateCandidateRequest,
   type RevisionFinalization,
   type NovelSelectionInput,
   type ProposeChangeSetRequest,
@@ -358,7 +361,7 @@ export class LocalNovelRepository extends NovelRepository {
       const catalog = await this.scan(project, state, signal, sandboxPolicy)
       this.ctx.novelAssetTypes.get(request.type)
       const current = [...catalog.values()]
-        .filter(value => value.summary.asset.type === request.type)
+        .filter(value => sameAssetType(value.summary.asset.type, request.type))
         .map(value => value.summary.asset.id)
       const received = [...request.orderedAssetIds]
       if (received.length !== current.length || new Set(received).size !== received.length) {
@@ -634,6 +637,92 @@ export class LocalNovelRepository extends NovelRepository {
         candidateId, decision, new Date().toISOString(), decidedBySessionId, result,
       )
       if (decided === undefined) throw new NovelRepositoryError('novel repository: preference candidate not found', 'NOVEL_PREFERENCE_CANDIDATE_NOT_FOUND')
+      return structuredClone(decided)
+    })
+  }
+
+  override async putStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    request: PutNovelStoryStateCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const chapter = this.snapshotFromHistory(project, state, request.assetId, request.finalRevisionId)
+      if (!sameAssetType(chapter.asset.type, 'manuscript.chapter')) {
+        throw new NovelRepositoryError('novel repository: Story State source is not manuscript.chapter', 'NOVEL_STORY_STATE_CANDIDATE_INVALID')
+      }
+      const target = this.snapshotFromHistory(
+        project, state, request.targetStoryStateAssetId, request.targetStoryStateRevisionId,
+      )
+      if (!sameAssetType(target.asset.type, 'book.story-state')) {
+        throw new NovelRepositoryError('novel repository: Story State target is not book.story-state', 'NOVEL_STORY_STATE_CANDIDATE_INVALID')
+      }
+      validateStoryStateCandidateInput(request, this.config.analysisReportMaxBytes)
+      return structuredClone(state.history.putStoryStateCandidate({
+        id: StoryStateCandidateId(`story_state_${randomUUID()}`),
+        projectId: project.id,
+        ...request,
+        status: 'pending',
+      }))
+    })
+  }
+
+  override async listStoryStateCandidates(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    finalRevisionId: RevisionIdValue,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelStoryStateCandidate[]> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      this.snapshotFromHistory(project, state, assetId, finalRevisionId)
+      return state.history.storyStateCandidates(project.id, assetId, finalRevisionId)
+        .map(value => structuredClone(value))
+    })
+  }
+
+  override async readStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: StoryStateCandidateId,
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const value = state.history.storyStateCandidate(candidateId)
+      if (value === undefined || value.projectId !== project.id) {
+        throw new NovelRepositoryError('novel repository: Story State candidate not found', 'NOVEL_STORY_STATE_CANDIDATE_NOT_FOUND')
+      }
+      return structuredClone(value)
+    })
+  }
+
+  override async decideStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: StoryStateCandidateId,
+    decision: 'accepted' | 'rejected',
+    decidedBySessionId: RevisionFinalization['finalizedBySessionId'],
+    result?: { readonly changeSetId: ChangeSetId; readonly revisionId: RevisionIdValue },
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    return await this.withProject(project, (state) => {
+      signal?.throwIfAborted()
+      const current = state.history.storyStateCandidate(candidateId)
+      if (current === undefined || current.projectId !== project.id) {
+        throw new NovelRepositoryError('novel repository: Story State candidate not found', 'NOVEL_STORY_STATE_CANDIDATE_NOT_FOUND')
+      }
+      if (decision === 'accepted' && result === undefined) {
+        throw new NovelRepositoryError(
+          'novel repository: accepted Story State requires applied ChangeSet lineage',
+          'NOVEL_STORY_STATE_CANDIDATE_INVALID',
+        )
+      }
+      const decided = state.history.decideStoryStateCandidate(
+        candidateId, decision, new Date().toISOString(), decidedBySessionId, result,
+      )
+      if (decided === undefined) {
+        throw new NovelRepositoryError('novel repository: Story State candidate not found', 'NOVEL_STORY_STATE_CANDIDATE_NOT_FOUND')
+      }
       return structuredClone(decided)
     })
   }
@@ -1472,7 +1561,7 @@ function orderedSummaries(
     .sort((left, right) => {
       const leftAsset = left.summary.asset
       const rightAsset = right.summary.asset
-      if (leftAsset.type === rightAsset.type) {
+      if (sameAssetType(leftAsset.type, rightAsset.type)) {
         const typeIndexes = indexes.get(leftAsset.type)
         const leftIndex = typeIndexes?.get(leftAsset.id)
         const rightIndex = typeIndexes?.get(rightAsset.id)
@@ -1664,6 +1753,31 @@ function validatePreferenceCandidateInput(
   }
   if (new TextEncoder().encode(JSON.stringify(request)).byteLength > maxBytes) {
     throw new NovelRepositoryError('novel repository: preference candidate is too large', 'NOVEL_ASSET_TOO_LARGE')
+  }
+}
+
+function validateStoryStateCandidateInput(
+  request: PutNovelStoryStateCandidateRequest,
+  maxBytes: number,
+): void {
+  if (request.extractorVersion.length === 0 || request.extractorVersion.length > 100
+    || request.extractorVersion !== request.extractorVersion.trim()
+    || !Number.isFinite(Date.parse(request.generatedAt))) {
+    throw new NovelRepositoryError('novel repository: Story State extractor provenance is invalid', 'NOVEL_STORY_STATE_CANDIDATE_INVALID')
+  }
+  if (request.summary.trim().length === 0 || request.summary.length > 1_000
+    || request.replacementMarkdown.trim().length === 0
+    || request.evidence.length === 0 || request.evidence.length > 12) {
+    throw new NovelRepositoryError('novel repository: Story State candidate is outside bounds', 'NOVEL_STORY_STATE_CANDIDATE_INVALID')
+  }
+  for (const item of request.evidence) {
+    if (item.quote.trim().length === 0 || item.quote.length > 1_000
+      || item.update.trim().length === 0 || item.update.length > 1_000) {
+      throw new NovelRepositoryError('novel repository: Story State evidence is outside bounds', 'NOVEL_STORY_STATE_CANDIDATE_INVALID')
+    }
+  }
+  if (new TextEncoder().encode(JSON.stringify(request)).byteLength > maxBytes) {
+    throw new NovelRepositoryError('novel repository: Story State candidate is too large', 'NOVEL_ASSET_TOO_LARGE')
   }
 }
 

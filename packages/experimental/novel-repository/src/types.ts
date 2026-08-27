@@ -10,6 +10,7 @@ import type {
   PreferenceCandidateId,
   RevisionId,
   SelectionRefId,
+  StoryStateCandidateId,
 } from './brand.ts'
 
 export type {
@@ -19,6 +20,7 @@ export type {
   PreferenceCandidateId,
   RevisionId,
   SelectionRefId,
+  StoryStateCandidateId,
 } from './brand.ts'
 
 /** SHA-256 over the named exact UTF-8 bytes. */
@@ -130,6 +132,8 @@ export type NovelRepositoryErrorCode =
   | 'NOVEL_FINALIZATION_INVALID'
   | 'NOVEL_PREFERENCE_CANDIDATE_NOT_FOUND'
   | 'NOVEL_PREFERENCE_CANDIDATE_INVALID'
+  | 'NOVEL_STORY_STATE_CANDIDATE_NOT_FOUND'
+  | 'NOVEL_STORY_STATE_CANDIDATE_INVALID'
 
 /** One validated version-one Novel Project declaration. */
 export interface NovelProjectSnapshot {
@@ -292,6 +296,53 @@ export interface PutNovelPreferenceCandidateRequest {
   readonly summary: string
   readonly guidanceMarkdown: string
   readonly evidence: readonly NovelPreferenceEvidence[]
+}
+
+/** Bounded prose evidence supporting one proposed Story State update. */
+export interface NovelStoryStateEvidence {
+  /** Exact or short quote from the finalized chapter. */
+  readonly quote: string
+  /** State change justified by that quote. */
+  readonly update: string
+}
+
+export type NovelStoryStateCandidateStatus = 'pending' | 'accepted' | 'rejected'
+
+/** Complete proposed replacement of the confirmed Story State, inert until accepted. */
+export interface NovelStoryStateCandidate {
+  readonly id: StoryStateCandidateId
+  readonly projectId: ProjectId
+  /** Finalized manuscript chapter that supplied the delta. */
+  readonly assetId: AssetId
+  readonly finalRevisionId: RevisionId
+  readonly targetStoryStateAssetId: AssetId
+  readonly targetStoryStateRevisionId: RevisionId
+  readonly extractorVersion: string
+  readonly generatedAt: string
+  readonly workerSessionId?: SessionId
+  readonly summary: string
+  /** Complete Markdown replacement, not a patch fragment. */
+  readonly replacementMarkdown: string
+  readonly evidence: readonly NovelStoryStateEvidence[]
+  readonly status: NovelStoryStateCandidateStatus
+  readonly decidedAt?: string
+  readonly decidedBySessionId?: SessionId
+  readonly resultChangeSetId?: ChangeSetId
+  readonly resultRevisionId?: RevisionId
+}
+
+/** Valid generated Story State candidate before provider-owned fields are assigned. */
+export interface PutNovelStoryStateCandidateRequest {
+  readonly assetId: AssetId
+  readonly finalRevisionId: RevisionId
+  readonly targetStoryStateAssetId: AssetId
+  readonly targetStoryStateRevisionId: RevisionId
+  readonly extractorVersion: string
+  readonly generatedAt: string
+  readonly workerSessionId?: SessionId
+  readonly summary: string
+  readonly replacementMarkdown: string
+  readonly evidence: readonly NovelStoryStateEvidence[]
 }
 
 /** First durable analysis products attached to exact chapter bytes. */

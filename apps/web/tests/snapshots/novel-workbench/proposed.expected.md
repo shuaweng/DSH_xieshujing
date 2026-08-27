@@ -10,11 +10,13 @@
         - text: 2 items
         - button "Book Brief Brief"
         - button "Book Style Style"
+        - button "＋ Create Story State"
       - group:
         - text: ›
         - strong: Manuscript
         - text: 1 chapters
-        - button "第一章 12 characters"
+        - button "＋ New chapter"
+        - button "第一章，Drag to reorder chapters": 第一章 12 characters
       - group:
         - text: ›
         - strong: Outline
@@ -27,7 +29,7 @@
     - strong: 白港
     - text: 第一章
     - combobox "Manuscript versions":
-      - option "Current · 8/26/2026, {{clock}} · Initial import" [selected]
+      - option "Current · 8/27/2026, {{clock}} · Initial import" [selected]
   - text: Saved
   - button "Save" [disabled]
   - button "Mark final"

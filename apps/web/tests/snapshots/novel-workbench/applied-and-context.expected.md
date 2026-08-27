@@ -10,11 +10,13 @@
         - text: 2 items
         - button "Book Brief Brief"
         - button "Book Style Style"
+        - button "＋ Create Story State"
       - group:
         - text: ›
         - strong: Manuscript
         - text: 1 chapters
-        - button "雨夜归人 12 characters"
+        - button "＋ New chapter"
+        - button "雨夜归人，Drag to reorder chapters": 雨夜归人 12 characters
       - group:
         - text: ›
         - strong: Outline
@@ -27,9 +29,9 @@
     - strong: 白港
     - text: 雨夜归人
     - combobox "Manuscript versions":
-      - option "Current · 8/26/2026, {{clock}} · Author save" [selected]
-      - option "8/26/2026, {{clock}} · Accepted Agent change"
-      - option "8/26/2026, {{clock}} · Initial import"
+      - option "Current · 8/27/2026, {{clock}} · Author save" [selected]
+      - option "8/27/2026, {{clock}} · Accepted Agent change"
+      - option "8/27/2026, {{clock}} · Initial import"
   - text: Saved
   - button "Save" [disabled]
   - button "Mark final"

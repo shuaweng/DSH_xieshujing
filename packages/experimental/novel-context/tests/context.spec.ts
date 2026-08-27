@@ -71,6 +71,11 @@ async function harness(config: ConstructorParameters<typeof NovelContextResolver
     '---', 'novel:', '  schema: 1', '  id: style-context',
     '  type: book.style-profile', '  title: 本书风格', '---', '克制，短句。', '',
   ].join('\n'))
+  await writeFile(join(dir, 'planning', 'story-state.md'), [
+    '---', 'novel:', '  schema: 1', '  id: story-state-context',
+    '  type: book.story-state', '  title: 故事状态', '---',
+    '# 当前事实', '', '- 林澈已经抵达白港。', '',
+  ].join('\n'))
   await writeFile(join(dir, 'planning', 'outline.md'), [
     '---', 'novel:', '  schema: 1', '  id: outline-context',
     '  type: planning.outline', '  title: 全书大纲', '  level: book',
@@ -317,11 +322,14 @@ describe('Novel context preparation', () => {
       .toMatchObject({ projection: 'full', reason: 'book-brief' })
     expect(compiled.source.references.find(item => item.assetId === 'style-context'))
       .toMatchObject({ projection: 'full', reason: 'book-style' })
+    expect(compiled.source.references.find(item => item.assetId === 'story-state-context'))
+      .toMatchObject({ projection: 'full', reason: 'story-state' })
     expect(compiled.source.references.find(item => item.assetId === 'outline-context'))
       .toMatchObject({ projection: 'coordinate', reason: 'book-outline' })
     expect(new Set(compiled.source.references.map(item => `${item.assetId}@${item.revisionId}`)).size)
       .toBe(compiled.source.references.length)
     expect(compiled.text).toContain('先发现灯灭，再听见脚步。')
+    expect(compiled.text).toContain('林澈已经抵达白港。')
     expect(compiled.text).not.toContain('"reason":"book-outline","text"')
 
     const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))

@@ -80,15 +80,17 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
       setCreating(false)
     }
   }
-  const createBookGuidance = async (type: 'book.brief' | 'book.style-profile') => {
+  const createBookGuidance = async (type: 'book.brief' | 'book.style-profile' | 'book.story-state') => {
     if (sessionId === undefined || creating) return
     setCreating(true)
     try {
       const brief = type === 'book.brief'
+      const style = type === 'book.style-profile'
       const document = await create(sessionId, {
         type,
-        title: brief ? t('newBookBriefTitle') : t('newBookStyleProfileTitle'),
-        content: brief ? { kind: 'book-brief', body: '' } : { kind: 'book-style-profile', body: '' },
+        title: brief ? t('newBookBriefTitle') : style ? t('newBookStyleProfileTitle') : t('newBookStoryStateTitle'),
+        content: brief ? { kind: 'book-brief', body: '' }
+          : style ? { kind: 'book-style-profile', body: '' } : { kind: 'book-story-state', body: '' },
       })
       actions.assetCreated(document)
       actions.open(document)
@@ -145,12 +147,13 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
     catch { characterCount = undefined }
   }
   const manuscripts = state.assets.filter(asset => asset.type.startsWith('manuscript.'))
-  const guidance = state.assets.filter(asset => asset.type === 'book.brief' || asset.type === 'book.style-profile')
+  const guidance = state.assets.filter(asset => asset.type === 'book.brief'
+    || asset.type === 'book.style-profile' || asset.type === 'book.story-state')
   const outlines = state.assets.filter(asset => asset.type === 'planning.outline')
   const roots = outlines.filter(asset => asset.parentId === undefined)
   const other = state.assets.filter(asset => !asset.type.startsWith('manuscript.')
     && asset.type !== 'planning.outline' && asset.type !== 'planning.chapter-outline'
-    && asset.type !== 'book.brief' && asset.type !== 'book.style-profile')
+    && asset.type !== 'book.brief' && asset.type !== 'book.style-profile' && asset.type !== 'book.story-state')
   const titleOf = (asset: NovelAssetDescriptor) => asset.id === state.active ? state.titleDraft ?? asset.title : asset.title
 
   return <div className={css.explorerInner}>
@@ -172,7 +175,8 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
           createAsset={createBookGuidance}
           labels={{
             title: t('bookGuidance'), items: t('assetUnit'), brief: t('bookBrief'), style: t('bookStyleProfile'),
-            addBrief: t('addBookBrief'), addStyle: t('addBookStyleProfile'),
+            storyState: t('bookStoryState'), addBrief: t('addBookBrief'), addStyle: t('addBookStyleProfile'),
+            addStoryState: t('addBookStoryState'),
           }}
         />
         <AssetGroup title={t('chapters')} assets={manuscripts} active={state.active} unit={t('chapterUnit')}
@@ -202,18 +206,21 @@ function BookGuidanceGroup({ assets, active, creating, titleOf, openAsset, creat
   readonly creating: boolean
   readonly titleOf: (asset: NovelAssetDescriptor) => string
   readonly openAsset: (assetId: string) => void
-  readonly createAsset: (type: 'book.brief' | 'book.style-profile') => Promise<void>
+  readonly createAsset: (type: 'book.brief' | 'book.style-profile' | 'book.story-state') => Promise<void>
   readonly labels: {
     readonly title: string
     readonly items: string
     readonly brief: string
     readonly style: string
+    readonly storyState: string
     readonly addBrief: string
     readonly addStyle: string
+    readonly addStoryState: string
   }
 }) {
   const brief = assets.find(asset => asset.type === 'book.brief')
   const style = assets.find(asset => asset.type === 'book.style-profile')
+  const storyState = assets.find(asset => asset.type === 'book.story-state')
   return <details className={css.assetGroup} open>
     <summary><strong>{labels.title}</strong><small>{assets.length} {labels.items}</small></summary>
     <div className={css.assetGroupItems}>
@@ -225,6 +232,11 @@ function BookGuidanceGroup({ assets, active, creating, titleOf, openAsset, creat
         ? <button className={css.addGuidance} type="button" disabled={creating}
           onClick={() => { void createAsset('book.style-profile') }}>＋ {labels.addStyle}</button>
         : <AssetButton asset={style} active={active} title={titleOf(style)} details={labels.style} openAsset={openAsset} />}
+      {storyState === undefined
+        ? <button className={css.addGuidance} type="button" disabled={creating}
+          onClick={() => { void createAsset('book.story-state') }}>＋ {labels.addStoryState}</button>
+        : <AssetButton asset={storyState} active={active} title={titleOf(storyState)}
+          details={labels.storyState} openAsset={openAsset} />}
     </div>
   </details>
 }

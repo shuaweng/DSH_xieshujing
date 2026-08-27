@@ -27,6 +27,7 @@ const workbenchSkillNames = [
   'preference-learning',
   'rewrite-to-style',
   'scene-drive',
+  'story-state-extraction',
   'style-audit',
 ] as const
 const contextPolicies = {
@@ -36,6 +37,7 @@ const contextPolicies = {
   'new-book-bootstrap': 'outline-edit',
   'outline-beat-design': 'outline-edit',
   'preference-learning': 'preference-learning',
+  'story-state-extraction': 'story-state-learning',
   'rewrite-to-style': 'selection-rewrite',
   'scene-drive': 'chapter-write',
   'style-audit': 'selection-review',
@@ -72,8 +74,8 @@ describe('experimental Novel Studio bundle', () => {
     ) as Array<{ id?: string; config?: { text?: string } }>
     const prompt = parsed.find(row => row.id === 'persona')?.config?.text ?? ''
 
-    expect(prompt).toContain('正文、大纲和章纲目前都使用其精确')
-    expect(prompt).toContain('Revision 上的 UTF-16 文本范围')
+    expect(prompt).toContain('正文、大纲和设定都是版本化小说资产')
+    expect(prompt).toContain('正文可以用 insert-text 在精确 Revision')
     expect(prompt).toContain('先调用 skill 加载最匹配的精确方法')
     for (const name of workbenchSkillNames) expect(prompt).toContain(name)
     expect(prompt).not.toContain('稳定 node id')
@@ -103,9 +105,9 @@ describe('experimental Novel Studio bundle', () => {
     for (const name of workbenchSkillNames) {
       const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
       expect(body).toMatch(new RegExp(`^---\\nname: ${name}\\n`))
-      expect(body).toContain('user-invocable: true')
+      expect(body).toContain(`user-invocable: ${name === 'story-state-extraction' ? 'false' : 'true'}`)
       expect(body).toContain(`novelContextPolicy: ${contextPolicies[name]}`)
-      expect(body).toContain('novel_get')
+      if (name !== 'story-state-extraction') expect(body).toContain('novel_get')
       expect(body).not.toMatch(/PROJECT\.md|STYLE\.md|\.lingtai|references\//)
       expect(body).not.toMatch(/`(?:read|write|edit|grep|glob|bash)`/)
     }

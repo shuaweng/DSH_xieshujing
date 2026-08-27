@@ -10,11 +10,13 @@
         - text: 2 items
         - button "Book Brief Brief"
         - button "White Harbor Style Style"
+        - button "＋ Create Story State"
       - group:
         - text: ›
         - strong: Manuscript
         - text: 1 chapters
-        - button "雨夜归人"
+        - button "＋ New chapter"
+        - button "雨夜归人，Drag to reorder chapters": 雨夜归人
       - group:
         - text: ›
         - strong: Outline
@@ -27,14 +29,15 @@
     - strong: 白港
     - text: White Harbor Style
     - combobox "Manuscript versions":
-      - option "Current · 8/26/2026, {{clock}} · Author save" [selected]
-      - option "8/26/2026, {{clock}} · Initial import"
+      - option "Current · 8/27/2026, {{clock}} · Author save" [selected]
+      - option "8/27/2026, {{clock}} · Initial import"
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent"
   - region "White Harbor Style · Book style":
     - text: Name
     - textbox "Name": White Harbor Style
+    - button "Read" [pressed]
     - textbox "Freeform planning content":
       - /placeholder: Freely record narrative voice, sentence rhythm, dialogue, information release, serial pacing, hooks, positive references, and explicit avoidances…
       - text: "## Voice Restrained, concrete, and character-specific."

@@ -99,6 +99,7 @@ const CONTEXT_POLICIES = new Set<NovelContextPolicyId>([
   'outline-edit',
   'chapter-review',
   'preference-learning',
+  'story-state-learning',
 ])
 
 function normalizePolicies(values: readonly NovelContextPolicyId[]): readonly NovelContextPolicyId[] {
@@ -167,6 +168,7 @@ function isReason(value: unknown): value is NovelContextReason {
     || value === 'target-asset' || value === 'chapter-outline' || value === 'book-outline'
     || value === 'book-brief' || value === 'book-style' || value === 'outline-parent'
     || value === 'outline-child' || value === 'draft-source' || value === 'final-source'
+    || value === 'story-state'
 }
 
 /** Runtime registries may contribute Asset kinds unknown to this package's compile-time type map. */
@@ -563,11 +565,13 @@ export class NovelContextResolver extends Service {
             && summary.asset.parentId === snapshot.asset.id), 'full', 'chapter-outline', 90)
           addSummary(singleton('book.brief'), 'full', 'book-brief', 60)
           addSummary(singleton('book.style-profile'), 'full', 'book-style', 55)
+          addSummary(singleton('book.story-state'), 'full', 'story-state', 85)
           addSummary(catalog.find(summary => hasAssetType(summary, 'planning.outline')
             && summary.asset.parentId === undefined), 'coordinate', 'book-outline', 20)
         }
         if (policies.some(policy => policy === 'selection-rewrite' || policy === 'selection-review')) {
           addSummary(singleton('book.style-profile'), 'full', 'book-style', 80)
+          addSummary(singleton('book.story-state'), 'full', 'story-state', 75)
           addSummary(singleton('book.brief'), 'coordinate', 'book-brief', 20)
         }
       }

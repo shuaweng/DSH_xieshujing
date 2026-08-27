@@ -38,6 +38,7 @@ export type NovelContextPolicyId =
   | 'outline-edit'
   | 'chapter-review'
   | 'preference-learning'
+  | 'story-state-learning'
 
 /** How much authored material one compiled reference contributes. */
 export type NovelContextProjection = 'coordinate' | 'selection' | 'full'
@@ -52,6 +53,7 @@ export type NovelContextReason =
   | 'book-outline'
   | 'book-brief'
   | 'book-style'
+  | 'story-state'
   | 'outline-parent'
   | 'outline-child'
   | 'draft-source'

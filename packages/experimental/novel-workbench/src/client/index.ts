@@ -229,6 +229,10 @@ export function apply(ctx: Context): void {
         remote.preferenceCandidates(sessionId, assetId as AssetId, revisionId as RevisionId),
         'list preference candidates',
       ),
+      storyStateCandidates: async (sessionId, assetId, revisionId) => await unwrapRemote(
+        remote.storyStateCandidates(sessionId, assetId as AssetId, revisionId as RevisionId),
+        'list Story State candidates',
+      ),
       finalizeChapter: async (sessionId, assetId, revisionId) => await unwrapRemote(
         remote.finalizeChapter(sessionId, assetId as AssetId, revisionId as RevisionId),
         'finalize chapter',
@@ -240,6 +244,14 @@ export function apply(ctx: Context): void {
       rejectPreference: async (sessionId, candidateId) => (await unwrapRemote(
         remote.rejectPreference(sessionId, candidateId as import('@deepseek-ai/dsh-experimental-novel-repository').PreferenceCandidateId),
         'reject preference candidate',
+      )).candidate,
+      acceptStoryState: async (sessionId, candidateId) => (await unwrapRemote(
+        remote.acceptStoryState(sessionId, candidateId as import('@deepseek-ai/dsh-experimental-novel-repository').StoryStateCandidateId),
+        'accept Story State candidate',
+      )).candidate,
+      rejectStoryState: async (sessionId, candidateId) => (await unwrapRemote(
+        remote.rejectStoryState(sessionId, candidateId as import('@deepseek-ai/dsh-experimental-novel-repository').StoryStateCandidateId),
+        'reject Story State candidate',
       )).candidate,
       create: async (sessionId, request) => await unwrapRemote(
         remote.createAsset(sessionId, request),

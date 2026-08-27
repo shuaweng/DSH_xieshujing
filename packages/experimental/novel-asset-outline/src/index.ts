@@ -23,6 +23,7 @@ import type {
 } from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import type {
   BookBriefContent,
+  BookStoryStateContent,
   BookStyleProfileContent,
   ChapterOutlineContent,
   PlanningOutlineContent,
@@ -31,6 +32,7 @@ import type {
 
 export type {
   BookBriefContent,
+  BookStoryStateContent,
   BookStyleProfileContent,
   ChapterOutlineContent,
   PlanningOutlineContent,
@@ -57,6 +59,7 @@ export function apply(ctx: Context): void {
   ctx.novelAssetTypes.register(chapterOutlineTypeDefinition)
   ctx.novelAssetTypes.register(bookBriefTypeDefinition)
   ctx.novelAssetTypes.register(bookStyleProfileTypeDefinition)
+  ctx.novelAssetTypes.register(bookStoryStateTypeDefinition)
 }
 
 /** Freeform two-level outline Host contribution. */
@@ -106,6 +109,16 @@ export const bookStyleProfileTypeDefinition = freeformBookDefinition({
   creationInstructions: 'Before creating, use novel_list or novel_search to confirm the project has no book.style-profile. Create content {"kind":"book-style-profile","body":"<free Markdown>"}. Record only author-confirmed guidance; do not infer durable preferences from one draft.',
   parse: parseBookStyleProfile,
   content: bookStyleProfileContent,
+})
+
+/** Project-singleton story reality confirmed by finalized manuscript prose. */
+export const bookStoryStateTypeDefinition = freeformBookDefinition({
+  type: 'book.story-state',
+  kind: 'book-story-state',
+  description: 'The project-singleton freeform Markdown Story State: only events, chronology, character conditions and knowledge, relationships, object state, active plot threads, promises, and other facts confirmed by finalized prose.',
+  creationInstructions: 'Before creating, use novel_list or novel_search to confirm the project has no book.story-state. Create content {"kind":"book-story-state","body":"<free Markdown>"}. Keep it concise and current. Do not copy planned future events from an outline into established story reality.',
+  parse: parseBookStoryState,
+  content: bookStoryStateContent,
 })
 
 /** Freeform chapter-plan Host contribution bound one-to-one to a manuscript chapter. */
@@ -201,11 +214,16 @@ export function parseBookStyleProfile(bytes: Uint8Array, path: string): ParsedNo
   return parseBookGuidance(bytes, path, 'book.style-profile', 'book-style-profile')
 }
 
+/** Parse the one freeform confirmed Story State allowed in a project. */
+export function parseBookStoryState(bytes: Uint8Array, path: string): ParsedNovelAsset {
+  return parseBookGuidance(bytes, path, 'book.story-state', 'book-story-state')
+}
+
 function parseBookGuidance(
   bytes: Uint8Array,
   path: string,
-  type: 'book.brief' | 'book.style-profile',
-  kind: 'book-brief' | 'book-style-profile',
+  type: 'book.brief' | 'book.style-profile' | 'book.story-state',
+  kind: 'book-brief' | 'book-style-profile' | 'book-story-state',
 ): ParsedNovelAsset {
   const parsed = parsePlanningFile(bytes, path, type)
   if (parsed.parentId !== undefined) invalidAsset(path, `${type} must not declare novel.parent`)
@@ -220,7 +238,7 @@ function parseBookGuidance(
 }
 
 function freeformBehavior(
-  kind: 'outline' | 'chapter-outline' | 'book-brief' | 'book-style-profile',
+  kind: 'outline' | 'chapter-outline' | 'book-brief' | 'book-style-profile' | 'book-story-state',
   bodyOf: (content: unknown) => string,
   parse: (bytes: Uint8Array, path: string) => ParsedNovelAsset,
 ): Pick<NovelAssetTypeDefinition, 'serializeContent' | 'captureSelection' | 'modelText' | 'prepareOperations' | 'decodeOperations' | 'materializeOperations'> {
@@ -319,7 +337,7 @@ function freeformBehavior(
 function parsePlanningFile(
   bytes: Uint8Array,
   path: string,
-  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile',
+  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile' | 'book.story-state',
 ): {
   readonly file: ParsedFrontmatterFile
   readonly id: AssetId
@@ -395,7 +413,7 @@ function markdownBodyStart(text: string, start: number): number {
 function createdMaterialization(
   id: AssetId,
   title: string,
-  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile',
+  type: 'planning.outline' | 'planning.chapter-outline' | 'book.brief' | 'book.style-profile' | 'book.story-state',
   parentId: AssetId | undefined,
   extra: Readonly<Record<string, unknown>>,
   body: string,
@@ -504,13 +522,21 @@ function bookStyleProfileContent(value: unknown): BookStyleProfileContent {
   return { kind: 'book-style-profile', body: value['body'] }
 }
 
+function bookStoryStateContent(value: unknown): BookStoryStateContent {
+  if (!isRecord(value) || value['kind'] !== 'book-story-state' || typeof value['body'] !== 'string') {
+    invalidAsset('<asset-content>', 'book story state content is invalid')
+  }
+  return { kind: 'book-story-state', body: value['body'] }
+}
+
 function outlineBody(value: unknown): string { return outlineContent(value).body }
 function chapterBody(value: unknown): string { return chapterContent(value).body }
 function bookBriefBody(value: unknown): string { return bookBriefContent(value).body }
 function bookStyleProfileBody(value: unknown): string { return bookStyleProfileContent(value).body }
+function bookStoryStateBody(value: unknown): string { return bookStoryStateContent(value).body }
 
 function contentWithBody(
-  kind: 'outline' | 'chapter-outline' | 'book-brief' | 'book-style-profile',
+  kind: 'outline' | 'chapter-outline' | 'book-brief' | 'book-style-profile' | 'book-story-state',
   current: unknown,
   body: string,
 ): NovelAssetContent {
@@ -519,18 +545,20 @@ function contentWithBody(
     case 'chapter-outline': return { kind, body }
     case 'book-brief': return { kind, body }
     case 'book-style-profile': return { kind, body }
+    case 'book-story-state': return { kind, body }
   }
 }
 
 function freeformBookDefinition(config: {
-  readonly type: 'book.brief' | 'book.style-profile'
-  readonly kind: 'book-brief' | 'book-style-profile'
+  readonly type: 'book.brief' | 'book.style-profile' | 'book.story-state'
+  readonly kind: 'book-brief' | 'book-style-profile' | 'book-story-state'
   readonly description: string
   readonly creationInstructions: string
   readonly parse: (bytes: Uint8Array, path: string) => ParsedNovelAsset
-  readonly content: (value: unknown) => BookBriefContent | BookStyleProfileContent
+  readonly content: (value: unknown) => BookBriefContent | BookStyleProfileContent | BookStoryStateContent
 }): NovelAssetTypeDefinition {
-  const bodyOf = config.kind === 'book-brief' ? bookBriefBody : bookStyleProfileBody
+  const bodyOf = config.kind === 'book-brief' ? bookBriefBody
+    : config.kind === 'book-style-profile' ? bookStyleProfileBody : bookStoryStateBody
   return {
     type: config.type,
     contentRoot: 'planning',

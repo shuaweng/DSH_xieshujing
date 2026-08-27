@@ -1,8 +1,8 @@
 # Agent Note: 小说资产顺序
 
-[English](2026-08-27-novel-asset-order.md) | 中文
-
 Status: implemented
+
+[English](2026-08-27-novel-asset-order.md) | 中文
 
 ## Problem
 

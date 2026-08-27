@@ -12,6 +12,7 @@ import type {} from '@deepseek-ai/dsh-experimental-novel-analysis'
 import {
   ChangeSetId,
   PreferenceCandidateId,
+  StoryStateCandidateId,
   NovelRepositoryError,
   type AssetId,
   type AssetSnapshot,
@@ -38,10 +39,12 @@ import type {
   NovelAssetRevisionDescriptor,
   NovelAnalysisReportDescriptor,
   NovelPreferenceCandidateDescriptor,
+  NovelStoryStateCandidateDescriptor,
   NovelRevisionFinalizationDescriptor,
   FinalizeNovelChapterDescriptor,
   InitializeNovelProjectRequest,
   DecideNovelPreferenceDescriptor,
+  DecideNovelStoryStateDescriptor,
   NovelProjectDescriptor,
   NovelAssetSearchResult,
   NovelContextWorksetDescriptor,
@@ -61,10 +64,12 @@ export type {
   NovelAssetRevisionDescriptor,
   NovelAnalysisReportDescriptor,
   NovelPreferenceCandidateDescriptor,
+  NovelStoryStateCandidateDescriptor,
   NovelRevisionFinalizationDescriptor,
   FinalizeNovelChapterDescriptor,
   InitializeNovelProjectRequest,
   DecideNovelPreferenceDescriptor,
+  DecideNovelStoryStateDescriptor,
   NovelProjectDescriptor,
   NovelAssetSearchResult,
   NovelContextWorksetDescriptor,
@@ -398,6 +403,22 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     return values
   }
 
+  /** List Story State candidates attached to one exact final chapter Revision. */
+  @Remote('storyStateCandidates')
+  async storyStateCandidates(
+    agent: Agent,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+    signal: AbortSignal,
+  ): Promise<NovelStoryStateCandidateDescriptor[]> {
+    const project = await this.requireProject(agent, signal)
+    const values = (await this.ctx.novelRepository.listStoryStateCandidates(
+      project, assetId, finalRevisionId, signal,
+    )).map(storyStateCandidateDescriptor)
+    assertResponseBytes(values, this.responseMaxBytes, 'Story State candidates')
+    return values
+  }
+
   /** Explicitly finalize the exact chapter Revision and optionally extract a preference candidate. */
   @Remote('finalizeChapter')
   async finalizeChapter(
@@ -411,6 +432,9 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       finalization: finalizationDescriptor(value.finalization),
       ...(value.candidate === undefined ? {} : { candidate: preferenceCandidateDescriptor(value.candidate) }),
       ...(value.noCandidateReason === undefined ? {} : { noCandidateReason: value.noCandidateReason }),
+      ...(value.storyCandidate === undefined ? {} : { storyCandidate: storyStateCandidateDescriptor(value.storyCandidate) }),
+      ...(value.noStoryCandidateReason === undefined ? {} : { noStoryCandidateReason: value.noStoryCandidateReason }),
+      ...(value.storyCandidateError === undefined ? {} : { storyCandidateError: value.storyCandidateError }),
     }
     assertResponseBytes(result, this.responseMaxBytes, 'chapter finalization')
     return result
@@ -442,6 +466,35 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     const candidate = await this.ctx.novelAnalysis.rejectPreference(agent, candidateId, signal)
     const result = { candidate: preferenceCandidateDescriptor(candidate) }
     assertResponseBytes(result, this.responseMaxBytes, 'rejected preference')
+    return result
+  }
+
+  /** Apply one reviewed Story State candidate through exact-Revision ChangeSet publication. */
+  @Remote('acceptStoryState')
+  async acceptStoryState(
+    agent: Agent,
+    candidateId: StoryStateCandidateId,
+    signal: AbortSignal,
+  ): Promise<DecideNovelStoryStateDescriptor> {
+    const value = await this.ctx.novelAnalysis.acceptStoryState(agent, candidateId, signal)
+    const result: DecideNovelStoryStateDescriptor = {
+      candidate: storyStateCandidateDescriptor(value.candidate),
+      changeSet: changeSetDescriptor(value.changeSet),
+    }
+    assertResponseBytes(result, this.responseMaxBytes, 'accepted Story State')
+    return result
+  }
+
+  /** Reject one pending Story State candidate without changing authored assets. */
+  @Remote('rejectStoryState')
+  async rejectStoryState(
+    agent: Agent,
+    candidateId: StoryStateCandidateId,
+    signal: AbortSignal,
+  ): Promise<DecideNovelStoryStateDescriptor> {
+    const candidate = await this.ctx.novelAnalysis.rejectStoryState(agent, candidateId, signal)
+    const result = { candidate: storyStateCandidateDescriptor(candidate) }
+    assertResponseBytes(result, this.responseMaxBytes, 'rejected Story State')
     return result
   }
 
@@ -759,6 +812,25 @@ function preferenceCandidateDescriptor(
     generatedAt: value.generatedAt,
     summary: value.summary,
     guidanceMarkdown: value.guidanceMarkdown,
+    evidence: value.evidence.map(item => ({ ...item })),
+    status: value.status,
+    ...(value.resultRevisionId === undefined ? {} : { resultRevisionId: value.resultRevisionId }),
+  }
+}
+
+function storyStateCandidateDescriptor(
+  value: Awaited<ReturnType<Context['novelRepository']['readStoryStateCandidate']>>,
+): NovelStoryStateCandidateDescriptor {
+  return {
+    id: value.id,
+    projectId: value.projectId,
+    assetId: value.assetId,
+    finalRevisionId: value.finalRevisionId,
+    targetStoryStateAssetId: value.targetStoryStateAssetId,
+    targetStoryStateRevisionId: value.targetStoryStateRevisionId,
+    generatedAt: value.generatedAt,
+    summary: value.summary,
+    replacementMarkdown: value.replacementMarkdown,
     evidence: value.evidence.map(item => ({ ...item })),
     status: value.status,
     ...(value.resultRevisionId === undefined ? {} : { resultRevisionId: value.resultRevisionId }),

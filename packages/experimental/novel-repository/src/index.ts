@@ -27,6 +27,9 @@ import type {
   PutNovelPreferenceCandidateRequest,
   NovelPreferenceCandidate,
   PreferenceCandidateId,
+  NovelStoryStateCandidate,
+  PutNovelStoryStateCandidateRequest,
+  StoryStateCandidateId,
   RevisionFinalization,
   ReorderAssetsRequest,
   ProposeChangeSetRequest,
@@ -43,6 +46,7 @@ export {
   ProjectId,
   RevisionId,
   SelectionRefId,
+  StoryStateCandidateId,
 } from './brand.ts'
 export { NovelRepositoryError }
 export type {
@@ -67,6 +71,9 @@ export type {
   NovelPreferenceCandidate,
   NovelPreferenceCandidateStatus,
   NovelPreferenceEvidence,
+  NovelStoryStateCandidate,
+  NovelStoryStateCandidateStatus,
+  NovelStoryStateEvidence,
   NovelOperation,
   NovelSelectionInput,
   NovelSelector,
@@ -76,6 +83,7 @@ export type {
   ProposeChangeSetRequest,
   PutNovelAnalysisReportRequest,
   PutNovelPreferenceCandidateRequest,
+  PutNovelStoryStateCandidateRequest,
   InsertTextOperation,
   UpdateTitleOperation,
   ReplaceTextOperation,
@@ -284,6 +292,50 @@ export abstract class NovelRepository extends Service {
   ): Promise<NovelPreferenceCandidate> {
     void project; void candidateId; void decision; void decidedBySessionId; void result; void signal
     return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
+
+  /** Retain one inert, reviewable Story State replacement candidate. */
+  putStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    request: PutNovelStoryStateCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    void project; void request; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Story State candidates'))
+  }
+
+  /** List Story State candidates attached to one finalized chapter Revision. */
+  listStoryStateCandidates(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelStoryStateCandidate[]> {
+    void project; void assetId; void finalRevisionId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Story State candidates'))
+  }
+
+  /** Read one retained Story State candidate. */
+  readStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: StoryStateCandidateId,
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    void project; void candidateId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Story State candidates'))
+  }
+
+  /** Record the explicit terminal Story State decision and optional applied lineage. */
+  decideStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: StoryStateCandidateId,
+    decision: 'accepted' | 'rejected',
+    decidedBySessionId: import('@deepseek-ai/dsh-session/types').SessionId,
+    result?: { readonly changeSetId: ChangeSetId; readonly revisionId: RevisionId },
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    void project; void candidateId; void decision; void decidedBySessionId; void result; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Story State candidates'))
   }
 
   /**

@@ -109,6 +109,30 @@ const singletonTestNoteType: NovelAssetTypeDefinition = {
   projectSingleton: true,
 }
 
+function parseTestStoryState(serializedUtf8: Uint8Array): ParsedNovelAsset {
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(serializedUtf8)
+  const id = /^\s+id: ([^\n]+)$/mu.exec(text)?.[1]
+  const title = /^\s+title: ([^\n]+)$/mu.exec(text)?.[1]
+  const body = text.split('---\n').at(-1)
+  if (id === undefined || title === undefined || body === undefined) throw new Error('invalid test Story State')
+  return {
+    id: AssetId(id), type: 'book.story-state', title,
+    frontmatter: { novel: { schema: 1, id, type: 'book.story-state', title } },
+    content: { kind: 'book-story-state', body } as never,
+    source: undefined,
+  }
+}
+
+const storyStateTestType: NovelAssetTypeDefinition = {
+  ...testNoteType,
+  type: 'book.story-state',
+  contentRoot: 'planning',
+  extensions: ['.md'],
+  projectSingleton: true,
+  parse: parseTestStoryState,
+  modelText(snapshot: AssetSnapshot) { return (snapshot.content as never as { body: string }).body },
+}
+
 function chapter(id: string, title: string, body: string, newline = '\n'): string {
   return [
     '---',
@@ -644,6 +668,45 @@ describe('LocalNovelRepository', () => {
       generatedAt: '2026-08-25T03:00:00.000Z',
       data: {},
     })).rejects.toMatchObject({ code: 'NOVEL_REVISION_NOT_FOUND' })
+  })
+
+  it('persists one inert Story State candidate per finalized chapter Revision', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await mkdir(join(dir, 'planning'))
+    await writeFile(join(dir, 'novel.yaml'), manifest(['  planning: planning']))
+    await writeFile(join(dir, 'manuscript', 'chapter.md'), chapter('chapter-one', '第一章', '林澈抵达白港。'))
+    await writeFile(join(dir, 'planning', 'story-state.md'), [
+      '---', 'novel:', '  schema: 1', '  id: story-state-one',
+      '  type: book.story-state', '  title: 故事状态', '---', '# 当前事实', '',
+    ].join('\n'))
+    const ctx = await boot(dir, {}, [storyStateTestType])
+    const novel = await project(ctx)
+    const assets = await ctx.novelRepository.listAssets(novel)
+    const chapterAsset = assets.find(value => value.asset.id === 'chapter-one')!
+    const storyState = assets.find(value => value.asset.id === 'story-state-one')!
+    const pending = await ctx.novelRepository.putStoryStateCandidate(novel, {
+      assetId: chapterAsset.asset.id,
+      finalRevisionId: chapterAsset.revisionId,
+      targetStoryStateAssetId: storyState.asset.id,
+      targetStoryStateRevisionId: storyState.revisionId,
+      extractorVersion: 'story-state/1',
+      generatedAt: '2026-08-27T01:00:00.000Z',
+      summary: '林澈抵达白港。',
+      replacementMarkdown: '# 当前事实\n\n- 林澈已经抵达白港。',
+      evidence: [{ quote: '林澈抵达白港', update: '人物当前位置更新为白港' }],
+    })
+    expect(pending).toMatchObject({ status: 'pending', targetStoryStateRevisionId: storyState.revisionId })
+    await expect(ctx.novelRepository.listStoryStateCandidates(
+      novel, chapterAsset.asset.id, chapterAsset.revisionId,
+    )).resolves.toEqual([pending])
+    await expect(ctx.novelRepository.decideStoryStateCandidate(
+      novel, pending.id, 'accepted', SessionId('owner'), undefined,
+    )).rejects.toMatchObject({ code: 'NOVEL_STORY_STATE_CANDIDATE_INVALID' })
+    const rejected = await ctx.novelRepository.decideStoryStateCandidate(
+      novel, pending.id, 'rejected', SessionId('owner'), undefined,
+    )
+    expect(rejected).toMatchObject({ status: 'rejected', decidedBySessionId: 'owner' })
   })
 
   it('rejects malformed assets and duplicate stable ids without rewriting authored files', async () => {
@@ -1209,7 +1272,7 @@ describe('LocalNovelRepository', () => {
     },
   )
 
-  it('migrates an identified version-one history database to finalization schema five', async () => {
+  it('migrates an identified version-one history database to Story State schema six', async () => {
     const dir = await tempDir()
     const path = join(dir, 'history.sqlite')
     const { DatabaseSync } = await import('node:sqlite')
@@ -1220,16 +1283,17 @@ describe('LocalNovelRepository', () => {
     const history = await openHistory(path, 100, decodeHistoryOperations)
     history.close()
     const migrated = new DatabaseSync(path)
-    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(5)
+    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6)
     expect((migrated.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>).map(row => row.name))
       .toContain('asset_type')
     const tables = migrated.prepare(`
       SELECT name FROM sqlite_master
-      WHERE type = 'table' AND name IN ('change_sets', 'apply_journal', 'analysis_reports', 'revision_finalizations', 'preference_candidates')
+      WHERE type = 'table' AND name IN ('change_sets', 'apply_journal', 'analysis_reports', 'revision_finalizations', 'preference_candidates', 'story_state_candidates')
       ORDER BY name
     `).all() as Array<{ name: string }>
     expect(tables.map(row => row.name)).toEqual([
       'analysis_reports', 'apply_journal', 'change_sets', 'preference_candidates', 'revision_finalizations',
+      'story_state_candidates',
     ])
     migrated.close()
   })

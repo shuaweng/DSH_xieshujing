@@ -69,3 +69,11 @@ export type PreferenceCandidateId = Branded<'NovelPreferenceCandidateId'>
 export function PreferenceCandidateId(value: string): PreferenceCandidateId {
   return value as PreferenceCandidateId
 }
+
+/** Opaque identity of one inferred, author-reviewable Story State candidate. */
+export type StoryStateCandidateId = Branded<'NovelStoryStateCandidateId'>
+
+/** Brand a provider-created Story State candidate identity. */
+export function StoryStateCandidateId(value: string): StoryStateCandidateId {
+  return value as StoryStateCandidateId
+}

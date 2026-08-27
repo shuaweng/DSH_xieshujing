@@ -3,6 +3,7 @@ import { fireEvent, render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createBookBriefRenderer,
+  createBookStoryStateRenderer,
   createBookStyleProfileRenderer,
   createChapterOutlineRenderer,
   createPlanningOutlineRenderer,
@@ -106,5 +107,19 @@ describe('freeform planning Client renderers', () => {
     }))
     fireEvent.click(style.getByRole('button', { name: zh.editMarkdown }))
     expect(style.getByPlaceholderText(zh.bookStyleProfilePlaceholder)).toBeTruthy()
+
+    const storyState = render(createBookStoryStateRenderer(t).renderEditor({
+      document: {} as never,
+      title: '故事状态',
+      content: { kind: 'book-story-state', body: '# 当前事实\n\n林澈已抵达白港。' },
+      ariaLabel: '故事状态',
+      readOnly: false,
+      onContentChange: vi.fn(),
+      onTitleChange: vi.fn(),
+      onSelectionChange: vi.fn(),
+    }))
+    expect(storyState.getByLabelText(zh.markdownPreview).textContent).toContain('林澈已抵达白港')
+    fireEvent.click(storyState.getByRole('button', { name: zh.editMarkdown }))
+    expect(storyState.getByPlaceholderText(zh.bookStoryStatePlaceholder)).toBeTruthy()
   })
 })

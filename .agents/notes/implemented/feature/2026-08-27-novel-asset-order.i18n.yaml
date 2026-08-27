@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-novel-asset-order.md
-2026-08-27-novel-asset-order.md: c307c18700b9dfd03feac27e46477347fd0c1a5b
-2026-08-27-novel-asset-order.zh.md: 7156a2418bb5c4bcb85635ec447a0a2a4f4f107e
+2026-08-27-novel-asset-order.md: 6369017078ac411f5ba55f379cb98df1aceb04c7
+2026-08-27-novel-asset-order.zh.md: f7d6db6a2b6772e5680fed33af89f1ffbf63799b

@@ -11,11 +11,11 @@
 - `planning.outline` 是声明的 `planning` 内容根下的 UTF-8 Markdown Asset。Frontmatter 保存 schema、稳定 id、类型、标题与 `level: book | volume`；Markdown 正文完全自由。
 - 大纲没有父级。卷纲必须通过 `novel.parent` 指向大纲。继续嵌套、跨类型父级、父级缺失与循环关系都会失败关闭。
 - `planning.chapter-outline` 是自由 Markdown，其 `novel.parent` 必须指向一个 `manuscript.chapter`。每章最多只能拥有一个章纲。
-- `book.brief` 与 `book.style-profile` 是放在已声明 `planning` 内容根下、没有父级的自由 Markdown Asset。每种类型在项目中最多一份。概述保存作者确认的作品定位与全书事实边界；风格资产保存作者确认的文气与连载节奏要求。
+- `book.brief`、`book.style-profile` 与 `book.story-state` 是放在已声明 `planning` 内容根下、没有父级的自由 Markdown Asset。每种类型在项目中最多一份。概述保存作品定位与 Canon 边界；风格资产保存文气与连载节奏要求；Story State 只保存定稿正文已确认的当前现实。
 - 情绪目标、场面钥匙、钩子分布、15/35/35/15 节奏和起承转合只是工作台提供的可选引导。它们不是持久化字段，也不是校验要求。
 - 人类保存可以修改标题和完整正文。冻结选区复用精确 UTF-16 文本范围 selector，并通过 quote hash 绑定到一个已保留 Revision。
-- 四种类型都通过 ChangeSet 接受一个精确 `replace-text` 操作，并可在同一 ChangeSet 中与一个 `update-title` 组合。类型定义会在一次原子物化前校验标题、offset 与 quote hash，并保留身份、父级和无关 Frontmatter。
-- Client contribution 对已有内容默认展示渲染后的 Markdown 阅读视图，并可明确切换到不受模板限制的源码编辑器。阅读视图只是保留源码的投影。它会展示精确文本与标题 Diff；共享 Explorer 为两个项目级唯一指导 Asset 提供“本书”分组和两层大纲导航，正文 Canvas 提供章节本地章纲侧栏。
+- 五种类型都通过 ChangeSet 接受一个精确 `replace-text` 操作，并可在同一 ChangeSet 中与一个 `update-title` 组合。类型定义会在一次原子物化前校验标题、offset 与 quote hash，并保留身份、父级和无关 Frontmatter。
+- Client contribution 对已有内容默认展示渲染后的 Markdown 阅读视图，并可明确切换到不受模板限制的源码编辑器。阅读视图只是保留源码的投影。它会展示精确文本与标题 Diff；共享 Explorer 为三个项目级唯一 Asset 提供“本书”分组和两层大纲导航，正文 Canvas 提供章节本地章纲侧栏。
 
 ```markdown
 ---
@@ -73,13 +73,27 @@ novel:
 克制、具体，先写动作与后果，再补当前场景必需的解释。
 ```
 
+```markdown
+---
+novel:
+  schema: 1
+  id: book-story-state
+  type: book.story-state
+  title: Story State
+---
+
+# Confirmed facts
+
+- <one fact confirmed by the finalized manuscript>
+```
+
 ## 模型体验
 
 ### 自由策划上下文与操作
 
 #### 模型看到什么
 
-`novel_list` 暴露全部创建契约与规范精确 Revision 引用。`novel_create` 可以创建大纲、卷纲、绑定章节的章纲或尚未存在的项目级唯一指导 Asset；`novel_get` 返回精确自由正文；`novel_propose_changes` 创建可审阅的精确文本替换，而不会直接应用。工作台 persona 与相关 Skill 会按任务显式发现并读取当前 `book.brief` 或 `book.style-profile` Revision；它们不是隐藏的常驻 prompt 注入。
+`novel_list` 暴露全部创建契约与规范精确 Revision 引用。`novel_create` 可以创建大纲、卷纲、绑定章节的章纲或尚未存在的项目级唯一 Asset；`novel_get` 返回精确自由正文；`novel_propose_changes` 创建可审阅的精确文本替换，而不会直接应用。相关流程只在匹配的显式策略下读取概述、风格或已确认 Story State；它们都不是隐藏的常驻 prompt 注入。
 
 #### Token 影响
 
@@ -96,4 +110,5 @@ novel:
 - **只约束两层大纲**：幕、阶段或自定义层级暂时应写在自由 Markdown 内，等出现有证据的语义需求再升级。
 - **每章一个章纲**：备选方案与分支章纲尚未实现。
 - **只有经过审阅的定稿偏好学习**：已采纳的草稿/定稿候选会通过 ChangeSet 追加到 `book.style-profile`；自动提升、多次定稿去重与偏好检索尚未实现。
+- **只有经过审阅的 Story State 提升**：定稿章节可以为 `book.story-state` 生成一份完整替换候选；必须由作者采纳，目标 Revision 过期时会冲突。
 - **仅词法发现**：策划与指导 Asset 已参与提供方无关的标题/模型文本检索；语义检索与关系范围检索尚未实现。

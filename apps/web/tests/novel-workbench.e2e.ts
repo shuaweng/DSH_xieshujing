@@ -358,6 +358,7 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
 
     await page.getByRole('button', { name: 'Book Style Style', exact: true }).click()
     await page.getByRole('region', { name: 'Book Style · Book style' }).waitFor()
+    await page.getByRole('button', { name: 'Edit', exact: true }).click()
     const styleEditor = page.getByRole('textbox', { name: 'Freeform planning content' })
     await page.getByRole('textbox', { name: 'Name' }).fill('White Harbor Style')
     await styleEditor.fill('## Voice\n\nRestrained, concrete, and character-specific.')

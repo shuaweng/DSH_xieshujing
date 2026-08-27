@@ -8,6 +8,7 @@ import {
   AssetId,
   ChangeSetId,
   PreferenceCandidateId,
+  StoryStateCandidateId,
   NovelRepositoryError,
   ProjectId,
   RevisionId,
@@ -20,12 +21,13 @@ import {
   type NovelAnalysisReportKind,
   type NovelOperation,
   type NovelPreferenceCandidate,
+  type NovelStoryStateCandidate,
   type RevisionFinalization,
   type RevisionOrigin,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 
 /** Physical schema containing revisions, proposals, and recoverable apply intent. */
-export const NOVEL_HISTORY_SCHEMA_VERSION = 5
+export const NOVEL_HISTORY_SCHEMA_VERSION = 6
 /** SQLite application id reserved for DSH Novel history. */
 export const NOVEL_HISTORY_APPLICATION_ID = 0x44534E48
 
@@ -115,6 +117,26 @@ interface PreferenceCandidateRow {
   result_revision_id: string | null
 }
 
+interface StoryStateCandidateRow {
+  id: string
+  project_id: string
+  asset_id: string
+  final_revision_id: string
+  target_story_state_asset_id: string
+  target_story_state_revision_id: string
+  extractor_version: string
+  generated_at: string
+  worker_session_id: string | null
+  summary: string
+  replacement_markdown: string
+  evidence_json: string
+  status: string
+  decided_at: string | null
+  decided_by_session_id: string | null
+  result_change_set_id: string | null
+  result_revision_id: string | null
+}
+
 /** Exact durable intent needed to finish or reject an interrupted publication. */
 export interface ApplyJournal {
   readonly changeSetId: ChangeSetId
@@ -186,7 +208,7 @@ function configure(db: DatabaseSync, path: string): void {
       'NOVEL_HISTORY_CORRUPT',
     )
   }
-  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4
+  if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5
     && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
     throw new NovelRepositoryError(
       `novel repository: history database "${path}" uses unsupported schema ${version}`,
@@ -298,6 +320,28 @@ function configure(db: DatabaseSync, path: string): void {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS preference_candidates_final
         ON preference_candidates(project_id, asset_id, final_revision_id, generated_at, id);
+      CREATE TABLE IF NOT EXISTS story_state_candidates (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        asset_id TEXT NOT NULL,
+        final_revision_id TEXT NOT NULL REFERENCES revisions(id),
+        target_story_state_asset_id TEXT NOT NULL,
+        target_story_state_revision_id TEXT NOT NULL REFERENCES revisions(id),
+        extractor_version TEXT NOT NULL,
+        generated_at TEXT NOT NULL,
+        worker_session_id TEXT,
+        summary TEXT NOT NULL,
+        replacement_markdown TEXT NOT NULL,
+        evidence_json TEXT NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('pending', 'accepted', 'rejected')),
+        decided_at TEXT,
+        decided_by_session_id TEXT,
+        result_change_set_id TEXT REFERENCES change_sets(id),
+        result_revision_id TEXT REFERENCES revisions(id),
+        UNIQUE(project_id, asset_id, final_revision_id)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS story_state_candidates_final
+        ON story_state_candidates(project_id, asset_id, final_revision_id, generated_at, id);
     `)
     const changeSetColumns = db.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>
     if (version > 0 && version < 3 && !changeSetColumns.some(column => column.name === 'asset_type')) {
@@ -513,6 +557,81 @@ export class NovelHistory {
       WHERE id = ? AND status = 'pending'
     `).run(status, decidedAt, sessionId, result?.changeSetId ?? null, result?.revisionId ?? null, id)
     return this.preferenceCandidate(id)
+  }
+
+  putStoryStateCandidate(value: NovelStoryStateCandidate): NovelStoryStateCandidate {
+    this.db.prepare(`
+      INSERT INTO story_state_candidates (
+        id, project_id, asset_id, final_revision_id, target_story_state_asset_id,
+        target_story_state_revision_id, extractor_version, generated_at,
+        worker_session_id, summary, replacement_markdown, evidence_json, status,
+        decided_at, decided_by_session_id, result_change_set_id, result_revision_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(project_id, asset_id, final_revision_id) DO UPDATE SET
+        target_story_state_asset_id = excluded.target_story_state_asset_id,
+        target_story_state_revision_id = excluded.target_story_state_revision_id,
+        extractor_version = excluded.extractor_version,
+        generated_at = excluded.generated_at,
+        worker_session_id = excluded.worker_session_id,
+        summary = excluded.summary,
+        replacement_markdown = excluded.replacement_markdown,
+        evidence_json = excluded.evidence_json
+      WHERE story_state_candidates.status = 'pending'
+    `).run(
+      value.id, value.projectId, value.assetId, value.finalRevisionId,
+      value.targetStoryStateAssetId, value.targetStoryStateRevisionId,
+      value.extractorVersion, value.generatedAt, value.workerSessionId ?? null,
+      value.summary, value.replacementMarkdown, JSON.stringify(value.evidence),
+      value.status, value.decidedAt ?? null, value.decidedBySessionId ?? null,
+      value.resultChangeSetId ?? null, value.resultRevisionId ?? null,
+    )
+    return requiredStoryStateCandidate(this.storyStateCandidateForFinal(
+      value.projectId, value.assetId, value.finalRevisionId,
+    ))
+  }
+
+  storyStateCandidate(id: StoryStateCandidateId): NovelStoryStateCandidate | undefined {
+    const row = this.db.prepare('SELECT * FROM story_state_candidates WHERE id = ?')
+      .get(id) as StoryStateCandidateRow | undefined
+    return row === undefined ? undefined : storyStateCandidateFromRow(row)
+  }
+
+  storyStateCandidateForFinal(
+    projectId: ProjectId,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+  ): NovelStoryStateCandidate | undefined {
+    const row = this.db.prepare(`
+      SELECT * FROM story_state_candidates
+      WHERE project_id = ? AND asset_id = ? AND final_revision_id = ?
+    `).get(projectId, assetId, finalRevisionId) as StoryStateCandidateRow | undefined
+    return row === undefined ? undefined : storyStateCandidateFromRow(row)
+  }
+
+  storyStateCandidates(
+    projectId: ProjectId,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+  ): readonly NovelStoryStateCandidate[] {
+    const value = this.storyStateCandidateForFinal(projectId, assetId, finalRevisionId)
+    return value === undefined ? [] : [value]
+  }
+
+  decideStoryStateCandidate(
+    id: StoryStateCandidateId,
+    status: 'accepted' | 'rejected',
+    decidedAt: string,
+    sessionId: SessionId,
+    result?: { readonly changeSetId: ChangeSetId; readonly revisionId: RevisionId },
+  ): NovelStoryStateCandidate | undefined {
+    const current = this.storyStateCandidate(id)
+    if (current === undefined || current.status !== 'pending') return current
+    this.db.prepare(`
+      UPDATE story_state_candidates SET status = ?, decided_at = ?, decided_by_session_id = ?,
+        result_change_set_id = ?, result_revision_id = ?
+      WHERE id = ? AND status = 'pending'
+    `).run(status, decidedAt, sessionId, result?.changeSetId ?? null, result?.revisionId ?? null, id)
+    return this.storyStateCandidate(id)
   }
 
   /**
@@ -785,6 +904,11 @@ function requiredCandidate(value: NovelPreferenceCandidate | undefined): NovelPr
   return value
 }
 
+function requiredStoryStateCandidate(value: NovelStoryStateCandidate | undefined): NovelStoryStateCandidate {
+  if (value === undefined) throw corrupt('Story State candidate disappeared during a transaction')
+  return value
+}
+
 function corrupt(detail: string, cause?: unknown): NovelRepositoryError {
   return new NovelRepositoryError(
     `novel repository: corrupt history: ${detail}`,
@@ -940,6 +1064,43 @@ function preferenceEvidence(value: unknown): NovelPreferenceCandidate['evidence'
       throw corrupt('preference evidence is invalid')
     }
     return { before, after, inference }
+  })
+}
+
+function storyStateCandidateFromRow(row: StoryStateCandidateRow): NovelStoryStateCandidate {
+  const evidence = storyStateEvidence(parseJson(row.evidence_json, 'Story State evidence'))
+  if (!['pending', 'accepted', 'rejected'].includes(row.status)) throw corrupt('Story State status is invalid')
+  if (!Number.isFinite(Date.parse(row.generated_at))) throw corrupt('Story State generation time is invalid')
+  return {
+    id: StoryStateCandidateId(row.id),
+    projectId: ProjectId(row.project_id),
+    assetId: AssetId(row.asset_id),
+    finalRevisionId: RevisionId(row.final_revision_id),
+    targetStoryStateAssetId: AssetId(row.target_story_state_asset_id),
+    targetStoryStateRevisionId: RevisionId(row.target_story_state_revision_id),
+    extractorVersion: row.extractor_version,
+    generatedAt: row.generated_at,
+    ...(row.worker_session_id === null ? {} : { workerSessionId: row.worker_session_id as SessionId }),
+    summary: row.summary,
+    replacementMarkdown: row.replacement_markdown,
+    evidence,
+    status: row.status as NovelStoryStateCandidate['status'],
+    ...(row.decided_at === null ? {} : { decidedAt: row.decided_at }),
+    ...(row.decided_by_session_id === null ? {} : { decidedBySessionId: row.decided_by_session_id as SessionId }),
+    ...(row.result_change_set_id === null ? {} : { resultChangeSetId: ChangeSetId(row.result_change_set_id) }),
+    ...(row.result_revision_id === null ? {} : { resultRevisionId: RevisionId(row.result_revision_id) }),
+  }
+}
+
+function storyStateEvidence(value: unknown): NovelStoryStateCandidate['evidence'] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 12) {
+    throw corrupt('Story State evidence is invalid')
+  }
+  return value.map((item) => {
+    if (!isRecord(item) || typeof item['quote'] !== 'string' || typeof item['update'] !== 'string') {
+      throw corrupt('Story State evidence is invalid')
+    }
+    return { quote: item['quote'], update: item['update'] }
   })
 }
 

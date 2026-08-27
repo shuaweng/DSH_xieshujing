@@ -65,6 +65,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         fsSandbox: 'packages/fs/fs-sandbox/lib/index.js',
         novelAssetTypes: 'packages/experimental/novel-repository/lib/types/asset-types.js',
         novelAnalysis: 'packages/experimental/novel-analysis/lib/index.js',
+        novelContext: 'packages/experimental/novel-context/lib/index.js',
         novelClient: 'packages/experimental/novel-repository-client/lib/client.js',
         novelLocal: 'packages/experimental/novel-repository-local/lib/index.js',
         novelRemote: 'packages/experimental/novel-repository-remote/lib/index.js',
@@ -85,6 +86,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         const { default: SandboxedFileSystem } = await import(urls.fsSandbox)
         const { default: NovelAssetTypeRegistry } = await import(urls.novelAssetTypes)
         const { default: NovelAnalysis } = await import(urls.novelAnalysis)
+        const { default: NovelContextResolver } = await import(urls.novelContext)
         const { default: LocalNovelRepository } = await import(urls.novelLocal)
         const { default: NovelRepositoryRemote } = await import(urls.novelRemote)
         const { TYPERT } = await import(urls.novelTypert)
@@ -97,6 +99,7 @@ describe.skipIf(!requiredArtifacts)('Novel Repository built Remote chain', () =>
         await host.plugin(SandboxedFileSystem, { cwd: projectRoot })
         await host.plugin(NovelAssetTypeRegistry)
         await host.plugin(LocalNovelRepository)
+        await host.plugin(NovelContextResolver)
         await host.plugin(SubagentRuntime)
         await host.plugin(NovelAnalysis)
         await host.plugin(TypertRegistry)

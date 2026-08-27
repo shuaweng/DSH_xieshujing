@@ -20,6 +20,7 @@ import type {
   NovelAnalysisReportDescriptor,
   NovelPreferenceCandidateDescriptor,
   NovelRevisionFinalizationDescriptor,
+  NovelStoryStateCandidateDescriptor,
   NovelContextWorksetDescriptor,
   NovelSelectionDescriptor,
   CreateNovelAssetRequest,
@@ -91,9 +92,12 @@ const canvasAnalysisStubs = {
   reviewChapter: async () => analysisReport('chapter-review'),
   finalizations: async () => [],
   preferenceCandidates: async () => [],
+  storyStateCandidates: async () => [],
   finalizeChapter: async () => { throw new Error('not exercised') },
   acceptPreference: async () => { throw new Error('not exercised') },
   rejectPreference: async () => { throw new Error('not exercised') },
+  acceptStoryState: async () => { throw new Error('not exercised') },
+  rejectStoryState: async () => { throw new Error('not exercised') },
 }
 
 function chapter(overrides: Partial<NovelAssetDocument> = {}): NovelAssetDocument {
@@ -187,6 +191,24 @@ function preference(status: NovelPreferenceCandidateDescriptor['status'] = 'pend
     summary: '作者偏好用画面承载情绪。',
     guidanceMarkdown: '- 用具体动作和环境承载情绪，减少直接总结。',
     evidence: [{ before: '她很紧张。', after: '她把票根折了两次。', inference: '用动作替代情绪命名。' }],
+    status,
+  }
+}
+
+function storyCandidate(
+  status: NovelStoryStateCandidateDescriptor['status'] = 'pending',
+): NovelStoryStateCandidateDescriptor {
+  return {
+    id: 'story-state-candidate-1' as never,
+    projectId: 'project-1' as never,
+    assetId: 'asset-chapter-1' as never,
+    finalRevisionId: 'revision-1' as never,
+    targetStoryStateAssetId: 'story-state-1' as never,
+    targetStoryStateRevisionId: 'revision-story-state-1' as never,
+    generatedAt: '2026-08-26T08:00:02.000Z',
+    summary: '林澈已经抵达白港。',
+    replacementMarkdown: '# 当前事实\n\n- 林澈已经抵达白港。',
+    evidence: [{ quote: '林澈抵达白港', update: '当前位置更新为白港' }],
     status,
   }
 }
@@ -771,23 +793,30 @@ describe('Canvas', () => {
     expect(reviewChapter).not.toHaveBeenCalled()
   })
 
-  it('marks the exact Revision final and keeps inferred preference inert until the author accepts it', async () => {
+  it('marks the exact Revision final and keeps preference and Story State candidates inert', async () => {
     const store = createNovelWorkbenchStore().create()
     const current = chapter()
     act(() => {
       store.actions.loaded({ title: '白港' } as never, [{ ...current, content: undefined }] as never)
       store.actions.open(current)
     })
-    const finalizeChapter = vi.fn(async () => ({ finalization: finalization(), candidate: preference() }))
+    const finalizeChapter = vi.fn(async () => ({
+      finalization: finalization(), candidate: preference(), storyCandidate: storyCandidate(),
+    }))
     const acceptPreference = vi.fn(async () => preference('accepted'))
     const rejectPreference = vi.fn(async () => preference('rejected'))
+    const acceptStoryState = vi.fn(async () => storyCandidate('accepted'))
+    const rejectStoryState = vi.fn(async () => storyCandidate('rejected'))
     const view = render(<Canvas
       {...canvasAnalysisStubs}
       finalizations={async () => []}
       preferenceCandidates={async () => []}
+      storyStateCandidates={async () => []}
       finalizeChapter={finalizeChapter}
       acceptPreference={acceptPreference}
       rejectPreference={rejectPreference}
+      acceptStoryState={acceptStoryState}
+      rejectStoryState={rejectStoryState}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
@@ -801,6 +830,8 @@ describe('Canvas', () => {
     expect(within(drawer).getByText('作者偏好用画面承载情绪。')).toBeTruthy()
     expect(within(drawer).getByText('她很紧张。')).toBeTruthy()
     expect(within(drawer).getByText('她把票根折了两次。')).toBeTruthy()
+    expect(within(drawer).getByText('林澈已经抵达白港。')).toBeTruthy()
+    expect(within(drawer).getByText('当前位置更新为白港')).toBeTruthy()
     expect(acceptPreference).not.toHaveBeenCalled()
 
     fireEvent.click(within(drawer).getByRole('button', { name: zh.acceptPreference }))
@@ -808,6 +839,11 @@ describe('Canvas', () => {
     await waitFor(() => { expect(within(drawer).getByText(zh.preferenceAccepted)).toBeTruthy() })
     expect(within(drawer).queryByRole('button', { name: zh.acceptPreference })).toBeNull()
     expect(rejectPreference).not.toHaveBeenCalled()
+
+    fireEvent.click(within(drawer).getByRole('button', { name: zh.acceptStoryState }))
+    await waitFor(() => { expect(acceptStoryState).toHaveBeenCalledWith(SID, 'story-state-candidate-1') })
+    await waitFor(() => { expect(within(drawer).getAllByText(zh.preferenceAccepted)).toHaveLength(2) })
+    expect(rejectStoryState).not.toHaveBeenCalled()
   })
 })
 
@@ -1121,8 +1157,16 @@ describe('Explorer', () => {
       projectRelativePath: 'planning/book-style.md',
       content: { kind: 'book-style-profile', body: '' },
     })
+    const createdStoryState = chapter({
+      id: 'story-state' as never,
+      type: 'book.story-state',
+      title: zh.newBookStoryStateTitle,
+      projectRelativePath: 'planning/story-state.md',
+      content: { kind: 'book-story-state', body: '' },
+    })
     const create = vi.fn(async (_sid: SessionId, request: CreateNovelAssetRequest) =>
-      request.type === 'book.brief' ? createdBrief : createdStyle)
+      request.type === 'book.brief' ? createdBrief
+        : request.type === 'book.style-profile' ? createdStyle : createdStoryState)
     const view = render(<Explorer
       reorder={reorderStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
@@ -1143,7 +1187,13 @@ describe('Explorer', () => {
       content: { kind: 'book-style-profile', body: '' },
     }) })
     expect(view.getByText(zh.newBookStyleProfileTitle)).toBeTruthy()
-    expect(view.getByText(zh.bookGuidance).parentElement?.textContent).toContain('2 项')
+    fireEvent.click(view.getByText(`＋ ${zh.addBookStoryState}`))
+    await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
+      type: 'book.story-state', title: zh.newBookStoryStateTitle,
+      content: { kind: 'book-story-state', body: '' },
+    }) })
+    expect(view.getAllByText(zh.newBookStoryStateTitle)).toHaveLength(2)
+    expect(view.getByText(zh.bookGuidance).parentElement?.textContent).toContain('3 项')
   })
 
   it('cancels late load outcomes and ignores chapter clicks without a Session', async () => {

@@ -10,11 +10,13 @@
         - text: 2 items
         - button "Book Brief Brief"
         - button "White Harbor Style Style"
+        - button "＋ Create Story State"
       - group:
         - text: ›
         - strong: Manuscript
         - text: 1 chapters
-        - button "雨夜归人"
+        - button "＋ New chapter"
+        - button "雨夜归人，Drag to reorder chapters": 雨夜归人
       - group:
         - text: ›
         - strong: Outline
@@ -27,14 +29,15 @@
     - strong: 白港
     - text: White Harbor Story Outline
     - combobox "Manuscript versions":
-      - option "Current · 8/26/2026, {{clock}} · Author save" [selected]
-      - option "8/26/2026, {{clock}} · Initial import"
+      - option "Current · 8/27/2026, {{clock}} · Author save" [selected]
+      - option "8/27/2026, {{clock}} · Initial import"
   - text: Saved
   - button "Save" [disabled]
   - button "Reference selection to Agent"
   - region "White Harbor Story Outline · Freeform outline":
     - text: Name
     - textbox "Name": White Harbor Story Outline
+    - button "Read" [pressed]
     - textbox "Freeform planning content":
       - /placeholder: Write freely. Use headings, lists, tables, or any method that fits this book…
       - text: "# Act One Opening: Open with hunger, rain, and an uncertain arrival."

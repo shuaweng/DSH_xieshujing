@@ -28,6 +28,12 @@ export interface BookStyleProfileContent {
   readonly body: string
 }
 
+/** Freeform project-level truth established by finalized manuscript prose. */
+export interface BookStoryStateContent {
+  readonly kind: 'book-story-state'
+  readonly body: string
+}
+
 declare module '@deepseek-ai/dsh-experimental-novel-repository/types' {
   interface NovelAssetTypeMap {
     'planning.outline': {
@@ -53,6 +59,13 @@ declare module '@deepseek-ai/dsh-experimental-novel-repository/types' {
     }
     'book.style-profile': {
       readonly content: BookStyleProfileContent
+      readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
+      readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
+      readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation
+        | import('@deepseek-ai/dsh-experimental-novel-repository/types').UpdateTitleOperation
+    }
+    'book.story-state': {
+      readonly content: BookStoryStateContent
       readonly selectionInput: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelectionInput
       readonly selector: import('@deepseek-ai/dsh-experimental-novel-repository/types').TextRangeSelector
       readonly operation: import('@deepseek-ai/dsh-experimental-novel-repository/types').ReplaceTextOperation

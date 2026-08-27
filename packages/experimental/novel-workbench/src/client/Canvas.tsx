@@ -10,6 +10,7 @@ import type {
   CreateNovelAssetRequest,
   NovelAnalysisReportDescriptor,
   NovelPreferenceCandidateDescriptor,
+  NovelStoryStateCandidateDescriptor,
   NovelRevisionFinalizationDescriptor,
   FinalizeNovelChapterDescriptor,
   NovelAssetDescriptor,
@@ -40,9 +41,14 @@ export interface CanvasInjected {
   preferenceCandidates: (
     sessionId: SessionId, assetId: string, revisionId: string,
   ) => Promise<readonly NovelPreferenceCandidateDescriptor[]>
+  storyStateCandidates: (
+    sessionId: SessionId, assetId: string, revisionId: string,
+  ) => Promise<readonly NovelStoryStateCandidateDescriptor[]>
   finalizeChapter: (sessionId: SessionId, assetId: string, revisionId: string) => Promise<FinalizeNovelChapterDescriptor>
   acceptPreference: (sessionId: SessionId, candidateId: string) => Promise<NovelPreferenceCandidateDescriptor>
   rejectPreference: (sessionId: SessionId, candidateId: string) => Promise<NovelPreferenceCandidateDescriptor>
+  acceptStoryState: (sessionId: SessionId, candidateId: string) => Promise<NovelStoryStateCandidateDescriptor>
+  rejectStoryState: (sessionId: SessionId, candidateId: string) => Promise<NovelStoryStateCandidateDescriptor>
   create: (sessionId: SessionId, request: CreateNovelAssetRequest) => Promise<NovelAssetDocument>
   save: (sessionId: SessionId, request: SaveNovelAssetRequest) => Promise<NovelAssetDocument>
   capture: (sessionId: SessionId, request: CaptureNovelSelectionRequest) => Promise<NovelSelectionDescriptor>
@@ -96,7 +102,8 @@ const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 /** One exact-revision typed Asset editor with an optional chapter-local planning surface. */
 export function Canvas({
   useSessions, useStore, actions, renderers, initialize, open, revisions, analysisReports, scanNoAi, reviewChapter,
-  finalizations, preferenceCandidates, finalizeChapter, acceptPreference, rejectPreference,
+  finalizations, preferenceCandidates, storyStateCandidates, finalizeChapter, acceptPreference, rejectPreference,
+  acceptStoryState, rejectStoryState,
   create, save, capture, appendReference,
   reportContextFocus = ignoreContextFocus, reportProjectStatus = ignoreProjectStatus, t,
 }: CanvasProps) {
@@ -111,10 +118,12 @@ export function Canvas({
   const [analysisError, setAnalysisError] = useState<string>()
   const [finalizationItems, setFinalizationItems] = useState<readonly NovelRevisionFinalizationDescriptor[]>([])
   const [preferenceCandidate, setPreferenceCandidate] = useState<NovelPreferenceCandidateDescriptor>()
+  const [storyCandidate, setStoryCandidate] = useState<NovelStoryStateCandidateDescriptor>()
   const [preferenceOpen, setPreferenceOpen] = useState(false)
   const [preferenceBusy, setPreferenceBusy] = useState(false)
   const [preferenceError, setPreferenceError] = useState<string>()
   const [preferenceNotice, setPreferenceNotice] = useState<string>()
+  const [storyNotice, setStoryNotice] = useState<string>()
   const [statusHost, setStatusHost] = useState<Element | null>(null)
   const analysisEpoch = useRef(0)
 
@@ -146,8 +155,10 @@ export function Canvas({
   useEffect(() => {
     setPreferenceOpen(false)
     setPreferenceCandidate(undefined)
+    setStoryCandidate(undefined)
     setPreferenceError(undefined)
     setPreferenceNotice(undefined)
+    setStoryNotice(undefined)
   }, [state.document?.id, state.document?.revisionId])
 
   useEffect(() => {
@@ -161,19 +172,22 @@ export function Canvas({
 
   useEffect(() => {
     if (sessionId === undefined || state.document?.type !== 'manuscript.chapter') {
-      setFinalizationItems([]); setPreferenceCandidate(undefined); return
+      setFinalizationItems([]); setPreferenceCandidate(undefined); setStoryCandidate(undefined); return
     }
     let live = true
     void Promise.all([
       finalizations(sessionId, state.document.id),
       preferenceCandidates(sessionId, state.document.id, state.document.revisionId),
-    ]).then(([finalized, candidates]) => {
+      storyStateCandidates(sessionId, state.document.id, state.document.revisionId),
+    ]).then(([finalized, candidates, storyCandidates]) => {
       if (!live) return
       setFinalizationItems(finalized)
       setPreferenceCandidate(candidates[0])
+      setStoryCandidate(storyCandidates[0])
     }).catch((cause: unknown) => { if (live) setPreferenceError(errorMessage(cause)) })
     return () => { live = false }
-  }, [finalizations, preferenceCandidates, sessionId, state.document?.id, state.document?.revisionId, state.document?.type])
+  }, [finalizations, preferenceCandidates, storyStateCandidates, sessionId,
+    state.document?.id, state.document?.revisionId, state.document?.type])
 
   useEffect(() => {
     if (analysisMode === undefined || sessionId === undefined || state.document === undefined) return
@@ -269,6 +283,7 @@ export function Canvas({
     setPreferenceBusy(true)
     setPreferenceError(undefined)
     setPreferenceNotice(undefined)
+    setStoryNotice(undefined)
     try {
       const document = await persist()
       if (document === undefined) return
@@ -276,11 +291,15 @@ export function Canvas({
       setFinalizationItems(previous => previous.some(item => item.revisionId === result.finalization.revisionId)
         ? previous : [result.finalization, ...previous])
       setPreferenceCandidate(result.candidate)
+      setStoryCandidate(result.storyCandidate)
       setPreferenceNotice(result.noCandidateReason === undefined ? undefined : t(
         result.noCandidateReason === 'no-agent-source' ? 'preferenceNoAgentSource'
           : result.noCandidateReason === 'no-author-diff' ? 'preferenceNoAuthorDiff'
             : 'preferenceMissingStyle',
       ))
+      setStoryNotice(result.storyCandidateError !== undefined
+        ? t('storyStateExtractionFailed')
+        : result.noStoryCandidateReason === undefined ? undefined : t('storyStateMissing'))
       setPreferenceOpen(true)
     } catch (cause: unknown) { setPreferenceError(errorMessage(cause)); setPreferenceOpen(true) }
     finally { setPreferenceBusy(false) }
@@ -295,6 +314,20 @@ export function Canvas({
         ? await acceptPreference(sessionId, preferenceCandidate.id)
         : await rejectPreference(sessionId, preferenceCandidate.id)
       setPreferenceCandidate(next)
+      if (decision === 'accept') actions.refresh()
+    } catch (cause: unknown) { setPreferenceError(errorMessage(cause)) }
+    finally { setPreferenceBusy(false) }
+  }
+
+  const decideStoryState = async (decision: 'accept' | 'reject') => {
+    if (sessionId === undefined || storyCandidate === undefined) return
+    setPreferenceBusy(true)
+    setPreferenceError(undefined)
+    try {
+      const next = decision === 'accept'
+        ? await acceptStoryState(sessionId, storyCandidate.id)
+        : await rejectStoryState(sessionId, storyCandidate.id)
+      setStoryCandidate(next)
       if (decision === 'accept') actions.refresh()
     } catch (cause: unknown) { setPreferenceError(errorMessage(cause)) }
     finally { setPreferenceBusy(false) }
@@ -350,7 +383,8 @@ export function Canvas({
         <button type="button" disabled={!state.dirty || busy || historical} onClick={() => { void persist() }}>{t('save')}</button>
         {state.document.type === 'manuscript.chapter' && <button type="button" disabled={busy || preferenceBusy}
           onClick={() => {
-            if (isFinal && preferenceCandidate !== undefined) setPreferenceOpen(true)
+            if (isFinal && (preferenceCandidate !== undefined || storyCandidate !== undefined
+              || preferenceNotice !== undefined || storyNotice !== undefined)) setPreferenceOpen(true)
             else void markFinal()
           }}>
           {isFinal ? t('viewFinalPreference') : t('markFinal')}
@@ -411,10 +445,14 @@ export function Canvas({
       revisionId={state.document.revisionId}
       candidate={preferenceCandidate}
       notice={preferenceNotice}
+      storyCandidate={storyCandidate}
+      storyNotice={storyNotice}
       busy={preferenceBusy}
       error={preferenceError}
       accept={() => { void decidePreference('accept') }}
       reject={() => { void decidePreference('reject') }}
+      acceptStoryState={() => { void decideStoryState('accept') }}
+      rejectStoryState={() => { void decideStoryState('reject') }}
       close={() => { setPreferenceOpen(false) }}
       t={t}
     />}
@@ -596,14 +634,21 @@ function AnalysisDrawer({ kind, revisionId, report, busy, error, rerun, close, t
   </div>
 }
 
-function PreferenceDrawer({ revisionId, candidate, notice, busy, error, accept, reject, close, t }: {
+function PreferenceDrawer({
+  revisionId, candidate, notice, storyCandidate, storyNotice, busy, error,
+  accept, reject, acceptStoryState, rejectStoryState, close, t,
+}: {
   readonly revisionId: string
   readonly candidate: NovelPreferenceCandidateDescriptor | undefined
   readonly notice: string | undefined
+  readonly storyCandidate: NovelStoryStateCandidateDescriptor | undefined
+  readonly storyNotice: string | undefined
   readonly busy: boolean
   readonly error: string | undefined
   readonly accept: () => void
   readonly reject: () => void
+  readonly acceptStoryState: () => void
+  readonly rejectStoryState: () => void
   readonly close: () => void
   readonly t: CanvasProps['t']
 }) {
@@ -617,8 +662,10 @@ function PreferenceDrawer({ revisionId, candidate, notice, busy, error, accept, 
       </header>
       {error !== undefined && <p className={css.chapterOutlineError} role="alert">{error}</p>}
       <div className={css.analysisBody}>
-        {busy && candidate === undefined && <p className={css.analysisEmpty}>{t('analyzing')}</p>}
+        {busy && candidate === undefined && storyCandidate === undefined
+          && <p className={css.analysisEmpty}>{t('analyzing')}</p>}
         {notice !== undefined && <p className={css.preferenceNotice}>{notice}</p>}
+        <h2 className={css.preferenceSummary}>{t('preferenceLearning')}</h2>
         {candidate !== undefined && <>
           <div className={css.analysisMeta}><span>{new Date(candidate.generatedAt).toLocaleString()}</span>
             <span>{candidate.status === 'pending' ? t('preferencePending')
@@ -632,6 +679,24 @@ function PreferenceDrawer({ revisionId, candidate, notice, busy, error, accept, 
           {candidate.status === 'pending' && <div className={css.preferenceActions}>
             <button type="button" disabled={busy} onClick={reject}>{t('rejectPreference')}</button>
             <button type="button" disabled={busy} onClick={accept}>{busy ? t('saving') : t('acceptPreference')}</button>
+          </div>}
+        </>}
+        <h2 className={css.preferenceSummary}>{t('storyStateUpdate')}</h2>
+        {storyNotice !== undefined && <p className={css.preferenceNotice}>{storyNotice}</p>}
+        {storyCandidate !== undefined && <>
+          <div className={css.analysisMeta}><span>{new Date(storyCandidate.generatedAt).toLocaleString()}</span>
+            <span>{storyCandidate.status === 'pending' ? t('preferencePending')
+              : storyCandidate.status === 'accepted' ? t('preferenceAccepted') : t('preferenceRejected')}</span></div>
+          <h3 className={css.preferenceSummary}>{storyCandidate.summary}</h3>
+          <pre className={css.preferenceGuidance}>{storyCandidate.replacementMarkdown}</pre>
+          <section className={css.preferenceEvidence}><h3>{t('storyStateEvidence')}</h3>
+            {storyCandidate.evidence.map((item, index) => <article key={`${index}-${item.update}`}>
+              <blockquote>{item.quote}</blockquote><small>{item.update}</small>
+            </article>)}</section>
+          {storyCandidate.status === 'pending' && <div className={css.preferenceActions}>
+            <button type="button" disabled={busy} onClick={rejectStoryState}>{t('rejectStoryState')}</button>
+            <button type="button" disabled={busy} onClick={acceptStoryState}>
+              {busy ? t('saving') : t('acceptStoryState')}</button>
           </div>}
         </>}
       </div>

@@ -12,6 +12,7 @@ import NovelAssetTypeRegistry from '@deepseek-ai/dsh-experimental-novel-reposito
 import {
   apply,
   bookBriefTypeDefinition,
+  bookStoryStateTypeDefinition,
   bookStyleProfileTypeDefinition,
   chapterOutlineTypeDefinition,
   parseChapterOutline,
@@ -71,11 +72,13 @@ describe('freeform planning Host definitions', () => {
     expect(ctx.novelAssetTypes.get('planning.chapter-outline')).toBe(chapterOutlineTypeDefinition)
     expect(ctx.novelAssetTypes.get('book.brief')).toBe(bookBriefTypeDefinition)
     expect(ctx.novelAssetTypes.get('book.style-profile')).toBe(bookStyleProfileTypeDefinition)
+    expect(ctx.novelAssetTypes.get('book.story-state')).toBe(bookStoryStateTypeDefinition)
     await contribution.dispose()
     expect(() => ctx.novelAssetTypes.get('planning.outline')).toThrow(/no registered Host definition/u)
     expect(() => ctx.novelAssetTypes.get('planning.chapter-outline')).toThrow(/no registered Host definition/u)
     expect(() => ctx.novelAssetTypes.get('book.brief')).toThrow(/no registered Host definition/u)
     expect(() => ctx.novelAssetTypes.get('book.style-profile')).toThrow(/no registered Host definition/u)
+    expect(() => ctx.novelAssetTypes.get('book.story-state')).toThrow(/no registered Host definition/u)
     await registry.dispose()
   })
 
@@ -182,6 +185,28 @@ describe('freeform planning Host definitions', () => {
       parentId: AssetId('outline-main'),
       content: { kind: 'book-style-profile', body: '克制、具体。' },
     }, 'planning/book-style.md')).toThrow(/must not declare novel.parent/u)
+  })
+
+  it('creates one freeform Story State singleton without imposing a fact schema', () => {
+    expect(bookStoryStateTypeDefinition.projectSingleton).toBe(true)
+    const created = bookStoryStateTypeDefinition.create!({
+      id: AssetId('book-story-state'),
+      title: '故事状态',
+      content: {
+        kind: 'book-story-state',
+        body: '# 当前事实\n\n- 林澈已经抵达白港。\n- 旧案卷宗被人为抽走。',
+      },
+    }, 'planning/book-story-state.md')
+    expect(created.parsed.content).toEqual({
+      kind: 'book-story-state',
+      body: '# 当前事实\n\n- 林澈已经抵达白港。\n- 旧案卷宗被人为抽走。',
+    })
+    expect(() => bookStoryStateTypeDefinition.create!({
+      id: AssetId('nested-story-state'),
+      title: '错误故事状态',
+      parentId: AssetId('outline-main'),
+      content: { kind: 'book-story-state', body: '' },
+    }, 'planning/nested-story-state.md')).toThrow(/must not declare novel.parent/u)
   })
 
   it('materializes one exact replacement and preserves unrelated Frontmatter', () => {

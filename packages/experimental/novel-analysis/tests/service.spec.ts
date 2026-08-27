@@ -44,6 +44,12 @@ const review = (score: number) => ({
   priorities: ['先强化触发人物行动的阻力。'],
 })
 
+const storyState = () => ({
+  summary: '林澈已经抵达白港，仍在观察入口。',
+  replacementMarkdown: '# 当前事实\n\n- 林澈已经抵达白港。\n- 林澈停在入口外，尚未进门。',
+  evidence: [{ quote: '林澈停在路口，没有立刻进门', update: '林澈抵达白港但仍停在入口外' }],
+})
+
 class ReviewProvider implements SubagentProvider {
   readonly name = 'review-test'
   readonly capabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
@@ -51,6 +57,7 @@ class ReviewProvider implements SubagentProvider {
   readonly requests: ResolvedSubagentStartRequest[] = []
   readonly disposals: Array<ReturnType<typeof vi.fn>> = []
   structured: unknown = review(72)
+  readonly queued: unknown[] = []
 
   async start(request: ResolvedSubagentStartRequest): Promise<SubagentRun> {
     this.requests.push(request)
@@ -59,7 +66,10 @@ class ReviewProvider implements SubagentProvider {
     return {
       id: SessionId(`review-worker-${this.requests.length}`),
       localAgent: undefined,
-      result: Promise.resolve({ output: [], structured: this.structured, stopReason: 'completed' }),
+      result: Promise.resolve({
+        output: [], structured: this.queued.length > 0 ? this.queued.shift() : this.structured,
+        stopReason: 'completed',
+      }),
       dispose,
     }
   }
@@ -105,6 +115,19 @@ async function harness(): Promise<{
     '  title: 本书风格',
     '---',
     '保持克制，避免替人物总结情绪。',
+    '',
+  ].join('\n'))
+  await writeFile(join(dir, 'planning', 'story-state.md'), [
+    '---',
+    'novel:',
+    '  schema: 1',
+    '  id: story-state-analysis',
+    '  type: book.story-state',
+    '  title: 故事状态',
+    '---',
+    '# 当前事实',
+    '',
+    '- 尚未开始正文。',
     '',
   ].join('\n'))
   const ctx = new Context()
@@ -208,7 +231,7 @@ describe('NovelAnalysis', () => {
     const { ctx, agent, revisionId, provider } = await harness()
     const signal = new AbortController().signal
     const { project, finalRevisionId } = await authorFinalAfterAgent(ctx, agent, revisionId)
-    provider.structured = {
+    const preference = {
       summary: '作者更偏好用可见环境建立情绪，不直接概括天气。',
       guidanceMarkdown: '- 用具体可见的环境细节承载氛围，少用概括性天气句。',
       evidence: [{
@@ -217,6 +240,7 @@ describe('NovelAnalysis', () => {
         inference: '用画面替代概括。',
       }],
     }
+    provider.queued.push(storyState(), preference)
 
     const learned = await ctx.novelAnalysis.finalizeChapter(
       agent, AssetId('chapter-analysis'), finalRevisionId, signal,
@@ -231,6 +255,14 @@ describe('NovelAnalysis', () => {
       targetStyleAssetId: 'style-analysis',
       summary: '作者更偏好用可见环境建立情绪，不直接概括天气。',
     })
+    expect(learned.storyCandidate).toMatchObject({
+      status: 'pending', finalRevisionId, targetStoryStateAssetId: 'story-state-analysis',
+    })
+    expect(provider.requests[0]?.persona).toContain('Story State')
+    const storyPrompt = provider.requests[0]?.prompt[0]
+    if (storyPrompt?.type !== 'text') throw new Error('expected text Story State prompt')
+    expect(storyPrompt.text).toContain('story-state-learning')
+    expect(storyPrompt.text).toContain('尚未开始正文')
     expect(provider.requests.at(-1)).toMatchObject({
       maxDepth: 1,
       toolFilter: { allow: ['skill'] },
@@ -241,6 +273,14 @@ describe('NovelAnalysis', () => {
     expect(preferencePrompt.text).toContain(String(learned.finalization.sourceRevisionId))
     expect(preferencePrompt.text).toContain(String(finalRevisionId))
     expect(preferencePrompt.text).toContain('保持克制')
+
+    if (learned.storyCandidate === undefined) throw new Error('expected Story State candidate')
+    const acceptedStory = await ctx.novelAnalysis.acceptStoryState(agent, learned.storyCandidate.id, signal)
+    expect(acceptedStory.candidate).toMatchObject({
+      status: 'accepted', resultRevisionId: acceptedStory.changeSet.resultRevisionId,
+    })
+    const story = await ctx.novelRepository.readAsset(project, AssetId('story-state-analysis'))
+    expect(ctx.novelAssetTypes.get(story.asset.type).modelText(story)).toContain('林澈已经抵达白港')
 
     if (learned.candidate === undefined) throw new Error('expected preference candidate')
     const accepted = await ctx.novelAnalysis.acceptPreference(agent, learned.candidate.id, signal)
@@ -256,28 +296,44 @@ describe('NovelAnalysis', () => {
       agent, AssetId('chapter-analysis'), finalRevisionId, signal,
     )
     expect(replay.candidate).toEqual(accepted.candidate)
-    expect(provider.requests).toHaveLength(1)
+    expect(replay.storyCandidate).toEqual(acceptedStory.candidate)
+    expect(provider.requests).toHaveLength(2)
   })
 
   it('does not fabricate learning without an Agent ancestor and preserves a pending candidate on style conflict', async () => {
     const noSource = await harness()
     const signal = new AbortController().signal
+    noSource.provider.structured = storyState()
     await expect(noSource.ctx.novelAnalysis.finalizeChapter(
       noSource.agent, AssetId('chapter-analysis'), noSource.revisionId, signal,
-    )).resolves.toMatchObject({ noCandidateReason: 'no-agent-source' })
-    expect(noSource.provider.requests).toEqual([])
+    )).resolves.toMatchObject({
+      noCandidateReason: 'no-agent-source', storyCandidate: { status: 'pending' },
+    })
+    expect(noSource.provider.requests).toHaveLength(1)
 
     const { ctx, agent, revisionId, provider } = await harness()
     const { project, finalRevisionId } = await authorFinalAfterAgent(ctx, agent, revisionId)
-    provider.structured = {
+    provider.queued.push(storyState(), {
       summary: '作者偏好更具体的环境动作。',
       guidanceMarkdown: '- 让环境细节参与人物处境。',
       evidence: [{ before: '白港落着雨。', after: '雨线压低了白港的天。', inference: '环境更具体。' }],
-    }
+    })
     const learned = await ctx.novelAnalysis.finalizeChapter(
       agent, AssetId('chapter-analysis'), finalRevisionId, signal,
     )
     if (learned.candidate === undefined) throw new Error('expected preference candidate')
+    if (learned.storyCandidate === undefined) throw new Error('expected Story State candidate')
+    const currentStory = await ctx.novelRepository.readAsset(project, AssetId('story-state-analysis'))
+    await ctx.novelRepository.saveAssetContent(project, {
+      assetId: currentStory.asset.id,
+      baseRevisionId: currentStory.revisionId,
+      content: { kind: 'book-story-state', body: '# 当前事实\n\n作者同时确认了另一项状态。' },
+    })
+    const storyConflict = await ctx.novelAnalysis.acceptStoryState(agent, learned.storyCandidate.id, signal)
+    expect(storyConflict.changeSet).toMatchObject({ status: 'conflicted' })
+    expect(storyConflict.candidate).toMatchObject({ status: 'pending' })
+    await expect(ctx.novelAnalysis.rejectStoryState(agent, learned.storyCandidate.id, signal))
+      .resolves.toMatchObject({ status: 'rejected' })
     const style = await ctx.novelRepository.readAsset(project, AssetId('style-analysis'))
     await ctx.novelRepository.saveAssetContent(project, {
       assetId: style.asset.id,
@@ -293,5 +349,23 @@ describe('NovelAnalysis', () => {
     const currentStyle = await ctx.novelRepository.readAsset(project, AssetId('style-analysis'))
     expect(ctx.novelAssetTypes.get(currentStyle.asset.type).modelText(currentStyle))
       .toBe('作者同时补充了更新的风格规则。')
+  })
+
+  it('retains explicit finalization when Story State extraction fails', async () => {
+    const { ctx, agent, revisionId, provider } = await harness()
+    provider.structured = {}
+    const result = await ctx.novelAnalysis.finalizeChapter(
+      agent, AssetId('chapter-analysis'), revisionId, new AbortController().signal,
+    )
+    expect(result).toMatchObject({
+      finalization: { revisionId },
+      noCandidateReason: 'no-agent-source',
+      storyCandidateError: 'extraction-failed',
+    })
+    const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
+    if (project === undefined) throw new Error('expected Novel Project')
+    await expect(ctx.novelRepository.listRevisionFinalizations(
+      project, AssetId('chapter-analysis'),
+    )).resolves.toHaveLength(1)
   })
 })

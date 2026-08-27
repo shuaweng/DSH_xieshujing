@@ -11,9 +11,11 @@ import {
   AssetId,
   PreferenceCandidateId,
   RevisionId,
+  StoryStateCandidateId,
   type AssetSnapshot,
   type NovelAnalysisReport,
   type NovelPreferenceCandidate,
+  type NovelStoryStateCandidate,
   type NovelOperation,
   type NovelProjectSnapshot,
   type RevisionFinalization,
@@ -28,6 +30,7 @@ export * from './noai.ts'
 const NOAI_ANALYZER_VERSION = 'noai-rules/2'
 const REVIEW_ANALYZER_VERSION = 'chapter-review/1'
 const PREFERENCE_EXTRACTOR_VERSION = 'final-preference/1'
+const STORY_STATE_EXTRACTOR_VERSION = 'story-state/1'
 const DEFAULT_MIN_CHARACTERS = 300
 const DEFAULT_STRONG_SAMPLE_CHARACTERS = 1_200
 const DEFAULT_MAX_FINDINGS = 80
@@ -94,6 +97,9 @@ export interface FinalizeChapterResult {
   readonly finalization: RevisionFinalization
   readonly candidate?: NovelPreferenceCandidate
   readonly noCandidateReason?: 'no-agent-source' | 'no-author-diff' | 'missing-style-profile'
+  readonly storyCandidate?: NovelStoryStateCandidate
+  readonly noStoryCandidateReason?: 'missing-story-state'
+  readonly storyCandidateError?: 'extraction-failed'
 }
 
 interface PreferenceExtraction {
@@ -104,6 +110,12 @@ interface PreferenceExtraction {
     readonly after: string
     readonly inference: string
   }[]
+}
+
+interface StoryStateExtraction {
+  readonly summary: string
+  readonly replacementMarkdown: string
+  readonly evidence: readonly { readonly quote: string; readonly update: string }[]
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -240,16 +252,28 @@ export class NovelAnalysis extends Service {
     const finalization = await this.ctx.novelRepository.finalizeRevision(
       project, assetId, revisionId, agent.id, signal,
     )
-    if (finalization.sourceRevisionId === undefined) return { finalization, noCandidateReason: 'no-agent-source' }
-    if (finalization.sourceRevisionId === revisionId) return { finalization, noCandidateReason: 'no-author-diff' }
+    let story: Pick<FinalizeChapterResult,
+      'storyCandidate' | 'noStoryCandidateReason' | 'storyCandidateError'>
+    try {
+      story = await this.extractStoryStateCandidate(agent, project, assetId, revisionId, signal)
+    } catch {
+      signal.throwIfAborted()
+      story = { storyCandidateError: 'extraction-failed' }
+    }
+    if (finalization.sourceRevisionId === undefined) {
+      return { finalization, ...story, noCandidateReason: 'no-agent-source' }
+    }
+    if (finalization.sourceRevisionId === revisionId) {
+      return { finalization, ...story, noCandidateReason: 'no-author-diff' }
+    }
     const existing = await this.ctx.novelRepository.listPreferenceCandidates(project, assetId, revisionId, signal)
-    if (existing[0] !== undefined) return { finalization, candidate: existing[0] }
+    if (existing[0] !== undefined) return { finalization, ...story, candidate: existing[0] }
 
     const assets = await this.ctx.novelRepository.listAssets(
       project, signal, this.ctx.sandboxPolicy.resolve({ session: agent.session }),
     )
     const styleSummary = assets.find(value => sameRuntimeType(value.asset.type, 'book.style-profile'))
-    if (styleSummary === undefined) return { finalization, noCandidateReason: 'missing-style-profile' }
+    if (styleSummary === undefined) return { finalization, ...story, noCandidateReason: 'missing-style-profile' }
     const source = await this.ctx.novelRepository.readAsset(
       project, assetId, finalization.sourceRevisionId, signal,
     )
@@ -258,7 +282,7 @@ export class NovelAnalysis extends Service {
     assertChapter(final)
     const sourceText = this.ctx.novelAssetTypes.get(source.asset.type).modelText(source)
     const finalText = this.ctx.novelAssetTypes.get(final.asset.type).modelText(final)
-    if (sourceText === finalText) return { finalization, noCandidateReason: 'no-author-diff' }
+    if (sourceText === finalText) return { finalization, ...story, noCandidateReason: 'no-author-diff' }
     const style = await this.ctx.novelRepository.readAsset(
       project, styleSummary.asset.id, styleSummary.revisionId, signal,
     )
@@ -306,7 +330,71 @@ export class NovelAnalysis extends Service {
       generatedAt: new Date().toISOString(),
       ...extracted,
     }, signal)
-    return { finalization, candidate }
+    return { finalization, ...story, candidate }
+  }
+
+  private async extractStoryStateCandidate(
+    agent: Agent,
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    signal: AbortSignal,
+  ): Promise<Pick<FinalizeChapterResult,
+    'storyCandidate' | 'noStoryCandidateReason' | 'storyCandidateError'>> {
+    const existing = await this.ctx.novelRepository.listStoryStateCandidates(
+      project, assetId, revisionId, signal,
+    )
+    if (existing[0] !== undefined) return { storyCandidate: existing[0] }
+    const assets = await this.ctx.novelRepository.listAssets(
+      project, signal, this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
+    const storySummary = assets.find(value => sameRuntimeType(value.asset.type, 'book.story-state'))
+    if (storySummary === undefined) return { noStoryCandidateReason: 'missing-story-state' }
+    const chapter = await this.ctx.novelRepository.readAsset(project, assetId, revisionId, signal)
+    assertChapter(chapter)
+    const storyState = await this.ctx.novelRepository.readAsset(
+      project, storySummary.asset.id, storySummary.revisionId, signal,
+    )
+    const compiled = await this.ctx.novelContextResolver.compile(agent, {
+      policies: ['story-state-learning'],
+      targets: [{
+        projectId: project.id, assetId: chapter.asset.id, revisionId: chapter.revisionId,
+        label: assets.find(value => value.asset.id === chapter.asset.id)?.title ?? '定稿章节',
+        origin: 'active-asset', mode: 'explicit', projection: 'full',
+        reason: 'final-source', required: true,
+      }, {
+        projectId: project.id, assetId: storyState.asset.id, revisionId: storyState.revisionId,
+        label: storySummary.title, origin: 'search', mode: 'explicit', projection: 'full',
+        reason: 'story-state', required: true,
+      }],
+    }, signal)
+    const prompt = `先调用 skill 加载 story-state-extraction 方法。根据定稿正文更新当前 Story State。只记录正文已经确立的事实，不把大纲计划、推测或修辞当成事实；保留与本章无关的现有状态，更新已改变的状态。replacementMarkdown 必须是可直接替换整个 Story State 的完整、简洁 Markdown。evidence 提供 1 到 12 条定稿正文中的准确短引文及其支持的状态变化。不得修改任何资产。\n\n${compiled.text}`
+    const run = await this.ctx.subagents.start(this.config.subagentProvider, {
+      label: `故事状态提取 · ${assetId}`,
+      parent: agent,
+      signal,
+      prompt: [{ type: 'text', text: prompt }],
+      maxDepth: 1,
+      toolFilter: { allow: ['skill'] },
+      persona: '你是只读的长篇小说 Story State 管理员。只从给定定稿正文中提取已发生、已确认且对后续创作有用的状态变化；不得把未来计划写成现实，不得修改资产。',
+      outputSchema: STORY_STATE_SCHEMA,
+    })
+    const result = await settleRun(run)
+    if (result.stopReason !== 'completed' || result.structured === undefined) {
+      throw new Error(`novel analysis: Story State extractor ended with ${result.stopReason}`)
+    }
+    const extracted = decodeStoryState(result.structured)
+    const candidate = await this.ctx.novelRepository.putStoryStateCandidate(project, {
+      assetId,
+      finalRevisionId: revisionId,
+      targetStoryStateAssetId: storyState.asset.id,
+      targetStoryStateRevisionId: storyState.revisionId,
+      extractorVersion: STORY_STATE_EXTRACTOR_VERSION,
+      generatedAt: new Date().toISOString(),
+      workerSessionId: run.id,
+      ...extracted,
+    }, signal)
+    return { storyCandidate: candidate }
   }
 
   /** Apply one reviewed candidate to the exact style Revision through ChangeSet publication. */
@@ -357,6 +445,57 @@ export class NovelAnalysis extends Service {
   ): Promise<NovelPreferenceCandidate> {
     const project = await this.resolveProject(agent, signal)
     return await this.ctx.novelRepository.decidePreferenceCandidate(
+      project, candidateId, 'rejected', agent.id, undefined, signal,
+    )
+  }
+
+  /** Apply one reviewed complete Story State replacement through ChangeSet publication. */
+  async acceptStoryState(
+    agent: Agent,
+    candidateId: StoryStateCandidateId,
+    signal: AbortSignal,
+  ): Promise<{ readonly candidate: NovelStoryStateCandidate; readonly changeSet: ChangeSet }> {
+    const project = await this.resolveProject(agent, signal)
+    const candidate = await this.ctx.novelRepository.readStoryStateCandidate(project, candidateId, signal)
+    if (candidate.status !== 'pending') throw new Error('novel analysis: Story State candidate is already terminal')
+    const storyState = await this.ctx.novelRepository.readAsset(
+      project, candidate.targetStoryStateAssetId, candidate.targetStoryStateRevisionId, signal,
+    )
+    const definition = this.ctx.novelAssetTypes.get(storyState.asset.type)
+    const body = definition.modelText(storyState)
+    const operations = definition.prepareOperations(storyState, [{
+      kind: 'replace-text', startUtf16: 0, endUtf16: body.length,
+      replacement: `${candidate.replacementMarkdown.trim()}\n`,
+    }])
+    const proposed = await this.ctx.novelRepository.proposeChangeSet(project, {
+      assetId: storyState.asset.id,
+      baseRevisionId: storyState.revisionId,
+      operations,
+      actor: { kind: 'user', sessionId: agent.id },
+      summary: `采纳定稿故事状态：${candidate.summary}`,
+    }, signal)
+    const applied = await this.ctx.novelRepository.applyChangeSet(
+      project, proposed.id, { sessionId: agent.id }, signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
+    if (applied.status !== 'applied' || applied.resultRevisionId === undefined) {
+      return { candidate, changeSet: applied }
+    }
+    const accepted = await this.ctx.novelRepository.decideStoryStateCandidate(
+      project, candidate.id, 'accepted', agent.id,
+      { changeSetId: applied.id, revisionId: applied.resultRevisionId }, signal,
+    )
+    return { candidate: accepted, changeSet: applied }
+  }
+
+  /** Retain explicit Story State rejection without changing authored assets. */
+  async rejectStoryState(
+    agent: Agent,
+    candidateId: StoryStateCandidateId,
+    signal: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    const project = await this.resolveProject(agent, signal)
+    return await this.ctx.novelRepository.decideStoryStateCandidate(
       project, candidateId, 'rejected', agent.id, undefined, signal,
     )
   }
@@ -461,6 +600,24 @@ const PREFERENCE_SCHEMA: ObjectJsonSchema = {
     },
   },
   required: ['summary', 'guidanceMarkdown', 'evidence'],
+}
+
+const STORY_STATE_SCHEMA: ObjectJsonSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    summary: { type: 'string' },
+    replacementMarkdown: { type: 'string' },
+    evidence: {
+      type: 'array',
+      items: {
+        type: 'object', additionalProperties: false,
+        properties: { quote: { type: 'string' }, update: { type: 'string' } },
+        required: ['quote', 'update'],
+      },
+    },
+  },
+  required: ['summary', 'replacementMarkdown', 'evidence'],
 }
 
 function resolveConfig(config: Config): ResolvedConfig {
@@ -583,6 +740,23 @@ function decodePreference(value: unknown): PreferenceExtraction {
     return { before: item['before'], after: item['after'], inference: item['inference'] }
   })
   return { summary: value['summary'], guidanceMarkdown: value['guidanceMarkdown'], evidence }
+}
+
+function decodeStoryState(value: unknown): StoryStateExtraction {
+  if (!isRecord(value) || !normalizedText(value['summary'], 1_000)
+    || !normalizedText(value['replacementMarkdown'], 64_000)
+    || !Array.isArray(value['evidence']) || value['evidence'].length < 1 || value['evidence'].length > 12) {
+    throw new Error('novel analysis: Story State extractor returned malformed output')
+  }
+  const evidence = value['evidence'].map((item) => {
+    if (!isRecord(item) || !normalizedText(item['quote'], 1_000) || !normalizedText(item['update'], 1_000)) {
+      throw new Error('novel analysis: Story State evidence is invalid')
+    }
+    return { quote: item['quote'], update: item['update'] }
+  })
+  return {
+    summary: value['summary'], replacementMarkdown: value['replacementMarkdown'], evidence,
+  }
 }
 
 export default NovelAnalysis

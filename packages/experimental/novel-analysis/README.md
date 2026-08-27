@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 ## Purpose
 
-This experimental Host service owns exact-Revision chapter analysis and explicit finalization learning for Novel Studio. It combines a deterministic Chinese web-fiction style scan, a fixed read-only reviewer, and a fixed draft/final preference extractor while persisting only validated reports and reviewable candidates through `ctx.novelRepository`.
+This experimental Host service owns exact-Revision chapter analysis and explicit finalization learning for Novel Studio. It combines a deterministic Chinese web-fiction style scan, a fixed read-only reviewer, a draft/final preference extractor, and a finalized-prose Story State extractor while persisting only validated reports and reviewable candidates through `ctx.novelRepository`.
 
 ## Behavior
 
@@ -13,8 +13,9 @@ This experimental Host service owns exact-Revision chapter analysis and explicit
 - The reviewer loads the package-owned `chapter-review` Skill and scores plot, causality, character, pacing, hook, and style with evidence-bound findings. Authored material is explicitly marked untrusted and cannot widen worker authority.
 - A report is written only after the worker completes and the service validates every field and bound. A failed rerun leaves the previous successful `(project, asset, revision, kind)` report intact; a successful rerun replaces that one row.
 - `candidateWarning()` materializes a proposed chapter ChangeSet in memory and runs the same deterministic scanner. Material risk returns bounded advisory text for the caller to add to the current model turn; it does not persist a report or create another ChangeSet.
-- `finalizeChapter()` first retains the user's explicit decision for one exact chapter Revision, finds the nearest `agent-apply` ancestor, and starts a fresh one-shot preference worker only when an author edit actually follows that Agent draft. Its `preference-learning` context policy freezes the exact draft, final Revision, and current exact `book.style-profile`; the worker can only return a strict inert candidate with evidence.
+- `finalizeChapter()` first retains the user's explicit decision for one exact chapter Revision. When a project has a `book.story-state`, a fresh one-shot worker receives only that exact state Revision and finalized chapter under `story-state-learning`, then returns a complete evidence-bound replacement candidate. Independently, the service finds the nearest `agent-apply` ancestor and starts a preference worker only when an author edit actually follows that Agent draft.
 - `acceptPreference()` appends author-reviewed guidance to the exact style-profile Revision through the normal ChangeSet apply and crash-recovery protocol. `rejectPreference()` records a terminal decision without changing authored content. Save, review, scan, and Agent tool paths never finalize automatically.
+- `acceptStoryState()` replaces the exact Story State Revision through the same ChangeSet protocol. A stale target conflicts instead of rebasing silently; rejection records a terminal decision without mutating the authored state.
 
 ## Model Experience
 
@@ -22,11 +23,11 @@ This experimental Host service owns exact-Revision chapter analysis and explicit
 
 #### What the model sees
 
-Only the dedicated reviewer sees the V3 Manifest compiled for the exact-Revision chapter and its deterministic related Assets. Only the dedicated preference worker sees the Manifest containing the exact Agent draft, exact user-final Revision, and exact current Book Style Profile. Both workers have fixed read-only personas, only the `skill` tool, and strict output contracts. Reports stay out of ordinary prompt context; the root Agent can explicitly retrieve persisted review/NOAI reports for an exact chapter Revision through `novel_get_analysis`. It sees deterministic candidate warnings automatically only when a proposed chapter crosses the configured threshold.
+Only the dedicated reviewer sees the V3 Manifest compiled for the exact-Revision chapter and its deterministic related Assets. The preference worker sees the exact Agent draft, user-final Revision, and current Book Style Profile. The Story State worker sees the exact finalized chapter plus the exact confirmed Story State it proposes to replace. All workers have fixed read-only personas, only the `skill` tool, and strict output contracts. Reports stay out of ordinary prompt context; the root Agent can explicitly retrieve persisted review/NOAI reports for an exact chapter Revision through `novel_get_analysis`.
 
 #### Token effect
 
-Deterministic NOAI scans use no model tokens. A requested chapter review spends one bounded Subagent request plus the on-demand `chapter-review` Skill body. An eligible explicit finalization spends one bounded preference-worker request; finalizations without a preceding Agent draft spend no model tokens. Candidate warnings add at most five findings to the current turn.
+Deterministic NOAI scans use no model tokens. A requested chapter review spends one bounded Subagent request. An explicit finalization spends one bounded Story State request when that singleton exists, plus one preference request only when there is a meaningful Agent-draft/author-final diff. Candidate warnings add at most five findings to the current turn.
 
 #### KV Cache effect
 
@@ -38,4 +39,5 @@ The analyzer adds no dynamic tool schemas or system-prefix content. Frozen revie
 - **One report per kind and Revision** — successful reruns replace the same kind instead of retaining report-run history.
 - **Chapter-only** — deterministic scan and reviewer currently require `manuscript.chapter`; book-wide, multi-chapter, character, and outline reviews are deferred.
 - **No autonomous preference promotion** — candidates remain inert until the author accepts them; one finalization never silently rewrites the Book Style Profile.
+- **No autonomous canon promotion** — Story State is freeform author-confirmed Markdown. Extraction produces one inert complete-replacement candidate per finalized chapter Revision; it never edits Canon silently and does not retain repeated extractor-run history.
 - **No preference retrieval or training** — accepted guidance is ordinary authored style-profile text. Preference RAG, ranking, fine-tuning, and cross-book author profiles are deferred.

@@ -7,6 +7,7 @@ import type {
   PreferenceCandidateId,
   RevisionId,
   SelectionRefId,
+  StoryStateCandidateId,
 } from '@deepseek-ai/dsh-experimental-novel-repository/brand'
 /** Closed JSON wire value; exact Asset schemas remain owned by the two registries. */
 export type NovelWireValue = null | boolean | number | string | NovelWireValue[] | { [key: string]: NovelWireValue }
@@ -164,14 +165,43 @@ export interface NovelPreferenceCandidateDescriptor {
   readonly resultRevisionId?: RevisionId
 }
 
+export interface NovelStoryStateEvidenceDescriptor {
+  readonly quote: string
+  readonly update: string
+}
+
+/** Browser-safe inert Story State replacement awaiting an explicit decision. */
+export interface NovelStoryStateCandidateDescriptor {
+  readonly id: StoryStateCandidateId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly finalRevisionId: RevisionId
+  readonly targetStoryStateAssetId: AssetId
+  readonly targetStoryStateRevisionId: RevisionId
+  readonly generatedAt: string
+  readonly summary: string
+  readonly replacementMarkdown: string
+  readonly evidence: readonly NovelStoryStateEvidenceDescriptor[]
+  readonly status: 'pending' | 'accepted' | 'rejected'
+  readonly resultRevisionId?: RevisionId
+}
+
 export interface FinalizeNovelChapterDescriptor {
   readonly finalization: NovelRevisionFinalizationDescriptor
   readonly candidate?: NovelPreferenceCandidateDescriptor
   readonly noCandidateReason?: 'no-agent-source' | 'no-author-diff' | 'missing-style-profile'
+  readonly storyCandidate?: NovelStoryStateCandidateDescriptor
+  readonly noStoryCandidateReason?: 'missing-story-state'
+  readonly storyCandidateError?: 'extraction-failed'
 }
 
 export interface DecideNovelPreferenceDescriptor {
   readonly candidate: NovelPreferenceCandidateDescriptor
+  readonly changeSet?: NovelChangeSetDescriptor
+}
+
+export interface DecideNovelStoryStateDescriptor {
+  readonly candidate: NovelStoryStateCandidateDescriptor
   readonly changeSet?: NovelChangeSetDescriptor
 }
 
