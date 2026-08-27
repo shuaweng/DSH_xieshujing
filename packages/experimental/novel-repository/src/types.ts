@@ -224,6 +224,10 @@ export interface AssetRevision {
   readonly contentHash: ContentHash
   readonly origin: RevisionOrigin
   readonly createdAt: string
+  /** Historical Revision whose exact bytes were deliberately restored. */
+  readonly restoredFromRevisionId?: RevisionId
+  /** Session in which the author confirmed the restore. */
+  readonly restoredBySessionId?: SessionId
 }
 
 /** Metadata-only view of one immutable retained Revision. */
@@ -235,6 +239,26 @@ export interface AssetRevisionSummary {
   readonly contentHash: ContentHash
   readonly origin: RevisionOrigin
   readonly createdAt: string
+  readonly restoredFromRevisionId?: RevisionId
+  readonly restoredBySessionId?: SessionId
+}
+
+/** Guarded author request to restore retained bytes as a new current Revision. */
+export interface RestoreAssetRevisionRequest {
+  readonly assetId: AssetId
+  /** Current head observed by the confirming browser. */
+  readonly baseRevisionId: RevisionId
+  /** Historical Revision whose exact authored bytes become the new head. */
+  readonly sourceRevisionId: RevisionId
+  readonly restoredBySessionId: SessionId
+}
+
+/** Committed restore plus bounded follow-up effects relevant to the author. */
+export interface RestoreAssetRevisionResult {
+  readonly snapshot: AssetSnapshot
+  readonly conflictedChangeSetCount: number
+  /** True when a restored chapter coexists with confirmed project Story State. */
+  readonly storyStateReviewRecommended: boolean
 }
 
 /** Explicit author decision that one exact chapter Revision is a finished version. */

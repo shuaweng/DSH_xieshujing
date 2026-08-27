@@ -92,6 +92,7 @@
 .revisionSelect { max-width: 230px; min-width: 112px; padding: 5px 25px 5px 8px; overflow: hidden; border: 1px solid var(--novel-chrome-border); border-radius: 6px; outline: 0; color: var(--novel-chrome-text); background: var(--novel-chrome-bg); font: inherit; text-overflow: ellipsis; }
 .revisionSelect:focus-visible { border-color: var(--novel-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--novel-accent) 18%, transparent); }
 .historicalBadge { flex: none; padding: 3px 7px; border-radius: 999px; color: var(--novel-accent); background: color-mix(in srgb, var(--novel-accent) 11%, transparent); font-size: 10px; }
+.restoreButton { border-color: var(--novel-accent) !important; color: var(--novel-accent) !important; background: color-mix(in srgb, var(--novel-accent) 8%, var(--novel-chrome-strong)) !important; }
 .editorActions { display: flex; align-items: center; gap: 8px; color: var(--novel-chrome-muted); font-size: 12px; }
 .editorActions button { padding: 7px 12px; border: 1px solid var(--novel-chrome-border); border-radius: 7px; color: var(--novel-chrome-text); background: var(--novel-chrome-strong); cursor: pointer; }
 .editorActions button:hover { color: var(--novel-chrome-text); background: var(--novel-chrome-bg); }
@@ -109,6 +110,28 @@
 .editor { display: block; box-sizing: border-box; width: 100%; min-height: 540px; flex: 0 0 auto; margin: 0; padding: 22px 54px 72px; overflow: hidden; resize: none; border: 0; outline: 0; color: inherit; background: transparent; font-family: var(--novel-reader-font, ui-serif, Georgia, 'Noto Serif SC', serif); font-size: var(--novel-reader-size, 18px); line-height: 1.95; caret-color: currentColor; }
 .editor::placeholder { color: var(--novel-muted); }
 .editor::selection { background: color-mix(in srgb, #4c84f4 24%, transparent); }
+.restoreNotice { position: absolute; z-index: 12; top: 67px; right: 16px; display: flex; max-width: min(620px, calc(100% - 32px)); align-items: flex-start; gap: 12px; padding: 11px 12px 11px 14px; border: 1px solid color-mix(in srgb, var(--novel-accent) 30%, var(--novel-chrome-border)); border-radius: 9px; color: var(--novel-chrome-text); background: color-mix(in srgb, var(--novel-chrome-strong) 96%, transparent); box-shadow: 0 10px 30px rgb(24 24 20 / 14%); font-size: 12px; line-height: 1.6; }
+.restoreNotice button { flex: none; padding: 0 3px; border: 0; color: var(--novel-chrome-muted); background: transparent; font-size: 17px; cursor: pointer; }
+.restoreBackdrop { position: absolute; z-index: 30; inset: 0; display: grid; place-items: center; padding: 28px; background: rgb(24 25 23 / 68%); animation: chapter-outline-fade 150ms ease-out; }
+.restoreDialog { display: grid; width: min(1080px, 100%); max-height: 100%; grid-template-rows: auto auto minmax(0, 1fr) auto; overflow: hidden; border: 1px solid var(--novel-chrome-border); border-radius: 14px; color: var(--novel-chrome-text); background: var(--novel-chrome-strong); box-shadow: 0 28px 80px rgb(16 17 15 / 34%); }
+.restoreDialog > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 20px 22px 12px; }
+.restoreDialog > header p { margin: 0 0 4px; color: var(--novel-chrome-muted); font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+.restoreDialog > header h2 { margin: 0; font-size: 20px; font-weight: 680; }
+.restoreDialog > header button { padding: 0 5px; border: 0; color: var(--novel-chrome-muted); background: transparent; font-size: 23px; cursor: pointer; }
+.restoreDescription { margin: 0; padding: 0 22px 18px; color: var(--novel-chrome-muted); font-size: 12px; line-height: 1.7; }
+.restoreComparison { display: grid; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; overflow: hidden; border-top: 1px solid var(--novel-chrome-border); border-bottom: 1px solid var(--novel-chrome-border); background: var(--novel-chrome-border); }
+.restoreComparison > article { display: grid; min-width: 0; min-height: 0; grid-template-rows: auto minmax(0, 1fr); background: var(--novel-paper-bg); }
+.restoreComparison > article[data-restore-source] { box-shadow: inset 3px 0 0 var(--novel-accent); }
+.restoreComparison > article > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 14px; border-bottom: 1px solid var(--novel-chrome-border); color: var(--novel-chrome-text); background: var(--novel-chrome-bg); }
+.restoreComparison > article > header strong { font-size: 12px; font-weight: 650; }
+.restoreComparison > article > header small { overflow: hidden; color: var(--novel-chrome-muted); font: 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.restoreDocument { min-height: 0; padding: 18px; overflow: auto; color: var(--novel-text); font: 14px/1.8 var(--novel-reader-font, ui-serif, Georgia, serif); }
+.restoreDocument textarea { min-height: 360px; padding: 0; font-size: 14px; }
+.restoreDialog > footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 18px; color: var(--novel-chrome-muted); font-size: 11px; }
+.restoreDialog > footer > div { display: flex; gap: 8px; }
+.restoreDialog > footer button { padding: 8px 13px; border: 1px solid var(--novel-chrome-border); border-radius: 7px; color: var(--novel-chrome-text); background: var(--novel-chrome-bg); cursor: pointer; }
+.restoreDialog > footer button:last-child { border-color: var(--novel-accent); color: var(--novel-accent-contrast); background: var(--novel-accent); }
+.restoreDialog > footer button:disabled { opacity: .45; cursor: progress; }
 .readerStatusBar { position: relative; z-index: 8; display: flex; width: 100%; height: 38px; min-width: 0; box-sizing: border-box; align-items: center; justify-content: space-between; padding: 0 14px 0 16px; border-top: 1px solid var(--novel-chrome-border); color: var(--novel-chrome-muted); background: var(--novel-chrome-strong); font-size: 11px; transition: color 180ms ease, background 180ms ease, border-color 180ms ease; }
 .readerStats { display: flex; align-items: center; gap: 18px; font-variant-numeric: tabular-nums; }
 .readerStats strong { color: var(--novel-chrome-text); font-weight: 600; }

@@ -4,7 +4,7 @@
 
 ## 用途
 
-这个实验性 Host Consumer 提供 Novel Project 发现，以及有边界的类型化 Asset 目录、检索、创建、读取、版本保护保存、选区、上下文工作集和审阅方法，同时避免把传输行为加入提供方无关的 Repository Service Definition。
+这个实验性 Host Consumer 提供 Novel Project 发现，以及有边界的类型化 Asset 目录、检索、创建、读取、版本保护保存、历史恢复、选区、上下文工作集和审阅方法，同时避免把传输行为加入提供方无关的 Repository Service Definition。
 
 ## 行为
 
@@ -18,7 +18,7 @@
 - `replaceContextWorkset` 把一份完整的第二版跟随/固定工作集委托给可选 Novel context 能力。跟随项携带活动 Asset 身份，并在编译上下文时解析当前已保存 head；固定项保留一个精确的已保留 Revision。Context Consumer 校验整值并记录 Session 事件；Remote 不拥有 fold 或模型注入。
 - Asset 类型、内容、selector 和 operation 通过 Remote 以有边界的 JSON 信封传输。Host 与 Client 注册表拥有其精确语义，因此增加类型不需要扩展生成的 Remote 方法清单；不兼容或非 JSON 的值会显式失败。
 - `changeSet`、`applyChangeSet` 和 `rejectChangeSet` 暴露浏览器审阅。应用和拒绝把被寻址 Agent Session id 作为显式授权，并返回持久终态或冲突状态。
-- `revisions` 返回不可变历史摘要，`asset` 可以打开一个已保留 Revision。`analysisReports`、`scanNoAi` 和 `reviewChapter` 都是精确 Revision 端点；确定性扫描与 Subagent 编排归 `ctx.novelAnalysis` 所有，而不是传输层。
+- `revisions` 返回不可变历史摘要，`asset` 可以打开一个已保留 Revision。`restoreAsset` 同时绑定当前 base 与选定源 Revision，从被寻址 Agent Session 派生恢复权威，并返回新的 head、转为冲突的提案数量和 Story State 复查建议。`analysisReports`、`scanNoAi` 和 `reviewChapter` 都是精确 Revision 端点；确定性扫描与 Subagent 编排归 `ctx.novelAnalysis` 所有，而不是传输层。
 - `revisionFinalizations` 与 `preferenceCandidates` 暴露浏览器安全的精确 Revision 历史；`finalizeChapter`、`acceptPreference` 与 `rejectPreference` 把显式用户流程委托给 `ctx.novelAnalysis`，任何模型工具都没有定稿权限。
 - 资产目录、创建、当前 head 读取、保存与应用都会解析被寻址 Agent Session 的 sandbox policy，并把它传入 Repository 协调流程。这样外部 Session 工作区可写，同时不会放宽部署 fallback 根目录。
 - `responseMaxBytes` 默认是 8 MiB，对所有非发现 JSON 完整响应设置边界；超出预算时明确失败，不截断也不静默漏掉数据。

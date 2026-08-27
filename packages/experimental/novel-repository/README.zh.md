@@ -11,9 +11,10 @@
 - `NovelRepository.discoverProject()` 接收一个规范化的文件系统目录 target；只有该目录不存在 `novel.yaml` 时才返回 `undefined`。
 - `initializeProject()` 会先创建默认内容根目录，最后才发布作为激活标记的 `novel.yaml`。空标题、已存在清单以及内容根不是目录的冲突都会被拒绝，既不修改已有项目，也不覆盖损坏项目。
 - 已发现的 `NovelProjectSnapshot` 包含 schema `1`、稳定 `ProjectId`、作者可见标题、规范化项目与清单 target，以及规范化的具名内容根 target。
-- `listAssets()` 把作者文件协调为当前目录项并应用清单中可选的按类型顺序，`reorderAssets()` 原子替换某一类型完整的稳定 ID 序列，`searchAssets()` 通过提供方拥有的检索策略发现有边界的当前精确 Revision，`createAsset()` 在提供方拥有的路径创建已注册类型，`readAsset()` 读取当前或指定的已保留不可变 Revision，`listAssetRevisions()` 暴露有边界的 Revision 历史，`saveAssetContent()` 以版本保护方式保存完整类型化内容，`captureSelection()` 冻结由资产类型定义的语义选区。
+- `listAssets()` 把作者文件协调为当前目录项并应用清单中可选的按类型顺序，`reorderAssets()` 原子替换某一类型完整的稳定 ID 序列，`searchAssets()` 通过提供方拥有的检索策略发现有边界的当前精确 Revision，`createAsset()` 在提供方拥有的路径创建已注册类型，`readAsset()` 读取当前或指定的已保留不可变 Revision，`listAssetRevisions()` 暴露有边界的 Revision 历史，`restoreAssetRevision()` 把一份已保留历史快照重新发布为新的、受版本保护的当前 Revision，`saveAssetContent()` 以版本保护方式保存完整类型化内容，`captureSelection()` 冻结由资产类型定义的语义选区。
 - `NovelAssetTypeMap` 可以通过声明合并扩展。每个匹配的 Host 定义拥有创建说明、可选语义父级规则或项目级单例 cardinality、精确作者类型解析/创建、模型投影、选区校验、保存物化、持久操作解码和 ChangeSet 物化；注册项必须唯一，并随调用方 effect 释放而移除。
-- 第一版内置 `manuscript.chapter`，并由独立策划包贡献自由的 `planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile`；同时提供精确 `sha256:` 内容哈希、不可变 Revision 父链、绑定 Revision 的 `SelectionRef`、类型化正文插入与精确替换操作，以及携带目标 Asset 类型的持久单资产 ChangeSet。
+- 第一版内置 `manuscript.chapter`，并由独立策划包贡献自由的 `planning.outline`、`planning.chapter-outline`、`book.brief`、`book.style-profile` 与 `book.story-state`；同时提供精确 `sha256:` 内容哈希、不可变 Revision 父链、绑定 Revision 的 `SelectionRef`、类型化正文插入与精确替换操作，以及携带目标 Asset 类型的持久单资产 ChangeSet。
+- 恢复请求同时绑定精确当前 base Revision 与已保留源 Revision。成功后会创建新的当前 Revision 并记录恢复来源，绝不倒退指针或删除历史；该 Asset 所有仍为 `proposed` 的 ChangeSet 会被标记为冲突。绑定 Revision 的报告、定稿、偏好证据与 Story State 候选仍保留在产生它们的历史 Revision 上。
 - `proposeChangeSet()` 记录提案但不修改创作文件。`readChangeSet()`、`applyChangeSet()` 和 `rejectChangeSet()` 暴露明确审阅状态转换；应用权威是由获授权 Consumer 提供的 Session id。
 - `NovelAnalysisReport` 绑定一个 Project、Asset、精确 Revision 和报告种类。提供方暴露列出与 upsert 操作，因此成功重跑只替换某 Revision 的同类报告，而失败分析无法清除旧报告；各报告 payload 的语义归分析 Consumer 所有。
 - `RevisionFinalization` 保留用户对一个精确章节 Revision 的显式定稿决策及其最近 Agent 作者祖先；`NovelPreferenceCandidate` 保留有边界的草稿/定稿证据，并在用户显式采纳或拒绝前保持惰性。提取与审阅后应用语义归分析 Consumer 所有。
@@ -39,7 +40,7 @@ Service Definition 与项目值不会增加提示词或工具 schema token。
 
 ## 已知限制与暂缓事项
 
-- **内置五种资产类型**：内核安装 `manuscript.chapter`；策划包贡献 `planning.outline`、`planning.chapter-outline`，以及项目级唯一的 `book.brief` / `book.style-profile`。人物、灵感、关系、场景与视图定义均暂缓。
+- **内置六种资产类型**：内核安装 `manuscript.chapter`；策划包贡献 `planning.outline`、`planning.chapter-outline`，以及项目级唯一的 `book.brief` / `book.style-profile` / `book.story-state`。人物、灵感、关系、场景与视图定义均暂缓。
 - **每个 ChangeSet 最多一个标题操作与一个正文操作**：内置文本 Asset 可以针对同一精确 Revision，把一个 `update-title` 与一个正文操作组合。正文使用 `insert-text` 或 `replace-text`；其他当前自由文本 Asset 使用 `replace-text`。类型会原子物化这组操作，所有操作都拒绝自动重定位到较新的 Revision。
 - **没有实时监听**：资产目录通过显式协调更新。Service 已提供有边界检索；文件监听与浏览器失效通知仍暂缓。
 - **仅定义层**：Remote 投影、工作台展示、Session Log 上下文和面向模型的 Novel 工具都属于独立 Consumer。

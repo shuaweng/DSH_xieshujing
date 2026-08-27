@@ -115,6 +115,22 @@ export interface NovelAssetRevisionDescriptor {
   readonly contentHash: string
   readonly origin: 'initial-scan' | 'user-edit' | 'agent-apply' | 'external-edit'
   readonly createdAt: string
+  readonly restoredFromRevisionId?: RevisionId
+  readonly restoredBySessionId?: string
+}
+
+/** Guarded browser request to restore one historical Revision as a new head. */
+export interface RestoreNovelAssetRequest {
+  readonly assetId: AssetId
+  readonly baseRevisionId: RevisionId
+  readonly sourceRevisionId: RevisionId
+}
+
+/** Browser-safe committed restore and its bounded follow-up effects. */
+export interface RestoreNovelAssetDescriptor {
+  readonly document: NovelAssetDocument
+  readonly conflictedChangeSetCount: number
+  readonly storyStateReviewRecommended: boolean
 }
 
 /** One generated analysis result bound to the exact Revision on screen. */

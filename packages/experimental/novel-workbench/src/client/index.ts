@@ -209,6 +209,10 @@ export function apply(ctx: Context): void {
         remote.revisions(sessionId, assetId as AssetId),
         'list Novel Asset Revisions',
       ),
+      restore: async (sessionId, request) => await unwrapRemote(
+        remote.restoreAsset(sessionId, request),
+        'restore Novel Asset Revision',
+      ),
       analysisReports: async (sessionId, assetId, revisionId) => await unwrapRemote(
         remote.analysisReports(sessionId, assetId as AssetId, revisionId as RevisionId),
         'list Novel analysis reports',

@@ -27,7 +27,7 @@ import {
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 
 /** Physical schema containing revisions, proposals, and recoverable apply intent. */
-export const NOVEL_HISTORY_SCHEMA_VERSION = 6
+export const NOVEL_HISTORY_SCHEMA_VERSION = 7
 /** SQLite application id reserved for DSH Novel history. */
 export const NOVEL_HISTORY_APPLICATION_ID = 0x44534E48
 
@@ -41,6 +41,8 @@ interface RevisionRow {
   content_hash: string
   origin: string
   created_at: string
+  restored_from_revision_id: string | null
+  restored_by_session_id: string | null
 }
 
 interface HeadRow {
@@ -209,6 +211,7 @@ function configure(db: DatabaseSync, path: string): void {
     )
   }
   if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5
+    && version !== 6
     && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
     throw new NovelRepositoryError(
       `novel repository: history database "${path}" uses unsupported schema ${version}`,
@@ -234,7 +237,9 @@ function configure(db: DatabaseSync, path: string): void {
         serialized_utf8       BLOB NOT NULL,
         content_hash          TEXT NOT NULL,
         origin                TEXT NOT NULL CHECK(origin IN ('initial-scan', 'user-edit', 'agent-apply', 'external-edit')),
-        created_at            TEXT NOT NULL
+        created_at            TEXT NOT NULL,
+        restored_from_revision_id TEXT REFERENCES revisions(id),
+        restored_by_session_id TEXT
       ) STRICT;
       CREATE INDEX IF NOT EXISTS revisions_asset_created
         ON revisions(project_id, asset_id, created_at, id);
@@ -347,6 +352,15 @@ function configure(db: DatabaseSync, path: string): void {
     if (version > 0 && version < 3 && !changeSetColumns.some(column => column.name === 'asset_type')) {
       db.exec("ALTER TABLE change_sets ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'manuscript.chapter'")
     }
+    const revisionColumns = db.prepare('PRAGMA table_info(revisions)').all() as Array<{ name: string }>
+    if (version > 0 && version < 7) {
+      if (!revisionColumns.some(column => column.name === 'restored_from_revision_id')) {
+        db.exec('ALTER TABLE revisions ADD COLUMN restored_from_revision_id TEXT REFERENCES revisions(id)')
+      }
+      if (!revisionColumns.some(column => column.name === 'restored_by_session_id')) {
+        db.exec('ALTER TABLE revisions ADD COLUMN restored_by_session_id TEXT')
+      }
+    }
     if (version === 0) db.exec(`PRAGMA application_id = ${NOVEL_HISTORY_APPLICATION_ID}`)
     if (version < NOVEL_HISTORY_SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${NOVEL_HISTORY_SCHEMA_VERSION}`)
     db.exec('COMMIT')
@@ -389,10 +403,12 @@ export class NovelHistory {
   revision(revisionId: RevisionId): { revision: AssetRevision; projectRelativePath: string } | undefined {
     const row = this.db.prepare(`
       SELECT id, project_id, asset_id, parent_revision_id, project_relative_path,
-             serialized_utf8, content_hash, origin, created_at
+             serialized_utf8, content_hash, origin, created_at,
+             restored_from_revision_id, restored_by_session_id
       FROM revisions WHERE id = ?
     `).get(revisionId) as RevisionRow | undefined
     if (row === undefined) return undefined
+    const restore = restoreProvenance(row)
     return {
       revision: {
         id: RevisionId(row.id),
@@ -401,8 +417,9 @@ export class NovelHistory {
         ...(row.parent_revision_id === null ? {} : { parentRevisionId: RevisionId(row.parent_revision_id) }),
         serializedUtf8: new Uint8Array(row.serialized_utf8),
         contentHash: row.content_hash as ContentHash,
-        origin: row.origin as RevisionOrigin,
+        origin: revisionOrigin(row.origin),
         createdAt: row.created_at,
+        ...restore,
       },
       projectRelativePath: row.project_relative_path,
     }
@@ -419,7 +436,8 @@ export class NovelHistory {
       SELECT revisions.id, revisions.project_id, revisions.asset_id,
              revisions.parent_revision_id, revisions.project_relative_path,
              revisions.serialized_utf8, revisions.content_hash, revisions.origin,
-             revisions.created_at
+             revisions.created_at, revisions.restored_from_revision_id,
+             revisions.restored_by_session_id
       FROM revisions
       LEFT JOIN asset_heads
         ON asset_heads.project_id = revisions.project_id
@@ -428,15 +446,19 @@ export class NovelHistory {
       ORDER BY CASE WHEN revisions.id = asset_heads.revision_id THEN 0 ELSE 1 END,
                revisions.created_at DESC, revisions.id DESC
     `).all(projectId, assetId) as unknown as RevisionRow[]
-    return rows.map(row => ({
-      id: RevisionId(row.id),
-      projectId: ProjectId(row.project_id),
-      assetId: AssetId(row.asset_id),
-      ...(row.parent_revision_id === null ? {} : { parentRevisionId: RevisionId(row.parent_revision_id) }),
-      contentHash: row.content_hash as ContentHash,
-      origin: revisionOrigin(row.origin),
-      createdAt: row.created_at,
-    }))
+    return rows.map((row) => {
+      const restore = restoreProvenance(row)
+      return {
+        id: RevisionId(row.id),
+        projectId: ProjectId(row.project_id),
+        assetId: AssetId(row.asset_id),
+        ...(row.parent_revision_id === null ? {} : { parentRevisionId: RevisionId(row.parent_revision_id) }),
+        contentHash: row.content_hash as ContentHash,
+        origin: revisionOrigin(row.origin),
+        createdAt: row.created_at,
+        ...restore,
+      }
+    })
   }
 
   /** Read the applied ChangeSet which produced an exact Revision, if any. */
@@ -698,6 +720,25 @@ export class NovelHistory {
   }
 
   /**
+   * Commit a restored head and conflict every proposal superseded by that explicit head change.
+   * @param revision - new immutable head carrying restore provenance.
+   * @param projectRelativePath - current authored path retained for the new Revision.
+   * @returns number of proposal-only ChangeSets made terminal.
+   */
+  commitRestoredRevision(revision: AssetRevision, projectRelativePath: string): number {
+    let conflicted = 0
+    this.transaction(() => {
+      this.insertRevision(revision, projectRelativePath)
+      this.putHead(revision.projectId, revision.assetId, revision.id, projectRelativePath)
+      conflicted = Number(this.db.prepare(`
+        UPDATE change_sets SET status = 'conflicted'
+        WHERE project_id = ? AND asset_id = ? AND status = 'proposed'
+      `).run(revision.projectId, revision.assetId).changes)
+    })
+    return conflicted
+  }
+
+  /**
    * Update only the mutable path projection after an authored file rename.
    * @param projectId - stable Novel Project identity.
    * @param assetId - stable authored Asset identity.
@@ -852,8 +893,9 @@ export class NovelHistory {
     this.db.prepare(`
       INSERT INTO revisions (
         id, project_id, asset_id, parent_revision_id, project_relative_path,
-        serialized_utf8, content_hash, origin, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        serialized_utf8, content_hash, origin, created_at,
+        restored_from_revision_id, restored_by_session_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       revision.id,
       revision.projectId,
@@ -864,6 +906,8 @@ export class NovelHistory {
       revision.contentHash,
       revision.origin,
       revision.createdAt,
+      revision.restoredFromRevisionId ?? null,
+      revision.restoredBySessionId ?? null,
     )
   }
 
@@ -974,6 +1018,24 @@ function revisionOrigin(value: string): RevisionOrigin {
     throw corrupt(`Revision origin ${JSON.stringify(value)} is invalid`)
   }
   return value as RevisionOrigin
+}
+
+function restoreProvenance(row: RevisionRow): Pick<AssetRevision, 'restoredFromRevisionId' | 'restoredBySessionId'> {
+  if (row.restored_from_revision_id === null && row.restored_by_session_id === null) return {}
+  if (row.restored_from_revision_id === null || row.restored_by_session_id === null) {
+    throw corrupt(`Revision ${JSON.stringify(row.id)} has incomplete restore provenance`)
+  }
+  if (row.restored_from_revision_id === row.id) {
+    throw corrupt(`Revision ${JSON.stringify(row.id)} restores itself`)
+  }
+  if (row.restored_by_session_id.length === 0 || row.restored_by_session_id.length > 200
+    || row.restored_by_session_id !== row.restored_by_session_id.trim()) {
+    throw corrupt(`Revision ${JSON.stringify(row.id)} has an invalid restore Session`)
+  }
+  return {
+    restoredFromRevisionId: RevisionId(row.restored_from_revision_id),
+    restoredBySessionId: row.restored_by_session_id as SessionId,
+  }
 }
 
 function analysisReportKind(value: string): NovelAnalysisReportKind {

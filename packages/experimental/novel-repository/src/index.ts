@@ -32,6 +32,8 @@ import type {
   StoryStateCandidateId,
   RevisionFinalization,
   ReorderAssetsRequest,
+  RestoreAssetRevisionRequest,
+  RestoreAssetRevisionResult,
   ProposeChangeSetRequest,
   RevisionId,
   SaveAssetContentRequest,
@@ -89,6 +91,8 @@ export type {
   ReplaceTextOperation,
   RevisionOrigin,
   RevisionFinalization,
+  RestoreAssetRevisionRequest,
+  RestoreAssetRevisionResult,
   ReorderAssetsRequest,
   SaveAssetContentRequest,
   SearchAssetsRequest,
@@ -227,6 +231,21 @@ export abstract class NovelRepository extends Service {
     assetId: AssetId,
     signal?: AbortSignal,
   ): Promise<readonly AssetRevisionSummary[]>
+
+  /**
+   * Restore one retained Revision as a new guarded current head.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - current head, retained source, and confirming Session identity.
+   * @param signal - optional cancellation before authored-file publication.
+   * @param sandboxPolicy - optional per-call policy governing authored-file publication.
+   * @returns the new head and bounded follow-up effects; historical reports remain attached to their original Revisions.
+   */
+  abstract restoreAssetRevision(
+    project: NovelProjectSnapshot,
+    request: RestoreAssetRevisionRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<RestoreAssetRevisionResult>
 
   /** Mark one exact chapter Revision final and retain its nearest Agent lineage. */
   finalizeRevision(

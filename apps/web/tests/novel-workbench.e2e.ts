@@ -40,6 +40,7 @@ const OUTLINE_EXPECTED = join(SNAPSHOT_DIR, 'outline.expected.md')
 const REVIEW_EXPECTED = join(SNAPSHOT_DIR, 'review.expected.md')
 const NOAI_EXPECTED = join(SNAPSHOT_DIR, 'noai.expected.md')
 const HISTORICAL_EXPECTED = join(SNAPSHOT_DIR, 'historical.expected.md')
+const RESTORE_EXPECTED = join(SNAPSHOT_DIR, 'restore.expected.md')
 const NOVEL_OVERLAY = fileURLToPath(new URL('../../../packages/experimental/novel-studio/cordis.patch.yml', import.meta.url))
 const NOVEL_PRESETS = fileURLToPath(new URL('../../../packages/experimental/novel-studio/presets', import.meta.url))
 const NOVEL_INSTALL_ANCHOR = fileURLToPath(new URL('../../../packages/experimental/novel-studio/package.json', import.meta.url))
@@ -199,6 +200,20 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       'Restrained, concrete, and character-specific.',
       '',
     ].join('\n'))
+    await writeFile(join(scaffold.workspaceCwd, 'planning', 'story-state.md'), [
+      '---',
+      'novel:',
+      '  schema: 1',
+      '  id: story-state-white-harbor',
+      '  type: book.story-state',
+      '  title: Story State',
+      '---',
+      '',
+      '# Confirmed facts',
+      '',
+      'The protagonist has reached White Harbor.',
+      '',
+    ].join('\n'))
 
     const project = await scaffold.ctx.novelRepository.discoverProject(
       await scaffold.ctx.fs.resolve(scaffold.workspaceCwd),
@@ -263,6 +278,7 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       await page.getByRole('button', { name: 'Open Novel Workbench' }).click()
       await page.locator('[data-novel-workbench]').waitFor({ timeout: 30_000 })
       await page.getByRole('textbox', { name: '第一章 · Chapter manuscript' }).waitFor({ timeout: 30_000 })
+      await page.getByRole('combobox', { name: 'Manuscript versions' }).waitFor({ timeout: 30_000 })
       await page.getByText('以动作替代直接解释', { exact: true }).waitFor({ timeout: 30_000 })
     } catch (cause) {
       throw new Error(`Novel Workbench content did not load; page errors: ${JSON.stringify(tripwire.pageErrors)}; body: ${JSON.stringify(await page.locator('body').innerText())}`, { cause })
@@ -300,14 +316,46 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
     const editor = page.getByRole('textbox', { name: '第一章 · Chapter manuscript' })
     await expect.poll(() => editor.inputValue()).toBe('她沉默片刻没有再解释。雨还在下。')
 
+    const project = await scaffold.ctx.novelRepository.discoverProject(
+      await scaffold.ctx.fs.resolve(scaffold.workspaceCwd),
+    )
+    if (project === undefined) throw new Error('Novel Project disappeared before restore')
+    const current = await scaffold.ctx.novelRepository.readAsset(project, 'chapter-white-harbor-1' as never)
+    const pendingSelection = await scaffold.ctx.novelRepository.captureSelection(project, {
+      assetId: current.asset.id,
+      revisionId: current.revisionId,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
+    })
+    const pending = await scaffold.ctx.novelRepository.proposeChangeSet(project, {
+      assetId: current.asset.id,
+      baseRevisionId: current.revisionId,
+      operations: [{ kind: 'replace-text', selector: pendingSelection.selector, replacement: '她仍' }],
+      actor: { kind: 'agent', sessionId: SESSION_ID },
+      summary: '恢复前仍待处理的提案',
+    })
+
     const versions = page.getByRole('combobox', { name: 'Manuscript versions' })
     await expect.poll(() => versions.locator('option').count()).toBe(2)
     await versions.selectOption(baseRevisionId)
     await page.getByText('Historical Revision · read-only', { exact: true }).waitFor()
     await expect.poll(() => page.getByRole('textbox', { name: '第一章 · Chapter manuscript' }).isEditable()).toBe(false)
     await compareOrRefreshGolden(HISTORICAL_EXPECTED, await captureNovelWorkbench(page, scaffold.workspaceCwd), MODE)
-    await versions.selectOption({ index: 0 })
+    await page.getByRole('button', { name: 'Restore this version' }).click()
+    const restoreDialog = page.getByRole('dialog', { name: 'Restore historical version' })
+    await restoreDialog.waitFor()
+    await compareOrRefreshGolden(RESTORE_EXPECTED, await captureNovelWorkbench(page, scaffold.workspaceCwd), MODE)
+    await restoreDialog.getByRole('button', { name: 'Confirm restore' }).click()
     await expect.poll(() => page.getByRole('textbox', { name: '第一章 · Chapter manuscript' }).isEditable()).toBe(true)
+    await expect.poll(() => page.getByRole('textbox', { name: '第一章 · Chapter manuscript' }).inputValue())
+      .toBe('她没有再解释。雨还在下。')
+    await expect.poll(() => versions.locator('option').count()).toBe(3)
+    await expect.poll(() => versions.locator('option').first().innerText()).toContain('Restored historical version')
+    const restoreStatus = page.getByRole('status')
+    await expect.poll(() => restoreStatus.innerText()).toContain('Pending proposals made stale: 1')
+    await expect.poll(() => restoreStatus.innerText()).toContain('Review Story State')
+    await expect(scaffold.ctx.novelRepository.readChangeSet(project, pending.id))
+      .resolves.toMatchObject({ status: 'conflicted' })
+    await page.getByRole('button', { name: 'Dismiss' }).click()
 
     const authored = '她只看着窗外。雨还在下。'
     await page.getByRole('textbox', { name: 'Chapter title' }).fill('雨夜归人')
@@ -414,6 +462,7 @@ describe.skipIf(MODE === 'record')('web e2e: Agent-native Novel Workbench MVP', 
       'outline.expected.md',
       'proposed.expected.md',
       'review.expected.md',
+      'restore.expected.md',
     ])
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])

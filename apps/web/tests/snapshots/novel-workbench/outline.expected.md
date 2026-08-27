@@ -7,10 +7,10 @@
       - group:
         - text: ›
         - strong: Book
-        - text: 2 items
+        - text: 3 items
         - button "Book Brief Brief"
         - button "White Harbor Style Style"
-        - button "＋ Create Story State"
+        - button "Story State Story State"
       - group:
         - text: ›
         - strong: Manuscript

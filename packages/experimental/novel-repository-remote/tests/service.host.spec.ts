@@ -20,6 +20,8 @@ import NovelRepository, {
   type PutNovelAnalysisReportRequest,
   type ProposeChangeSetRequest,
   type ReorderAssetsRequest,
+  type RestoreAssetRevisionRequest,
+  type RestoreAssetRevisionResult,
   type SaveAssetContentRequest,
   type SearchAssetsRequest,
   type SelectionRef,
@@ -44,6 +46,8 @@ class StubNovelRepository extends NovelRepository {
   reports: readonly NovelAnalysisReport[] = []
   initializations: string[] = []
   reorders: ReorderAssetsRequest[] = []
+  restores: RestoreAssetRevisionRequest[] = []
+  restoreResult: RestoreAssetRevisionResult | undefined
 
   override discoverProject(_root: FsTarget): Promise<NovelProjectSnapshot | undefined> {
     return Promise.resolve(this.project)
@@ -112,6 +116,15 @@ class StubNovelRepository extends NovelRepository {
 
   override listAssetRevisions(): Promise<readonly AssetRevisionSummary[]> {
     return Promise.resolve(this.revisions)
+  }
+
+  override restoreAssetRevision(
+    _project: NovelProjectSnapshot,
+    request: RestoreAssetRevisionRequest,
+  ): Promise<RestoreAssetRevisionResult> {
+    if (this.restoreResult === undefined) throw new Error('restore result not configured')
+    this.restores.push(request)
+    return Promise.resolve(this.restoreResult)
   }
 
   override listAnalysisReports(): Promise<readonly NovelAnalysisReport[]> {
@@ -364,6 +377,11 @@ describe('NovelRepositoryRemote Host service', () => {
       origin: 'initial-scan',
       createdAt: '2026-08-25T08:00:00.000Z',
     }]
+    repository.restoreResult = {
+      snapshot: { ...snapshot, revisionId: RevisionId('revision-restored') },
+      conflictedChangeSetCount: 2,
+      storyStateReviewRecommended: true,
+    }
     const noAiReport: NovelAnalysisReport = {
       projectId: snapshot.asset.projectId,
       assetId: snapshot.asset.id,
@@ -470,6 +488,19 @@ describe('NovelRepositoryRemote Host service', () => {
       .resolves.toMatchObject({ title: '第一章', content: { kind: 'manuscript', body: '旧正文' } })
     await expect(ctx.novelRepositoryRemote.revisions(agent, AssetId('chapter-1'), signal))
       .resolves.toEqual([expect.objectContaining({ id: 'revision-1', origin: 'initial-scan' })])
+    await expect(ctx.novelRepositoryRemote.restoreAsset(agent, {
+      assetId: AssetId('chapter-1'),
+      baseRevisionId: RevisionId('revision-2'),
+      sourceRevisionId: RevisionId('revision-1'),
+    }, signal)).resolves.toMatchObject({
+      document: { revisionId: 'revision-restored', title: '第一章' },
+      conflictedChangeSetCount: 2,
+      storyStateReviewRecommended: true,
+    })
+    expect(repository.restores).toEqual([{
+      assetId: 'chapter-1', baseRevisionId: 'revision-2', sourceRevisionId: 'revision-1',
+      restoredBySessionId: 'agent-1',
+    }])
     await expect(ctx.novelRepositoryRemote.analysisReports(
       agent, AssetId('chapter-1'), RevisionId('revision-1'), signal,
     )).resolves.toEqual([expect.objectContaining({ kind: 'noai-scan', data: { riskScore: 42 } })])

@@ -87,6 +87,7 @@ const canvasAnalysisStubs = {
     manifestDisplayPath: '/story/novel.yaml', contentRootDisplayPaths: { manuscript: '/story/manuscript' },
   }),
   revisions: async () => [],
+  restore: async () => { throw new Error('not exercised') },
   analysisReports: async () => [],
   scanNoAi: async () => analysisReport('noai-scan'),
   reviewChapter: async () => analysisReport('chapter-review'),
@@ -693,7 +694,7 @@ describe('Canvas', () => {
     expect(appendReference).toHaveBeenCalledWith(SID, frozen, '[情绪目标]')
   })
 
-  it('opens retained Revisions from the header and keeps historical prose read-only', async () => {
+  it('compares and restores a historical Revision as a new current head', async () => {
     const store = createNovelWorkbenchStore().create()
     const current = chapter({ revisionId: 'revision-2' as never, content: { kind: 'manuscript', body: '当前正文' } })
     const historical = chapter({ revisionId: 'revision-1' as never, content: { kind: 'manuscript', body: '历史正文' } })
@@ -704,16 +705,26 @@ describe('Canvas', () => {
     const open = vi.fn(async (_sessionId: SessionId, _assetId: string, revisionId?: string) => (
       revisionId === historical.revisionId ? historical : current
     ))
+    const restored = chapter({ revisionId: 'revision-3' as never, content: historical.content })
+    let didRestore = false
     const revisions = vi.fn(async () => [
+      ...(didRestore ? [{ id: restored.revisionId, projectId: restored.projectId, assetId: restored.id,
+        contentHash: restored.contentHash, origin: 'user-edit' as const, createdAt: '2026-08-25T10:00:00.000Z',
+        parentRevisionId: current.revisionId, restoredFromRevisionId: historical.revisionId,
+        restoredBySessionId: SID }] : []),
       { id: current.revisionId, projectId: current.projectId, assetId: current.id, contentHash: current.contentHash,
         origin: 'user-edit' as const, createdAt: '2026-08-25T09:00:00.000Z', parentRevisionId: historical.revisionId },
       { id: historical.revisionId, projectId: historical.projectId, assetId: historical.id, contentHash: historical.contentHash,
         origin: 'initial-scan' as const, createdAt: '2026-08-25T08:00:00.000Z' },
     ])
+    const restore = vi.fn(async () => {
+      didRestore = true
+      return { document: restored, conflictedChangeSetCount: 2, storyStateReviewRecommended: true }
+    })
     const save = vi.fn()
     const view = render(<Canvas
       {...canvasAnalysisStubs}
-      revisions={revisions} open={open} create={createStub}
+      revisions={revisions} restore={restore} open={open} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
       save={save} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
     />)
@@ -726,9 +737,23 @@ describe('Canvas', () => {
     expect(view.getByText(zh.historicalReadOnly)).toBeTruthy()
     expect(save).not.toHaveBeenCalled()
 
-    fireEvent.change(view.getByLabelText(zh.revisionHistory), { target: { value: current.revisionId } })
-    await waitFor(() => { expect((view.getByLabelText(/第一章/u) as HTMLTextAreaElement).value).toBe('当前正文') })
+    fireEvent.click(view.getByRole('button', { name: zh.restoreRevision }))
+    const dialog = await view.findByRole('dialog', { name: zh.restoreTitle })
+    expect(within(dialog).getByLabelText(`${zh.restoreCurrentVersion} · 第一章`))
+      .toHaveProperty('value', '当前正文')
+    expect(within(dialog).getByLabelText(`${zh.restoreSelectedVersion} · 第一章`))
+      .toHaveProperty('value', '历史正文')
+    expect(restore).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: zh.confirmRestore }))
+    await waitFor(() => { expect(restore).toHaveBeenCalledWith(SID, {
+      assetId: current.id, baseRevisionId: current.revisionId, sourceRevisionId: historical.revisionId,
+    }) })
+    await waitFor(() => { expect((view.getByLabelText(/第一章/u) as HTMLTextAreaElement).value).toBe('历史正文') })
     expect((view.getByLabelText(/第一章/u) as HTMLTextAreaElement).readOnly).toBe(false)
+    expect(view.getByRole('status').textContent).toContain(zh.restoreComplete)
+    expect(view.getByRole('status').textContent).toContain(`${zh.restoreConflictedChangeSets} 2`)
+    expect(view.getByRole('status').textContent).toContain(zh.restoreStoryStateWarning)
+    await waitFor(() => { expect(view.getByLabelText(zh.revisionHistory).textContent).toContain(zh.revisionRestored) })
   })
 
   it('flushes dirty prose before Revision-bound NOAI and review reports', async () => {

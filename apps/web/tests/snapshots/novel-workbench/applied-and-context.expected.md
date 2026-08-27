@@ -7,10 +7,10 @@
       - group:
         - text: ›
         - strong: Book
-        - text: 2 items
+        - text: 3 items
         - button "Book Brief Brief"
         - button "Book Style Style"
-        - button "＋ Create Story State"
+        - button "Story State Story State"
       - group:
         - text: ›
         - strong: Manuscript
@@ -30,6 +30,7 @@
     - text: 雨夜归人
     - combobox "Manuscript versions":
       - option "Current · 8/27/2026, {{clock}} · Author save" [selected]
+      - option "8/27/2026, {{clock}} · Restored historical version"
       - option "8/27/2026, {{clock}} · Accepted Agent change"
       - option "8/27/2026, {{clock}} · Initial import"
   - text: Saved

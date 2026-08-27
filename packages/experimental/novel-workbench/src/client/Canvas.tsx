@@ -18,9 +18,11 @@ import type {
   NovelAssetRevisionDescriptor,
   NovelSelectionDescriptor,
   NovelProjectDescriptor,
+  RestoreNovelAssetDescriptor,
+  RestoreNovelAssetRequest,
   SaveNovelAssetRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
-import type { NovelAssetRendererRegistry } from './renderers.tsx'
+import type { NovelAssetRendererDefinition, NovelAssetRendererRegistry } from './renderers.tsx'
 import type { NovelReaderFont, NovelReaderSkin, createNovelWorkbenchStore } from './store.ts'
 import type { NovelContextFocus, NovelProjectStatusFocus } from './context-controller.ts'
 import css from './workbench.module.css'
@@ -30,6 +32,7 @@ export interface CanvasInjected {
   initialize: (sessionId: SessionId, title: string) => Promise<NovelProjectDescriptor>
   open: (sessionId: SessionId, assetId: string, revisionId?: string) => Promise<NovelAssetDocument>
   revisions: (sessionId: SessionId, assetId: string) => Promise<readonly NovelAssetRevisionDescriptor[]>
+  restore: (sessionId: SessionId, request: RestoreNovelAssetRequest) => Promise<RestoreNovelAssetDescriptor>
   analysisReports: (
     sessionId: SessionId,
     assetId: string,
@@ -101,7 +104,7 @@ const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 
 /** One exact-revision typed Asset editor with an optional chapter-local planning surface. */
 export function Canvas({
-  useSessions, useStore, actions, renderers, initialize, open, revisions, analysisReports, scanNoAi, reviewChapter,
+  useSessions, useStore, actions, renderers, initialize, open, revisions, restore, analysisReports, scanNoAi, reviewChapter,
   finalizations, preferenceCandidates, storyStateCandidates, finalizeChapter, acceptPreference, rejectPreference,
   acceptStoryState, rejectStoryState,
   create, save, capture, appendReference,
@@ -124,6 +127,11 @@ export function Canvas({
   const [preferenceError, setPreferenceError] = useState<string>()
   const [preferenceNotice, setPreferenceNotice] = useState<string>()
   const [storyNotice, setStoryNotice] = useState<string>()
+  const [restorePreview, setRestorePreview] = useState<{
+    readonly current: NovelAssetDocument
+    readonly historical: NovelAssetDocument
+  }>()
+  const [restoreNotice, setRestoreNotice] = useState<string>()
   const [statusHost, setStatusHost] = useState<Element | null>(null)
   const analysisEpoch = useRef(0)
 
@@ -160,6 +168,11 @@ export function Canvas({
     setPreferenceNotice(undefined)
     setStoryNotice(undefined)
   }, [state.document?.id, state.document?.revisionId])
+
+  useEffect(() => {
+    setRestorePreview(undefined)
+    setRestoreNotice(undefined)
+  }, [state.document?.id])
 
   useEffect(() => {
     if (sessionId === undefined || state.document === undefined) { setRevisionItems([]); return }
@@ -251,6 +264,40 @@ export function Canvas({
       setAnalysisMode(undefined)
       setReports([])
       setAnalysisError(undefined)
+    } catch (cause: unknown) { actions.fail(errorMessage(cause)) }
+    finally { setBusy(false) }
+  }
+
+  const previewRestore = async () => {
+    if (sessionId === undefined || state.document === undefined || !historical || busy) return
+    setBusy(true)
+    try {
+      const current = await open(sessionId, state.document.id)
+      setRestorePreview({ current, historical: state.document })
+    } catch (cause: unknown) { actions.fail(errorMessage(cause)) }
+    finally { setBusy(false) }
+  }
+
+  const confirmRestore = async () => {
+    if (sessionId === undefined || restorePreview === undefined || busy) return
+    setBusy(true)
+    try {
+      const result = await restore(sessionId, {
+        assetId: restorePreview.current.id,
+        baseRevisionId: restorePreview.current.revisionId,
+        sourceRevisionId: restorePreview.historical.revisionId,
+      })
+      actions.saved(result.document)
+      setAnalysisMode(undefined)
+      setReports([])
+      setAnalysisError(undefined)
+      setRestorePreview(undefined)
+      const effects = [t('restoreComplete')]
+      if (result.conflictedChangeSetCount > 0) {
+        effects.push(`${t('restoreConflictedChangeSets')} ${result.conflictedChangeSetCount}`)
+      }
+      if (result.storyStateReviewRecommended) effects.push(t('restoreStoryStateWarning'))
+      setRestoreNotice(effects.join(' · '))
     } catch (cause: unknown) { actions.fail(errorMessage(cause)) }
     finally { setBusy(false) }
   }
@@ -381,6 +428,8 @@ export function Canvas({
         {state.error === undefined ? <span>{busy ? t('saving') : state.dirty ? '' : t('saved')}</span>
           : <span className={css.error} role="alert">{state.error}</span>}
         <button type="button" disabled={!state.dirty || busy || historical} onClick={() => { void persist() }}>{t('save')}</button>
+        {historical && <button type="button" className={css.restoreButton} disabled={busy}
+          onClick={() => { void previewRestore() }}>{t('restoreRevision')}</button>}
         {state.document.type === 'manuscript.chapter' && <button type="button" disabled={busy || preferenceBusy}
           onClick={() => {
             if (isFinal && (preferenceCandidate !== undefined || storyCandidate !== undefined
@@ -416,6 +465,18 @@ export function Canvas({
       </div>}
     </div>
     {statusHost === null ? controls : createPortal(controls, statusHost)}
+    {restoreNotice !== undefined && <aside className={css.restoreNotice} role="status">
+      <span>{restoreNotice}</span><button type="button" aria-label={t('dismiss')} onClick={() => { setRestoreNotice(undefined) }}>×</button>
+    </aside>}
+    {restorePreview !== undefined && <RestoreRevisionDialog
+      current={restorePreview.current}
+      historical={restorePreview.historical}
+      renderer={renderer}
+      busy={busy}
+      cancel={() => { setRestorePreview(undefined) }}
+      confirm={() => { void confirmRestore() }}
+      t={t}
+    />}
     {reader !== undefined && chapterOutlineOpen && sessionId !== undefined && <ChapterOutlineDrawer
       key={state.document.id}
       sessionId={sessionId}
@@ -456,6 +517,44 @@ export function Canvas({
       close={() => { setPreferenceOpen(false) }}
       t={t}
     />}
+  </div>
+}
+
+function RestoreRevisionDialog({ current, historical, renderer, busy, cancel, confirm, t }: {
+  readonly current: NovelAssetDocument
+  readonly historical: NovelAssetDocument
+  readonly renderer: NovelAssetRendererDefinition
+  readonly busy: boolean
+  readonly cancel: () => void
+  readonly confirm: () => void
+  readonly t: CanvasProps['t']
+}) {
+  const noop = (): void => {}
+  const currentTitle = current.title
+  const historicalTitle = historical.title
+  return <div className={css.restoreBackdrop} onMouseDown={cancel}>
+    <section className={css.restoreDialog} role="dialog" aria-modal="true" aria-labelledby="novel-restore-title"
+      onMouseDown={(event) => { event.stopPropagation() }}>
+      <header><div><p>{t('revisionHistory')}</p><h2 id="novel-restore-title">{t('restoreTitle')}</h2></div>
+        <button type="button" aria-label={t('dismiss')} onClick={cancel}>×</button></header>
+      <p className={css.restoreDescription}>{t('restoreDescription')}</p>
+      <div className={css.restoreComparison}>
+        <article><header><strong>{t('restoreCurrentVersion')}</strong></header>
+          <div className={css.restoreDocument}>{renderer.renderEditor({
+            document: current, content: current.content, title: currentTitle,
+            ariaLabel: `${t('restoreCurrentVersion')} · ${currentTitle}`, readOnly: true,
+            onContentChange: noop, onTitleChange: noop, onSelectionChange: noop,
+          })}</div></article>
+        <article data-restore-source=""><header><strong>{t('restoreSelectedVersion')}</strong></header>
+          <div className={css.restoreDocument}>{renderer.renderEditor({
+            document: historical, content: historical.content, title: historicalTitle,
+            ariaLabel: `${t('restoreSelectedVersion')} · ${historicalTitle}`, readOnly: true,
+            onContentChange: noop, onTitleChange: noop, onSelectionChange: noop,
+          })}</div></article>
+      </div>
+      <footer><span>{t('restoreSafety')}</span><div><button type="button" disabled={busy} onClick={cancel}>{t('cancel')}</button>
+        <button type="button" disabled={busy} onClick={confirm}>{busy ? t('restoring') : t('confirmRestore')}</button></div></footer>
+    </section>
   </div>
 }
 
@@ -855,9 +954,11 @@ export function shortReferenceLabel(preview: string): string {
 function revisionLabel(revision: NovelAssetRevisionDescriptor, current: boolean, t: CanvasProps['t']): string {
   const date = new Date(revision.createdAt)
   const when = Number.isNaN(date.getTime()) ? revision.createdAt : date.toLocaleString()
-  const origin = t(revision.origin === 'initial-scan' ? 'revisionInitial'
-    : revision.origin === 'user-edit' ? 'revisionUser'
-      : revision.origin === 'agent-apply' ? 'revisionAgent' : 'revisionExternal')
+  const originKey = revision.restoredFromRevisionId !== undefined ? 'revisionRestored'
+    : revision.origin === 'initial-scan' ? 'revisionInitial'
+      : revision.origin === 'user-edit' ? 'revisionUser'
+        : revision.origin === 'agent-apply' ? 'revisionAgent' : 'revisionExternal'
+  const origin = t(originKey)
   return `${current ? `${t('currentRevision')} · ` : ''}${when} · ${origin}`
 }
 

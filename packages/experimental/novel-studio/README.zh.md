@@ -13,6 +13,7 @@
 - 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含需用户批准的 `novel_initialize_project`、`novel_list`、`novel_search`、`novel_create`、`novel_get`、显式只读的 `novel_get_analysis`、`novel_propose_changes` 与 `novel_present`；不包含通用 shell 或文件系统修改工具。
 - 同一 Preset 通过标准按需 `skill` 工具挂载十个包内自包含写作/审稿 Skill：新书启动、大纲/beat 设计、章节执行、文风改写、文风审查、场景推进、对白诊断、精确 Revision 章节审稿、草稿/定稿偏好提取与定稿正文 Story State 提取。每个 Skill 声明一个闭集 `novelContextPolicy`；Skill 可以教授方法并选择有边界的上下文策略，但不能扩大 Novel 工具权限。
 - 绑定 Revision 的分析服务为工作台提供确定性 NOAI 扫描、固定 one-shot 审稿人、偏好 worker 与 Story State worker。它们都只收到冻结的有界材料、`skill` 工具与严格 Schema，且不拥有 Asset 修改权限；只有面向用户的 Host 流程可以保留定稿，并通过 ChangeSet 应用已采纳候选。
+- 历史作者 Revision 是只读证据。作者可以显式对照并把其中一版恢复为新的、受版本保护的当前 Revision；恢复绝不倒退历史，会把该 Asset 的陈旧提案标为冲突、保留绑定 Revision 的分析证据，并在章节 Canon 可能变化时要求复查 Story State。
 - `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
 - 默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。本包仍不添加已发布的全局 Profile template；调用方把它安装到显式 Profile 中。
 

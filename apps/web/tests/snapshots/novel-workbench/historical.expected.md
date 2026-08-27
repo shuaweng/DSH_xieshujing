@@ -7,10 +7,10 @@
       - group:
         - text: ›
         - strong: Book
-        - text: 2 items
+        - text: 3 items
         - button "Book Brief Brief"
         - button "Book Style Style"
-        - button "＋ Create Story State"
+        - button "Story State Story State"
       - group:
         - text: ›
         - strong: Manuscript
@@ -34,6 +34,7 @@
     - text: Historical Revision · read-only
   - text: Saved
   - button "Save" [disabled]
+  - button "Restore this version"
   - button "Mark final"
   - button "Reference selection to Agent" [disabled]
   - article:

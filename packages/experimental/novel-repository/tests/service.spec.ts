@@ -21,6 +21,8 @@ import NovelRepository, {
   type ProposeChangeSetRequest,
   type ReorderAssetsRequest,
   type PutNovelAnalysisReportRequest,
+  type RestoreAssetRevisionRequest,
+  type RestoreAssetRevisionResult,
   type SaveAssetContentRequest,
   type SearchAssetsRequest,
   type AssetSearchResult,
@@ -64,6 +66,13 @@ class StubNovelRepository extends NovelRepository {
 
   override listAssetRevisions(): Promise<readonly AssetRevisionSummary[]> {
     return Promise.resolve([])
+  }
+
+  override restoreAssetRevision(
+    _project: NovelProjectSnapshot,
+    _request: RestoreAssetRevisionRequest,
+  ): Promise<RestoreAssetRevisionResult> {
+    return Promise.reject(new Error('not configured'))
   }
 
   override listAnalysisReports(): Promise<readonly NovelAnalysisReport[]> {

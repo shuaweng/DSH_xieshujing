@@ -53,6 +53,8 @@ import type {
   NovelWireValue,
   SaveNovelAssetRequest,
   ReorderNovelAssetsRequest,
+  RestoreNovelAssetDescriptor,
+  RestoreNovelAssetRequest,
 } from './types.ts'
 
 export type {
@@ -78,6 +80,8 @@ export type {
   NovelWireValue,
   SaveNovelAssetRequest,
   ReorderNovelAssetsRequest,
+  RestoreNovelAssetDescriptor,
+  RestoreNovelAssetRequest,
 } from './types.ts'
 
 const DEFAULT_DESCRIPTOR_MAX_BYTES = 256 * 1024
@@ -371,6 +375,35 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       .map(value => ({ ...value }))
     assertResponseBytes(revisions, this.responseMaxBytes, 'Asset Revisions')
     return revisions
+  }
+
+  /**
+   * Restore retained authored bytes as a new guarded head after an explicit browser confirmation.
+   * @param agent - addressed Agent whose Session supplies project root, actor identity, and write policy.
+   * @param request - exact observed head and retained source Revision.
+   * @param signal - caller cancellation before authored-file publication.
+   * @returns the committed document and bounded follow-up effects.
+   */
+  @Remote('restoreAsset')
+  async restoreAsset(
+    agent: Agent,
+    request: RestoreNovelAssetRequest,
+    signal: AbortSignal,
+  ): Promise<RestoreNovelAssetDescriptor> {
+    const project = await this.requireProject(agent, signal)
+    const restored = await this.ctx.novelRepository.restoreAssetRevision(project, {
+      assetId: request.assetId,
+      baseRevisionId: request.baseRevisionId,
+      sourceRevisionId: request.sourceRevisionId,
+      restoredBySessionId: agent.id,
+    }, signal, this.ctx.sandboxPolicy.resolve({ session: agent.session }))
+    const result: RestoreNovelAssetDescriptor = {
+      document: assetDocument(restored.snapshot),
+      conflictedChangeSetCount: restored.conflictedChangeSetCount,
+      storyStateReviewRecommended: restored.storyStateReviewRecommended,
+    }
+    assertResponseBytes(result, this.responseMaxBytes, 'restored Asset document')
+    return result
   }
 
   /** List exact chapter Revisions explicitly marked final by the author. */

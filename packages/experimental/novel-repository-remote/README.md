@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 ## Purpose
 
-This experimental Host Consumer exposes Novel Project discovery plus bounded typed-Asset catalog, search, creation, read, guarded-save, selection, context-workset, and review methods without adding transport behavior to the provider-neutral Repository Service Definition.
+This experimental Host Consumer exposes Novel Project discovery plus bounded typed-Asset catalog, search, creation, read, guarded-save, historical restore, selection, context-workset, and review methods without adding transport behavior to the provider-neutral Repository Service Definition.
 
 ## Behavior
 
@@ -18,7 +18,7 @@ This experimental Host Consumer exposes Novel Project discovery plus bounded typ
 - `replaceContextWorkset` delegates one whole-value version-two follow/pinned workset to the optional Novel context capability. A follow entry carries active Asset identity and resolves its current saved head when context compiles; a pin keeps an exact retained Revision. The context Consumer validates the value and records the Session event; the Remote owns neither the fold nor model injection.
 - Asset types, content, selectors, and operations cross Remote as a bounded JSON envelope. Host and Client registries own their exact semantics, so adding a type does not require widening the generated Remote method list; incompatible or non-JSON values fail explicitly.
 - `changeSet`, `applyChangeSet`, and `rejectChangeSet` expose browser review. Apply and reject pass the addressed Agent Session id as explicit authorization and return the durable terminal or conflict state.
-- `revisions` returns immutable history summaries and `asset` can open one retained Revision. `analysisReports`, `scanNoAi`, and `reviewChapter` are exact-Revision endpoints; deterministic scan and Subagent orchestration remain owned by `ctx.novelAnalysis`, not by transport.
+- `revisions` returns immutable history summaries and `asset` can open one retained Revision. `restoreAsset` binds the current base and selected source Revision, derives restore authority from the addressed Agent Session, and returns the new head plus the number of now-conflicted proposals and a Story State review recommendation. `analysisReports`, `scanNoAi`, and `reviewChapter` are exact-Revision endpoints; deterministic scan and Subagent orchestration remain owned by `ctx.novelAnalysis`, not by transport.
 - `revisionFinalizations` and `preferenceCandidates` expose browser-safe exact-Revision history. `finalizeChapter`, `acceptPreference`, and `rejectPreference` delegate the explicit user workflow to `ctx.novelAnalysis`; no model tool receives finalization authority.
 - Catalog, creation, current-head reads, saves, and applies resolve the addressed Agent Session's sandbox policy and forward it through repository reconciliation. This keeps an external Session workspace writable without widening the deployment fallback root.
 - `responseMaxBytes`, defaulting to 8 MiB, bounds every complete non-discovery JSON response; over-budget responses fail rather than truncate or silently omit data.

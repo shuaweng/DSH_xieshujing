@@ -18,12 +18,13 @@
 - `searchAssets()` 会协调同一份类型化目录，检索作者可见标题与每个已注册定义的 `modelText()`，支持精确类型白名单，并返回确定性、有边界的摘要、评分和当前 Revision 目录项。检索不会写项目文件，也不会把结果偷偷加入模型上下文。
 - 精确 UTF-8 文件字节会被哈希，并作为不可变 Revision 快照写入私有 SQLite 数据库。文件重命名不改变 Asset 身份和当前 Revision；外部字节变化会生成 `external-edit` Revision。未知或损坏的历史 schema 会被拒绝，绝不自动重置。
 - 类型化创建会在已注册内容根内生成稳定 Asset id 与安全文件名，校验父级、单例与深度规则，以 `createIfAbsent` 发布并保留首个 Revision。内置章节定义会在一次创建中接收标题与完整正文，不要求另行建立空容器。若空章节已经存在，一个精确 Revision ChangeSet 可以把 `update-title` 与 offset 0 的 `insert-text` 组合，而 `replace-text` 仍要求非空范围。作者保存与 ChangeSet 会让已注册定义只物化并重新解析一次完整候选字节，再同时使用当前 `FsVersion` 和基础 Revision 拒绝陈旧发布。内置文本定义保留身份/父级 Frontmatter，并在完整 code-point 边界上校验 UTF-16 offset。
-- 历史 Schema 版本五会在 ChangeSet 中保存目标 Asset 类型、保留 apply journal、暴露不可变 Revision 摘要，为每个精确 `(Project, Asset, Revision, kind)` 保存一个通过校验的分析报告信封，并增加幂等的精确 Revision 定稿记录与经过审阅的偏好候选。持久操作由这个精确的已注册定义解码和物化；提案仍不写文件，审阅仍归 Session 所有。
+- 历史 Schema 版本七会在 ChangeSet 中保存目标 Asset 类型、保留 apply journal、暴露包含可选恢复来源的不可变 Revision 摘要，为每个精确 `(Project, Asset, Revision, kind)` 保存一个通过校验的分析报告信封，并增加幂等的精确 Revision 定稿记录、经过审阅的偏好候选与 Story State 候选。持久操作由这个精确的已注册定义解码和物化；提案仍不写文件，审阅仍归 Session 所有。
 - 分析报告受 `analysisReportMaxBytes` 限制（默认 1 MiB），必须指向属于目标 Asset 的已有 Revision，并且只有分析 Consumer 提交完整 JSON 后才原子 upsert。分析失败不会写入，因此会保留此前成功报告。
 - 定稿只沿目标章节已保留的父链寻找最近 `agent-apply` 来源及其 ChangeSet/Session lineage。偏好候选要求来源、定稿和精确 `book.style-profile` Revision 都存在；采纳后仍只能通过普通 ChangeSet journal 发布作者字节。
 - 应用会先把精确前后字节与哈希记录为 `applying`，再执行带保护的文件发布，最后记录 `agent-apply` Revision 和终态。项目重开时，after hash 会完成提交，before hash 会重试已授权写入，第三种 hash 会把 ChangeSet 标为 `conflicted` 而不覆盖文件。
+- 恢复会按 Asset 当前路径与已注册定义重新解析并校验精确的已保留源字节，在当前文件系统版本保护下发布，再记录一个新的 `user-edit` head，并携带 `restoredFromRevisionId` 与 `restoredBySessionId`。同一个 SQLite 事务会把该 Asset 所有仍为 `proposed` 的 ChangeSet 改为 `conflicted`；历史报告与定稿派生产物保持不变。
 - 保存和 apply 恢复发布会把调用方的逐调用 sandbox policy 传给 `ctx.fs`；提供方不会用自身进程目录替代 Session 工作区边界。
-- 版本一、版本二和版本三历史数据库会原地迁移到版本四。不支持的较新数据库或损坏数据库仍会明确失败，绝不重置。
+- 版本一至版本六的历史数据库会原地迁移到版本七。不支持的较新数据库或损坏数据库仍会明确失败，绝不重置。
 
 ## 模型体验
 
@@ -47,5 +48,6 @@
 - **仅显式协调**：当前文件会在列出、读取和保存边界上重新协调；没有 watcher 或自动修复。
 - **完整快照**：每个 Revision 保存完整字节；保留、压缩与导出策略均暂缓。
 - **单资产恢复**：多资产事务、自动 rebase、模糊重定位和三方合并尚未实现。
+- **恢复发布窗口**：文件系统发布发生在 SQLite 事务之前。若进程恰好在这个窄窗口失败，作者恢复出的字节仍然安全；下一次协调会把它记录为 `external-edit`，但无法自动找回丢失的恢复来源 metadata。
 - **无跨进程锁**：带保护的 `FsVersion` 会阻止一次陈旧发布，但第二个 Host 进程不在支持的写入模型内。
 - **仅词法检索**：当前提供归一化与确定性子串排序；语言感知分词、语义向量和关系范围排序尚未实现。

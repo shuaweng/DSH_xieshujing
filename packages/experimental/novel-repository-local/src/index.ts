@@ -44,6 +44,8 @@ import NovelRepository, {
   type RevisionId as RevisionIdValue,
   type RevisionOrigin,
   type ReorderAssetsRequest,
+  type RestoreAssetRevisionRequest,
+  type RestoreAssetRevisionResult,
   type SaveAssetContentRequest,
   type SearchAssetsRequest,
   type SelectionRef,
@@ -506,6 +508,104 @@ export class LocalNovelRepository extends NovelRepository {
       const revisions = state.history.revisions(project.id, assetId)
       if (revisions.length === 0) throw assetNotFound(assetId)
       return revisions.map(revision => ({ ...revision }))
+    })
+  }
+
+  override async restoreAssetRevision(
+    project: NovelProjectSnapshot,
+    request: RestoreAssetRevisionRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<RestoreAssetRevisionResult> {
+    return await this.withProject(project, async (state) => {
+      signal?.throwIfAborted()
+      const catalog = await this.scan(project, state, signal, sandboxPolicy)
+      const current = catalog.get(request.assetId)
+      if (current === undefined) throw assetNotFound(request.assetId)
+      if (current.snapshot.revisionId !== request.baseRevisionId) throw staleRevision(request.baseRevisionId)
+      if (request.sourceRevisionId === request.baseRevisionId) {
+        throw new NovelRepositoryError(
+          'novel repository: restore source is already the current Revision',
+          'NOVEL_REVISION_STALE',
+        )
+      }
+      const source = state.history.revision(request.sourceRevisionId)
+      if (source === undefined || source.revision.projectId !== project.id
+        || source.revision.assetId !== request.assetId) {
+        throw new NovelRepositoryError(
+          `novel repository: Revision ${JSON.stringify(request.sourceRevisionId)} was not retained for asset ${JSON.stringify(request.assetId)}`,
+          'NOVEL_REVISION_NOT_FOUND',
+        )
+      }
+      if (contentHash(source.revision.serializedUtf8) !== source.revision.contentHash) {
+        throw new NovelRepositoryError('novel repository: retained restore source is corrupt', 'NOVEL_HISTORY_CORRUPT')
+      }
+      const declaredType = declaredAssetType(
+        source.revision.serializedUtf8,
+        current.summary.asset.projectRelativePath,
+      )
+      const definition = this.ctx.novelAssetTypes.get(declaredType)
+      const parsed = definition.parse(source.revision.serializedUtf8, current.summary.asset.projectRelativePath)
+      if (parsed.id !== request.assetId || !sameAssetType(parsed.type, current.snapshot.asset.type)) {
+        throw new NovelRepositoryError(
+          'novel repository: restored bytes change the current asset identity or type',
+          'NOVEL_ASSET_INVALID',
+        )
+      }
+      const revision = restoredRevision(
+        project.id,
+        request.assetId,
+        request.baseRevisionId,
+        request.sourceRevisionId,
+        request.restoredBySessionId,
+        source.revision.serializedUtf8,
+      )
+      const candidate = observedAsset(
+        project,
+        current.summary.asset.projectRelativePath,
+        current.target,
+        current.version,
+        parsed,
+        revision,
+      )
+      const nextCatalog = new Map(catalog)
+      nextCatalog.set(request.assetId, candidate)
+      validateCatalogRelationships(nextCatalog, this.ctx.novelAssetTypes)
+
+      let outcome
+      try {
+        outcome = await this.ctx.fs.writeText(
+          current.target,
+          new TextDecoder().decode(source.revision.serializedUtf8),
+          { kind: 'replaceIfVersion', version: current.version },
+          signal,
+          sandboxPolicy,
+        )
+      } catch (error: unknown) {
+        if (!(error instanceof FsError) || error.code !== 'FS_STALE_VERSION') throw error
+        await this.scan(project, state, signal, sandboxPolicy)
+        throw staleRevision(request.baseRevisionId, error)
+      }
+
+      const conflictedChangeSetCount = state.history.commitRestoredRevision(
+        revision,
+        current.summary.asset.projectRelativePath,
+      )
+      const observed = observedAsset(
+        project,
+        current.summary.asset.projectRelativePath,
+        current.target,
+        outcome.version,
+        parsed,
+        revision,
+      )
+      state.catalog.set(request.assetId, observed)
+      return {
+        snapshot: cloneSnapshot(observed.snapshot),
+        conflictedChangeSetCount,
+        storyStateReviewRecommended: sameAssetType(observed.snapshot.asset.type, 'manuscript.chapter')
+          && [...state.catalog.values()].some(asset => sameAssetType(asset.parsed.type, 'book.story-state')),
+      }
     })
   }
 
@@ -1500,6 +1600,32 @@ function preparedRevision(
     contentHash: contentHash(serializedUtf8),
     origin: 'agent-apply',
     createdAt,
+  }
+}
+
+function restoredRevision(
+  projectId: ProjectId,
+  assetId: AssetId,
+  parentRevisionId: RevisionIdValue,
+  restoredFromRevisionId: RevisionIdValue,
+  restoredBySessionId: RestoreAssetRevisionRequest['restoredBySessionId'],
+  serializedUtf8: Uint8Array,
+): AssetRevision {
+  if (restoredBySessionId.length === 0 || restoredBySessionId.length > 200
+    || restoredBySessionId !== restoredBySessionId.trim()) {
+    throw new NovelRepositoryError('novel repository: restore Session is invalid', 'NOVEL_ASSET_INVALID')
+  }
+  return {
+    id: RevisionId(`revision_${randomUUID()}`),
+    projectId,
+    assetId,
+    parentRevisionId,
+    serializedUtf8: new Uint8Array(serializedUtf8),
+    contentHash: contentHash(serializedUtf8),
+    origin: 'user-edit',
+    createdAt: new Date().toISOString(),
+    restoredFromRevisionId,
+    restoredBySessionId,
   }
 }
 

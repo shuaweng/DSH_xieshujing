@@ -670,6 +670,103 @@ describe('LocalNovelRepository', () => {
     })).rejects.toMatchObject({ code: 'NOVEL_REVISION_NOT_FOUND' })
   })
 
+  it('restores historical bytes as a new head while preserving reports and conflicting pending proposals', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await mkdir(join(dir, 'planning'))
+    await writeFile(join(dir, 'novel.yaml'), manifest(['  planning: planning']))
+    const initialBytes = chapter('chapter-one', '第一章', '初稿正文')
+    await writeFile(join(dir, 'manuscript', 'chapter.md'), initialBytes)
+    await writeFile(join(dir, 'planning', 'story-state.md'), [
+      '---', 'novel:', '  schema: 1', '  id: story-state-one',
+      '  type: book.story-state', '  title: 故事状态', '---', '# 当前事实', '',
+    ].join('\n'))
+    const ctx = await boot(dir, {}, [storyStateTestType])
+    const novel = await project(ctx)
+    const assets = await ctx.novelRepository.listAssets(novel)
+    const initial = assets.find(value => value.asset.id === 'chapter-one')!
+    const saved = await ctx.novelRepository.saveAssetContent(novel, {
+      assetId: initial.asset.id,
+      baseRevisionId: initial.revisionId,
+      title: '第一章 · 修订稿',
+      content: { kind: 'manuscript', body: '修订后的正文' },
+    })
+    await ctx.novelRepository.putAnalysisReport(novel, {
+      assetId: initial.asset.id,
+      revisionId: saved.revisionId,
+      kind: 'chapter-review',
+      analyzerVersion: 'review/restore-test',
+      generatedAt: '2026-08-27T01:00:00.000Z',
+      data: { overallScore: 88 },
+    })
+    const selection = await ctx.novelRepository.captureSelection(novel, {
+      assetId: initial.asset.id,
+      revisionId: saved.revisionId,
+      selector: { kind: 'text-range', startUtf16: 0, endUtf16: 1 },
+    })
+    const pending = await ctx.novelRepository.proposeChangeSet(novel, {
+      assetId: initial.asset.id,
+      baseRevisionId: saved.revisionId,
+      operations: [{ kind: 'replace-text', selector: selection.selector, replacement: '再' }],
+      actor: { kind: 'agent', sessionId: SessionId('session-agent') },
+      summary: '尚未接受的提案',
+    })
+
+    await expect(ctx.novelRepository.restoreAssetRevision(novel, {
+      assetId: initial.asset.id,
+      baseRevisionId: saved.revisionId,
+      sourceRevisionId: initial.revisionId,
+      restoredBySessionId: SessionId(' '),
+    })).rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
+    await expect(ctx.novelRepository.readAsset(novel, initial.asset.id))
+      .resolves.toMatchObject({ revisionId: saved.revisionId, content: { body: '修订后的正文' } })
+
+    const restored = await ctx.novelRepository.restoreAssetRevision(novel, {
+      assetId: initial.asset.id,
+      baseRevisionId: saved.revisionId,
+      sourceRevisionId: initial.revisionId,
+      restoredBySessionId: SessionId('session-author'),
+    })
+
+    expect(restored).toMatchObject({
+      snapshot: {
+        frontmatter: { novel: { title: '第一章' } },
+        content: { kind: 'manuscript', body: '初稿正文' },
+      },
+      conflictedChangeSetCount: 1,
+      storyStateReviewRecommended: true,
+    })
+    expect(restored.snapshot.revisionId).toMatch(/^revision_/u)
+    expect(restored.snapshot.revisionId).not.toBe(initial.revisionId)
+    expect(await readFile(join(dir, 'manuscript', 'chapter.md'), 'utf8')).toBe(initialBytes)
+    await expect(ctx.novelRepository.readChangeSet(novel, pending.id))
+      .resolves.toMatchObject({ status: 'conflicted' })
+    await expect(ctx.novelRepository.listAnalysisReports(novel, initial.asset.id, saved.revisionId))
+      .resolves.toEqual([expect.objectContaining({ analyzerVersion: 'review/restore-test' })])
+    const revisions = await ctx.novelRepository.listAssetRevisions(novel, initial.asset.id)
+    expect(revisions).toHaveLength(3)
+    expect(revisions[0]).toMatchObject({
+      id: restored.snapshot.revisionId,
+      parentRevisionId: saved.revisionId,
+      origin: 'user-edit',
+      restoredFromRevisionId: initial.revisionId,
+      restoredBySessionId: 'session-author',
+    })
+    expect(revisions.map(value => value.id)).toEqual(expect.arrayContaining([saved.revisionId, initial.revisionId]))
+    await expect(ctx.novelRepository.restoreAssetRevision(novel, {
+      assetId: initial.asset.id,
+      baseRevisionId: saved.revisionId,
+      sourceRevisionId: initial.revisionId,
+      restoredBySessionId: SessionId('session-author'),
+    })).rejects.toMatchObject({ code: 'NOVEL_REVISION_STALE' })
+    await expect(ctx.novelRepository.restoreAssetRevision(novel, {
+      assetId: initial.asset.id,
+      baseRevisionId: restored.snapshot.revisionId,
+      sourceRevisionId: restored.snapshot.revisionId,
+      restoredBySessionId: SessionId('session-author'),
+    })).rejects.toMatchObject({ code: 'NOVEL_REVISION_STALE' })
+  })
+
   it('persists one inert Story State candidate per finalized chapter Revision', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))
@@ -1272,7 +1369,7 @@ describe('LocalNovelRepository', () => {
     },
   )
 
-  it('migrates an identified version-one history database to Story State schema six', async () => {
+  it('migrates an identified version-one history database to Revision restore schema seven', async () => {
     const dir = await tempDir()
     const path = join(dir, 'history.sqlite')
     const { DatabaseSync } = await import('node:sqlite')
@@ -1283,9 +1380,11 @@ describe('LocalNovelRepository', () => {
     const history = await openHistory(path, 100, decodeHistoryOperations)
     history.close()
     const migrated = new DatabaseSync(path)
-    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(6)
+    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(7)
     expect((migrated.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>).map(row => row.name))
       .toContain('asset_type')
+    expect((migrated.prepare('PRAGMA table_info(revisions)').all() as Array<{ name: string }>).map(row => row.name))
+      .toEqual(expect.arrayContaining(['restored_from_revision_id', 'restored_by_session_id']))
     const tables = migrated.prepare(`
       SELECT name FROM sqlite_master
       WHERE type = 'table' AND name IN ('change_sets', 'apply_journal', 'analysis_reports', 'revision_finalizations', 'preference_candidates', 'story_state_candidates')

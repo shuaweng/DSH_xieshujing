@@ -16,7 +16,7 @@
 - 当精确 Session 根目录没有 `novel.yaml` 时，资产浏览器与 Context Tray 会进入中性未初始化状态，不发起 Asset 或上下文工作集请求。画布只要求输入书名，通过与 Agent 工具相同的 Remote/Repository 操作完成初始化，然后刷新为普通资产界面；已有但损坏的清单仍会明确报错。
 - `ctx.novelAssetRenderers` 拥有 effect 作用域内、按精确类型匹配的编辑器、选区描述、可选阅读展示和 Diff contribution。共享画布拥有版本保护保存、Context Commit Barrier、Agent 引用插入和审阅权威；缺少 renderer 时会明确拒绝，而不是展示误导性的通用编辑器。
 - 内置正文 Renderer 通过同一次带 Revision 保护的保存编辑章节名称与正文、捕获简单 UTF-16 范围、统计排除空白后的作者字符，并启用全高居中的纸张画布。跨整个工作台的底栏及六套联动皮肤、字体和字号控件由所有 Asset Renderer 共用；只有正文额外显示本章字数与章纲入口。
-- 章节头部会列出带来源与时间戳的不可变 Revision。打开历史 Revision 时仍使用同一个 Renderer 和分析控件，但标题/正文只读；保存绝不会重写历史。
+- 章节头部会列出带来源与时间戳的不可变 Revision。打开历史 Revision 时仍使用同一个 Renderer 和分析控件，但标题/正文只读。“恢复此版本”会使用同一 Renderer 展示当前版与选中历史版的对照，并要求用户明确确认；成功后创建新的当前 Revision、标明恢复来源、报告因此冲突的陈旧提案数量，并提醒章节作者复查 Story State，而不是静默回滚 Canon。
 - 仅章节拥有的审稿与 `NOAI` 动作位于底栏。两者都会为当前显示的精确 Revision 打开右侧抽屉。NOAI 会立即运行确定性扫描；打开审稿页本身不会启动模型，只展示已有报告，只有作者明确点击“开始审查”或重跑才启动固定只读审稿人。每种成功报告在每个 Revision 上只保留一份，因此切换历史版本也会切换到对应报告。
 - 章节头部可以把屏幕上的精确 Revision 标记为定稿。满足条件的 Agent 草稿/作者定稿比较会打开偏好抽屉并展示前后证据；候选在作者采纳前不会改变任何内容，采纳后通过 ChangeSet 写入精确“本书风格”Revision，拒绝决策同样可审计。
 - `@deepseek-ai/dsh-experimental-novel-asset-outline` 独立贡献自由的 `planning.outline` 与 `planning.chapter-outline` Renderer。书本指导和策划 Asset 默认展示渲染后的 Markdown 阅读视图，并可明确切换到不受模板限制、支持精确文本选区与 Diff 的源码编辑。一个 ChangeSet 可以同时预览一次标题变更和一次正文变更。正文底栏把用户提供的章纲图标放在皮肤控件左侧；点击会打开与当前章节一对一绑定的右侧抽屉，作者可自由写作、保存或把章纲选区引用给 Agent。情绪/钩子/节奏/起承转合实用起步模板只是可选按钮，插入后仍是普通可编辑 Markdown。
@@ -45,8 +45,8 @@ Client 包本身不加入隐藏模型内容。显式 mention 与可见 Context T
 
 ## 已知限制与延期工作
 
-- **内置五个 renderer** — 画布安装 `manuscript.chapter`；策划包增加 `planning.outline`、`planning.chapter-outline`、`book.brief` 与 `book.style-profile`。人物、灵感、场景、时间线、关系和多编辑器标签尚未实现。
+- **内置六个 renderer** — 画布安装 `manuscript.chapter`；策划包增加 `planning.outline`、`planning.chapter-outline`、`book.brief`、`book.style-profile` 与 `book.story-state`。人物、灵感、场景、时间线、关系和多编辑器标签尚未实现。
 - **没有实时文件事件** — 工作台内应用修改后会刷新资产浏览器，Repository 调用会协调外部编辑；目前没有文件监听或浏览器失效事件流。
-- **一个活动文本选区** — 现在已经可以固定精确 Asset 并只读浏览历史 Revision，但固定选区、多选区、Block id、批注、命名快照、恢复与 Revision 删除尚未实现。
+- **一个活动文本选区** — 现在已经可以固定精确 Asset、只读浏览历史 Revision，并显式“恢复为新 head”；但固定选区、多选区、Block id、批注、命名快照与 Revision 删除尚未实现。
 - **桌面优先布局** — 移动端布局、路由级多工作台切换、持久面板几何，以及瞬时打开状态的跨浏览器同步尚未实现。
 - **基础文本编辑器** — 富 Markdown 编辑、语法装饰、自动保存节奏、导入导出和发布视图尚未实现。
