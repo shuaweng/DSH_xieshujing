@@ -31,18 +31,21 @@ export const NOVEL_HISTORY_SCHEMA_VERSION = 7
 /** SQLite application id reserved for DSH Novel history. */
 export const NOVEL_HISTORY_APPLICATION_ID = 0x44534E48
 
-interface RevisionRow {
+interface RevisionMetadataRow {
   id: string
   project_id: string
   asset_id: string
   parent_revision_id: string | null
-  project_relative_path: string
-  serialized_utf8: Uint8Array
   content_hash: string
   origin: string
   created_at: string
   restored_from_revision_id: string | null
   restored_by_session_id: string | null
+}
+
+interface RevisionRow extends RevisionMetadataRow {
+  project_relative_path: string
+  serialized_utf8: Uint8Array
 }
 
 interface HeadRow {
@@ -434,8 +437,7 @@ export class NovelHistory {
   revisions(projectId: ProjectId, assetId: AssetId): readonly AssetRevisionSummary[] {
     const rows = this.db.prepare(`
       SELECT revisions.id, revisions.project_id, revisions.asset_id,
-             revisions.parent_revision_id, revisions.project_relative_path,
-             revisions.serialized_utf8, revisions.content_hash, revisions.origin,
+             revisions.parent_revision_id, revisions.content_hash, revisions.origin,
              revisions.created_at, revisions.restored_from_revision_id,
              revisions.restored_by_session_id
       FROM revisions
@@ -445,7 +447,7 @@ export class NovelHistory {
       WHERE revisions.project_id = ? AND revisions.asset_id = ?
       ORDER BY CASE WHEN revisions.id = asset_heads.revision_id THEN 0 ELSE 1 END,
                revisions.created_at DESC, revisions.id DESC
-    `).all(projectId, assetId) as unknown as RevisionRow[]
+    `).all(projectId, assetId) as unknown as RevisionMetadataRow[]
     return rows.map((row) => {
       const restore = restoreProvenance(row)
       return {
@@ -1020,7 +1022,9 @@ function revisionOrigin(value: string): RevisionOrigin {
   return value as RevisionOrigin
 }
 
-function restoreProvenance(row: RevisionRow): Pick<AssetRevision, 'restoredFromRevisionId' | 'restoredBySessionId'> {
+function restoreProvenance(
+  row: RevisionMetadataRow,
+): Pick<AssetRevision, 'restoredFromRevisionId' | 'restoredBySessionId'> {
   if (row.restored_from_revision_id === null && row.restored_by_session_id === null) return {}
   if (row.restored_from_revision_id === null || row.restored_by_session_id === null) {
     throw corrupt(`Revision ${JSON.stringify(row.id)} has incomplete restore provenance`)

@@ -624,6 +624,15 @@ describe('LocalNovelRepository', () => {
     const ctx = await boot(dir)
     const novel = await project(ctx)
     const [initial] = await ctx.novelRepository.listAssets(novel)
+    const unchanged = await ctx.novelRepository.saveAssetContent(novel, {
+      assetId: initial!.asset.id,
+      baseRevisionId: initial!.revisionId,
+      title: '第一章',
+      content: { kind: 'manuscript', body: '初稿' },
+    })
+    expect(unchanged.revisionId).toBe(initial!.revisionId)
+    expect(await ctx.novelRepository.listAssetRevisions(novel, initial!.asset.id)).toHaveLength(1)
+
     const saved = await ctx.novelRepository.saveAssetContent(novel, {
       assetId: initial!.asset.id,
       baseRevisionId: initial!.revisionId,
@@ -635,6 +644,8 @@ describe('LocalNovelRepository', () => {
         { id: saved.revisionId, parentRevisionId: initial!.revisionId, origin: 'user-edit' },
         { id: initial!.revisionId, origin: 'initial-scan' },
       ])
+    expect((await ctx.novelRepository.listAssetRevisions(novel, initial!.asset.id))
+      .every(revision => !('serializedUtf8' in revision))).toBe(true)
     await ctx.novelRepository.putAnalysisReport(novel, {
       assetId: initial!.asset.id,
       revisionId: initial!.revisionId,

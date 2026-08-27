@@ -25,6 +25,7 @@ Novel Studio 会保留每一份作者 Revision，也已经允许作者查看历�
 ## 权威与恢复
 
 - 作者项目文件仍是当前内容的权威；保留的精确字节与恢复血缘存放在 `.novel/history.sqlite` schema version seven。
+- Revision 列表只读取不可变 metadata，不读取每一份已保留正文 BLOB。编辑器键盘输入保留为浏览器本地草稿，字节完全相同的保存则在 Repository 边界保持幂等，因此输入过程与重复的空保存屏障都不会膨胀永久历史。
 - 被寻址 Agent Session 通过 Remote Consumer 提供恢复权威与 sandbox policy。模型没有恢复工具，无法确认这个仅限作者的动作。
 - 发布同时使用当前 `FsVersion` 和精确 base Revision，因此并发保存或外部编辑会拒绝恢复，而不是被覆盖。
 - 文件系统写入必然发生在 SQLite 事务之前。若进程恰好在这个窄窗口失败，恢复出的作者字节仍然安全，下一次协调会记录一条 `external-edit` Revision，但预期恢复来源无法自动重建。
@@ -47,6 +48,7 @@ Novel Studio 会保留每一份作者 Revision，也已经允许作者查看历�
 - Schema 迁移测试覆盖版本一至版本六升级到版本七，在加入可空恢复来源字段时保留已有记录。
 - Remote 测试证明恢复权威来自被寻址 Agent Session，且浏览器 descriptor 只包含有边界、浏览器安全的效果。
 - 工作台测试覆盖历史只读模式、版本对照、显式确认、权威刷新、恢复标签、冲突提案反馈与 Story State 复查消息。
+- 草稿边界测试证明连续键盘输入不会调用保存或推进当前 Revision；Repository 测试则证明未变化的语义保存仍只保留一个 Revision。
 - 真实 keyless Novel Studio composition 快照覆盖装配后的恢复流程与持久 ChangeSet 冲突，而不是独立组件近似。
 - 受影响 TypeScript 工程、生成 Remote 契约、作用域内文档配对、聚焦测试、契约 lint 与无密钥组装工作台快照共同通过。仓库级静态审计仍会报告 PR14 范围外既有的工作区与文档语料漂移；本次改动没有给这些报告类别新增失败。
 

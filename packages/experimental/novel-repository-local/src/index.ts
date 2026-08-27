@@ -980,6 +980,9 @@ export class LocalNovelRepository extends NovelRepository {
         || !sameAssetType(materialized.parsed.type, current.snapshot.asset.type)) {
         throw new NovelRepositoryError('novel repository: authored save changed the asset identity or type', 'NOVEL_ASSET_INVALID')
       }
+      // The browser keeps keystrokes in a local draft. This Host-side guard also makes
+      // repeated semantic save barriers idempotent instead of manufacturing empty history.
+      if (contentHash(bytes) === current.snapshot.contentHash) return cloneSnapshot(current.snapshot)
       const serializedText = new TextDecoder().decode(bytes)
       let outcome
       try {

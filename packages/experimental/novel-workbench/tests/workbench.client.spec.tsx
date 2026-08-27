@@ -586,6 +586,7 @@ describe('Canvas', () => {
     const { preview: _preview, ...selectionWithoutPreview } = selection()
     const capture = vi.fn(async () => selectionWithoutPreview)
     const appendReference = vi.fn()
+    const save = vi.fn()
     act(() => {
       store.actions.open(chapter())
       store.actions.select({ kind: 'text-range', startUtf16: 0, endUtf16: 2 })
@@ -594,20 +595,23 @@ describe('Canvas', () => {
       {...canvasAnalysisStubs}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-      save={vi.fn()} capture={capture} appendReference={appendReference} renderers={renderers} t={t}
+      save={save} capture={capture} appendReference={appendReference} renderers={renderers} t={t}
     />)
     fireEvent.click(view.getByText(zh.reference))
     await waitFor(() => { expect(capture).toHaveBeenCalledWith(SID, expect.objectContaining({ revisionId: 'revision-1' })) })
     await waitFor(() => { expect(appendReference).toHaveBeenCalledWith(SID, selectionWithoutPreview, '[第一章]') })
     const textarea = view.getByLabelText(/第一章/u)
     fireEvent.change(textarea, { target: { value: '键盘编辑' } })
+    fireEvent.change(textarea, { target: { value: '键盘编辑继续' } })
     Object.defineProperties(textarea, { selectionStart: { value: 1, configurable: true }, selectionEnd: { value: 3, configurable: true } })
     fireEvent.select(textarea)
     expect(store.getSnapshot()).toMatchObject({
-      draft: { kind: 'manuscript', body: '键盘编辑' },
+      draft: { kind: 'manuscript', body: '键盘编辑继续' },
       dirty: true,
       selection: { kind: 'text-range', startUtf16: 1, endUtf16: 3 },
     })
+    expect(save).not.toHaveBeenCalled()
+    expect(store.getSnapshot().document?.revisionId).toBe('revision-1')
     view.unmount()
 
     const noSession = render(<Canvas

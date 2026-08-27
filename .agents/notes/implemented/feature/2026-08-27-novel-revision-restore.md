@@ -25,6 +25,7 @@ The browser exposes restore only from a read-only historical Revision. It opens 
 ## Authority and recovery
 
 - Authored project files remain the authority for current content; retained exact bytes and restore lineage live in `.novel/history.sqlite` schema version seven.
+- Revision listings read only immutable metadata, not every retained prose BLOB. Editor keystrokes remain browser-local drafts, and a byte-identical save is idempotent at the Repository boundary, so neither typing nor repeated empty save barriers inflate permanent history.
 - The addressed Agent Session supplies restore authority and sandbox policy through the Remote Consumer. The model has no restore tool and cannot confirm the author-only action.
 - Publication uses the current `FsVersion` and exact base Revision, so concurrent saves or external edits reject the restore instead of being overwritten.
 - The filesystem write necessarily precedes the SQLite transaction. If the process fails in that narrow interval, the restored authored bytes remain safe and the next reconciliation records an `external-edit` Revision, but the intended restore provenance cannot be reconstructed automatically.
@@ -47,6 +48,7 @@ The browser exposes restore only from a read-only historical Revision. It opens 
 - Schema migration tests upgrade versions one through six to version seven and retain existing rows while adding nullable restore provenance.
 - Remote tests prove that restore authority comes from the addressed Agent Session and that the browser descriptor contains only bounded, browser-safe effects.
 - Workbench tests cover historical read-only mode, comparison, explicit confirmation, authoritative refresh, restored labels, conflicted-proposal feedback, and Story State review messaging.
+- Draft-boundary tests prove repeated keyboard input does not call save or advance the current Revision, while Repository tests prove an unchanged semantic save retains exactly one Revision.
 - The real keyless Novel Studio composition snapshot covers the assembled restore workflow and durable ChangeSet conflict rather than a standalone component approximation.
 - The affected TypeScript projects, generated Remote contract, scoped documentation pairing, focused suites, contract lint, and assembled keyless workbench snapshot pass together. The repository-wide static audit still reports pre-existing workspace and documentation-corpus drift outside PR14; this change adds no new failure to those reported categories.
 
