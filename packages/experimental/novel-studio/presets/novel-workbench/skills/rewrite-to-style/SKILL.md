@@ -3,7 +3,8 @@ name: rewrite-to-style
 description: 在不改变核心事实、剧情 beat、POV 和信息边界的前提下改写已有正文；用于去 AI 味、调句法节奏、对白声音与信息露出。
 whenToUse: "[当前正文选区/章节引用与明确的风格目标]"
 user-invocable: true
-novelContextPolicy: selection-rewrite
+metadata:
+  novelContextPolicy: selection-rewrite
 ---
 
 # Rewrite To Style

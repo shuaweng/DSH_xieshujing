@@ -2,7 +2,8 @@
 name: preference-learning
 description: 比较 Agent 草稿与作者显式定稿，提取需要作者确认的本书文风、节奏与表达偏好。仅供定稿学习 Subagent 使用。
 user-invocable: true
-novelContextPolicy: preference-learning
+metadata:
+  novelContextPolicy: preference-learning
 ---
 
 # 定稿偏好学习

@@ -2,7 +2,8 @@
 name: story-state-extraction
 description: 从作者显式定稿的章节中提取可审阅的 Story Delta，并生成完整故事状态候选。仅供定稿流程的只读 Subagent 使用。
 user-invocable: false
-novelContextPolicy: story-state-learning
+metadata:
+  novelContextPolicy: story-state-learning
 ---
 
 # 定稿故事状态提取

@@ -214,6 +214,28 @@ export interface AssetSearchResult {
   readonly score: number
 }
 
+/** Small provenance record for one Agent-authored proposal and its published Revision. */
+export interface NovelGenerationLineage {
+  /** Session and turn whose model call proposed the authored change. */
+  readonly sessionId: SessionId
+  readonly turn?: number
+  /** Effective model route reconstructed from the durable request header. */
+  readonly provider?: string
+  readonly model?: string
+  /** Agent Preset in force for the proposing Session. */
+  readonly presetId?: string
+  /** Most recent successfully loaded writing Skill in the proposing turn. */
+  readonly skillName?: string
+  readonly skillVersion?: number
+  /** Frozen Novel material actually made visible in the proposing turn. */
+  readonly contextManifestId?: `sha256:${string}`
+  readonly contextPolicies?: readonly string[]
+  /** Whether prose followed a direct path or a selected set of short action options. */
+  readonly strategy: 'direct' | 'action-options-agent-selected' | 'action-options-user-selected'
+  readonly actionPlanCount?: number
+  readonly selectedActionPlan?: number
+}
+
 /** One immutable Revision retained in `.novel/history.sqlite`. */
 export interface AssetRevision {
   readonly id: RevisionId
@@ -228,6 +250,8 @@ export interface AssetRevision {
   readonly restoredFromRevisionId?: RevisionId
   /** Session in which the author confirmed the restore. */
   readonly restoredBySessionId?: SessionId
+  /** Agent-generation provenance inherited from the applied ChangeSet, when present. */
+  readonly generation?: NovelGenerationLineage
 }
 
 /** Metadata-only view of one immutable retained Revision. */
@@ -241,6 +265,7 @@ export interface AssetRevisionSummary {
   readonly createdAt: string
   readonly restoredFromRevisionId?: RevisionId
   readonly restoredBySessionId?: SessionId
+  readonly generation?: NovelGenerationLineage
 }
 
 /** Guarded author request to restore retained bytes as a new current Revision. */
@@ -426,6 +451,8 @@ export interface CreateAssetRequest {
   readonly actor:
     | { readonly kind: 'agent'; readonly sessionId: SessionId }
     | { readonly kind: 'user'; readonly sessionId?: SessionId }
+  /** Host-derived bounded provenance for an Agent-created initial Revision. */
+  readonly generation?: NovelGenerationLineage
 }
 
 /** Request to freeze a non-empty browser selection over one retained Revision. */
@@ -444,6 +471,8 @@ export interface ProposeChangeSetRequest {
     | { readonly kind: 'agent'; readonly sessionId: SessionId }
     | { readonly kind: 'user'; readonly sessionId?: SessionId }
   readonly summary: string
+  /** Host-derived bounded provenance; author text and prompts never belong here. */
+  readonly generation?: NovelGenerationLineage
 }
 
 /** Explicit user authority for one terminal ChangeSet decision. */
@@ -465,4 +494,5 @@ export interface ChangeSet {
   readonly summary: string
   readonly status: 'proposed' | 'applying' | 'applied' | 'rejected' | 'conflicted'
   readonly resultRevisionId?: RevisionId
+  readonly generation?: NovelGenerationLineage
 }

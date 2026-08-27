@@ -12,6 +12,7 @@ import {
   type NovelAssetContent,
   type NovelAnalysisReportKind,
   type NovelAssetType,
+  type NovelGenerationLineage,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import type {} from '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
 import type {} from '@deepseek-ai/dsh-experimental-novel-analysis'
@@ -41,7 +42,36 @@ the same call; never ask the author to create an empty chapter container first. 
 Use \`novel_propose_changes\` for existing Asset changes; it only creates a ChangeSet
 for user review and never means the file changed. Use \`novel_present\` only to open or
 close the Novel workbench when that presentation helps the current task. Do not claim
-a proposal was applied.`
+a proposal was applied. Agent-created Assets and ChangeSets automatically retain bounded
+generation lineage from the Session. Writing Skills should identify whether they used a
+direct path or selected one of 2–3 short action options; omit action-option coordinates
+for ordinary direct writing.`
+
+const GENERATION_STRATEGIES = [
+  'direct',
+  'action-options-agent-selected',
+  'action-options-user-selected',
+] as const
+
+type GenerationStrategy = typeof GENERATION_STRATEGIES[number]
+
+const GENERATION_PARAMETERS = {
+  generation_strategy: {
+    type: 'string' as const,
+    enum: [...GENERATION_STRATEGIES],
+    description: 'How the writing path was chosen. Defaults to direct.',
+  },
+  action_plan_count: {
+    type: 'integer' as const,
+    enum: [2, 3],
+    description: 'Number of short action options considered; required only for an action-options strategy.',
+  },
+  selected_action_plan: {
+    type: 'integer' as const,
+    enum: [1, 2, 3],
+    description: 'One-based selected action option; required only for an action-options strategy.',
+  },
+}
 
 /** Register creation, exact-read, and proposal-only Novel tools. */
 export function apply(ctx: Context): void {
@@ -405,6 +435,7 @@ export function apply(ctx: Context): void {
         type: 'object', required: true, additionalProperties: true,
         properties: { kind: { type: 'string', required: true } },
       },
+      ...GENERATION_PARAMETERS,
     },
     output: {
       schema: {
@@ -430,12 +461,18 @@ export function apply(ctx: Context): void {
       const { agent, project } = await requireProject(ctx, exec)
       const type = args.type as NovelAssetType
       ctx.novelAssetTypes.get(type)
+      const generation = await generationLineage(ctx, agent, exec.signal, {
+        ...(args.generation_strategy === undefined ? {} : { strategy: args.generation_strategy }),
+        ...(args.action_plan_count === undefined ? {} : { actionPlanCount: args.action_plan_count }),
+        ...(args.selected_action_plan === undefined ? {} : { selectedActionPlan: args.selected_action_plan }),
+      })
       const snapshot = await ctx.novelRepository.createAsset(project, {
         type,
         title: args.title,
         ...(args.parent_asset_id === undefined ? {} : { parentId: AssetId(args.parent_asset_id) }),
         content: args.content as unknown as NovelAssetContent,
         actor: { kind: 'agent', sessionId: agent.id },
+        generation,
       }, exec.signal, ctx.sandboxPolicy.resolve({ session: agent.session }))
       return {
         projectId: project.id,
@@ -465,6 +502,7 @@ export function apply(ctx: Context): void {
         items: { type: 'object', additionalProperties: true, properties: { kind: { type: 'string', required: true } } },
       },
       summary: { type: 'string', required: true },
+      ...GENERATION_PARAMETERS,
     },
     output: {
       schema: {
@@ -497,12 +535,18 @@ export function apply(ctx: Context): void {
       if (resolvedReference === undefined) throw new Error('novel_propose_changes lost its exact resolved Asset')
       const assetType = resolvedReference.snapshot.asset.type
       const operations = ctx.novelAssetTypes.get(assetType).prepareOperations(resolvedReference.snapshot, args.operations)
+      const generation = await generationLineage(ctx, exec.agent, exec.signal, {
+        ...(args.generation_strategy === undefined ? {} : { strategy: args.generation_strategy }),
+        ...(args.action_plan_count === undefined ? {} : { actionPlanCount: args.action_plan_count }),
+        ...(args.selected_action_plan === undefined ? {} : { selectedActionPlan: args.selected_action_plan }),
+      })
       const changeSet = await ctx.novelRepository.proposeChangeSet(resolved.project, {
         assetId: reference.assetId,
         baseRevisionId: reference.revisionId,
         operations,
         actor: { kind: 'agent', sessionId: exec.agent.id },
         summary: args.summary,
+        generation,
       }, exec.signal)
       const warning = ctx.novelAnalysis.candidateWarning(resolvedReference.snapshot, operations)
       if (warning !== undefined) {
@@ -528,6 +572,179 @@ export function apply(ctx: Context): void {
     },
     presentCall: args => ({ card: 'generic', title: '提出小说修改', kind: 'edit', rawInput: args.summary }),
   }))
+}
+
+interface GenerationCoordinates {
+  readonly strategy?: GenerationStrategy
+  readonly actionPlanCount?: number
+  readonly selectedActionPlan?: number
+}
+
+interface OptionalSkillRegistry {
+  get(
+    name: string,
+    options: { readonly cwd?: string; readonly signal: AbortSignal; readonly scope: unknown },
+  ): Promise<{ readonly metadata?: Readonly<Record<string, unknown>> } | undefined>
+}
+
+/** Build small, host-derived provenance without retaining prompts or generated prose. */
+async function generationLineage(
+  ctx: Context,
+  agent: NonNullable<ToolRunContext['agent']>,
+  signal: AbortSignal,
+  coordinates: GenerationCoordinates,
+): Promise<NovelGenerationLineage> {
+  const strategy = coordinates.strategy ?? 'direct'
+  validateGenerationCoordinates(strategy, coordinates.actionPlanCount, coordinates.selectedActionPlan)
+  const events = agent.session.events
+  const turn = events.findLast(event => event.type === 'turn/start')?.data.turn
+  const requestHeader = agent.session.requestHeader()
+  const presetId = currentPreset(agent.session.header.agentPreset, events)
+  const context = currentNovelManifest(events, turn)
+  const skillName = currentWritingSkill(events, turn)
+  const skillVersion = skillName === undefined
+    ? undefined
+    : await currentSkillVersion(ctx, agent, skillName, signal)
+  return {
+    sessionId: agent.id,
+    ...(turn === undefined ? {} : { turn }),
+    ...(requestHeader?.config.provider === undefined ? {} : { provider: requestHeader.config.provider }),
+    ...(requestHeader?.config.model === undefined ? {} : { model: requestHeader.config.model }),
+    ...(presetId === undefined ? {} : { presetId }),
+    ...(skillName === undefined ? {} : { skillName }),
+    ...(skillVersion === undefined ? {} : { skillVersion }),
+    ...(context === undefined ? {} : {
+      contextManifestId: context.manifestId,
+      contextPolicies: [...context.policies],
+    }),
+    strategy,
+    ...(coordinates.actionPlanCount === undefined ? {} : { actionPlanCount: coordinates.actionPlanCount }),
+    ...(coordinates.selectedActionPlan === undefined ? {} : { selectedActionPlan: coordinates.selectedActionPlan }),
+  }
+}
+
+function validateGenerationCoordinates(
+  strategy: GenerationStrategy,
+  actionPlanCount: number | undefined,
+  selectedActionPlan: number | undefined,
+): void {
+  if (strategy === 'direct') {
+    if (actionPlanCount !== undefined || selectedActionPlan !== undefined) {
+      throw new Error('direct generation must not include action-plan coordinates')
+    }
+    return
+  }
+  if (actionPlanCount === undefined || selectedActionPlan === undefined
+    || !Number.isSafeInteger(actionPlanCount) || actionPlanCount < 2 || actionPlanCount > 3
+    || !Number.isSafeInteger(selectedActionPlan) || selectedActionPlan < 1 || selectedActionPlan > actionPlanCount) {
+    throw new Error('action-option generation requires 2–3 plans and one valid one-based selection')
+  }
+}
+
+function currentPreset(
+  initial: string | undefined,
+  events: readonly { readonly type: string; readonly data: unknown }[],
+): string | undefined {
+  let preset = initial
+  for (const event of events) {
+    if (event.type !== 'agent-preset/selected') continue
+    const value = (event.data as { agentPreset?: unknown }).agentPreset
+    if (typeof value === 'string') preset = value
+  }
+  return preset
+}
+
+function currentNovelManifest(
+  events: readonly { readonly type: string; readonly data: unknown }[],
+  turn: number | undefined,
+): { readonly manifestId: `sha256:${string}`; readonly policies: readonly string[] } | undefined {
+  if (turn === undefined) return undefined
+  let inTurn = false
+  let latest: { readonly manifestId: `sha256:${string}`; readonly policies: readonly string[] } | undefined
+  for (const event of events) {
+    if (event.type === 'turn/start') {
+      inTurn = (event.data as { turn?: unknown }).turn === turn
+      continue
+    }
+    if (!inTurn || event.type !== 'user/message') continue
+    const source = (event.data as { source?: unknown }).source
+    if (typeof source !== 'object' || source === null) continue
+    const record = source as Record<string, unknown>
+    if (record['kind'] !== 'novel-context' || record['version'] !== 3
+      || typeof record['manifestId'] !== 'string' || !Array.isArray(record['policies'])
+      || record['policies'].some(value => typeof value !== 'string')) continue
+    latest = {
+      manifestId: record['manifestId'] as `sha256:${string}`,
+      policies: record['policies'] as string[],
+    }
+  }
+  return latest
+}
+
+function currentWritingSkill(
+  events: readonly { readonly type: string; readonly data: unknown }[],
+  turn: number | undefined,
+): string | undefined {
+  if (turn === undefined) return undefined
+  let inTurn = false
+  let latest: string | undefined
+  const successfulCalls = new Set<string>()
+  for (const event of events) {
+    if (event.type !== 'tool/result') continue
+    const data = event.data as {
+      error?: unknown
+      message?: { content?: Array<{ toolCallId?: unknown; isError?: unknown }> }
+    }
+    const block = data.message?.content?.[0]
+    if (data.error === undefined && block?.isError === false && typeof block.toolCallId === 'string') {
+      successfulCalls.add(block.toolCallId)
+    }
+  }
+  for (const event of events) {
+    if (event.type === 'turn/start') {
+      inTurn = (event.data as { turn?: unknown }).turn === turn
+      continue
+    }
+    if (!inTurn) continue
+    if (event.type === 'user/message') {
+      const source = (event.data as { source?: unknown }).source
+      if (typeof source === 'object' && source !== null) {
+        const record = source as Record<string, unknown>
+        if (record['kind'] === 'skill-invocation' && typeof record['name'] === 'string') latest = record['name']
+      }
+      continue
+    }
+    if (event.type !== 'tool/call') continue
+    const data = event.data as { callId?: unknown; name?: unknown; arguments?: unknown }
+    if (data.name !== 'skill' || typeof data.callId !== 'string' || !successfulCalls.has(data.callId)
+      || typeof data.arguments !== 'string') continue
+    try {
+      const value: unknown = JSON.parse(data.arguments)
+      if (typeof value === 'object' && value !== null && typeof (value as Record<string, unknown>)['name'] === 'string') {
+        latest = (value as Record<string, string>)['name']
+      }
+    } catch {
+      // Invalid tool arguments cannot be a successfully loaded Skill.
+    }
+  }
+  return latest
+}
+
+async function currentSkillVersion(
+  ctx: Context,
+  agent: NonNullable<ToolRunContext['agent']>,
+  skillName: string,
+  signal: AbortSignal,
+): Promise<number | undefined> {
+  const skills = (agent.ctx as Context & { get(name: 'skills'): OptionalSkillRegistry | undefined }).get('skills')
+    ?? (ctx as Context & { get(name: 'skills'): OptionalSkillRegistry | undefined }).get('skills')
+  const skill = await skills?.get(skillName, {
+    ...(agent.session.header.cwd === undefined ? {} : { cwd: agent.session.header.cwd }),
+    signal,
+    scope: agent,
+  })
+  const value = skill?.metadata?.['novelSkillVersion']
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined
 }
 
 async function requireProject(ctx: Context, exec: ToolRunContext) {

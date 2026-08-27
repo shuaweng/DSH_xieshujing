@@ -104,9 +104,17 @@ describe('experimental Novel Studio bundle', () => {
     expect(readdirSync(skillRoot).sort()).toEqual(workbenchSkillNames)
     for (const name of workbenchSkillNames) {
       const body = readFileSync(resolve(skillRoot, name, 'SKILL.md'), 'utf8')
+      const frontmatterEnd = body.indexOf('\n---\n', 4)
+      const frontmatter = yaml.load(body.slice(4, frontmatterEnd)) as {
+        metadata?: { novelContextPolicy?: string; novelSkillVersion?: number }
+      }
       expect(body).toMatch(new RegExp(`^---\\nname: ${name}\\n`))
       expect(body).toContain(`user-invocable: ${name === 'story-state-extraction' ? 'false' : 'true'}`)
       expect(body).toContain(`novelContextPolicy: ${contextPolicies[name]}`)
+      expect(frontmatter.metadata?.novelContextPolicy).toBe(contextPolicies[name])
+      if (name === 'chapter-execution' || name === 'scene-drive') {
+        expect(frontmatter.metadata?.novelSkillVersion).toBe(1)
+      }
       if (name !== 'story-state-extraction') expect(body).toContain('novel_get')
       expect(body).not.toMatch(/PROJECT\.md|STYLE\.md|\.lingtai|references\//)
       expect(body).not.toMatch(/`(?:read|write|edit|grep|glob|bash)`/)

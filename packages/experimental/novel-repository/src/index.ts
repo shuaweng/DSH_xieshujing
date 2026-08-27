@@ -73,6 +73,7 @@ export type {
   NovelPreferenceCandidate,
   NovelPreferenceCandidateStatus,
   NovelPreferenceEvidence,
+  NovelGenerationLineage,
   NovelStoryStateCandidate,
   NovelStoryStateCandidateStatus,
   NovelStoryStateEvidence,

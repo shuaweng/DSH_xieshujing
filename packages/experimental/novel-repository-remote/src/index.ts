@@ -372,7 +372,19 @@ export class NovelRepositoryRemote extends TypertRemoteService {
       project, signal, this.ctx.sandboxPolicy.resolve({ session: agent.session }),
     )
     const revisions = (await this.ctx.novelRepository.listAssetRevisions(project, assetId, signal))
-      .map(value => ({ ...value }))
+      .map(value => ({
+        id: value.id,
+        projectId: value.projectId,
+        assetId: value.assetId,
+        ...(value.parentRevisionId === undefined ? {} : { parentRevisionId: value.parentRevisionId }),
+        contentHash: value.contentHash,
+        origin: value.origin,
+        createdAt: value.createdAt,
+        ...(value.restoredFromRevisionId === undefined
+          ? {}
+          : { restoredFromRevisionId: value.restoredFromRevisionId }),
+        ...(value.restoredBySessionId === undefined ? {} : { restoredBySessionId: value.restoredBySessionId }),
+      }))
     assertResponseBytes(revisions, this.responseMaxBytes, 'Asset Revisions')
     return revisions
   }

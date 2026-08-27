@@ -3,7 +3,8 @@ name: chapter-review
 description: 对冻结的单章正文做证据化审查，检查剧情推进、因果连续性、人物可信度、节奏、追读钩子与文风；只生成报告，不修改资产。
 whenToUse: "[精确章节 Revision、相关章纲、本书概述、本书风格与必要上下文]"
 user-invocable: true
-novelContextPolicy: chapter-review
+metadata:
+  novelContextPolicy: chapter-review
 ---
 
 # Chapter Review

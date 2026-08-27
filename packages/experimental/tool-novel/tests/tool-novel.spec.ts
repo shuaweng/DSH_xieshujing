@@ -2,7 +2,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { CallId, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import {
   AssetId,
   ChangeSetId,
@@ -103,7 +103,9 @@ async function harness(): Promise<{
   const outline = assets.find(candidate => candidate.asset.id === 'outline-tool')
   if (asset === undefined || outline === undefined) throw new Error('expected chapter and outline Assets')
   const id = SessionId('tool-novel-agent')
-  const session = Session.create(id, [], { version: 0, id, createdAt: 0, cwd: dir })
+  const session = Session.create(id, [], {
+    version: 0, id, createdAt: 0, cwd: dir, agentPreset: 'novel-workbench',
+  })
   return {
     ctx,
     agent: { id, session, ctx } as Agent,
@@ -375,6 +377,77 @@ describe('Novel model tools', () => {
     await expect(execute(ctx, undefined, 'novel_propose_changes', {
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
       operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }], summary: '摘要',
+    })).resolves.toMatchObject({ isError: true })
+  })
+
+  it('derives bounded generation lineage from the active Session and selected action path', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    const manifestId = `sha256:${'a'.repeat(64)}` as const
+    const skillCallId = CallId('skill-chapter-execution')
+    agent.session.append('turn/start', { turn: 2 })
+    agent.session.append('step/start', { turn: 2, step: 1 })
+    agent.session.append('request/header', {
+      header: { config: { provider: 'test-provider', model: 'test-writer' } }, reason: 'initial',
+    })
+    agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: '<novel-context>frozen material</novel-context>' }],
+      source: {
+        kind: 'novel-context', form: 'manifest', version: 3, manifestId,
+        projectId: ProjectId('project-tool'), policies: ['chapter-write'], references: [],
+      },
+    }), { surfaceOp: 'append' })
+    agent.session.append('tool/call', {
+      turn: 2, step: 1, callId: skillCallId, name: 'skill', arguments: '{"name":"chapter-execution"}',
+    })
+    agent.session.append('tool/result', {
+      turn: 2, step: 1,
+      message: createToolResultMessage({
+        callId: skillCallId, content: [{ type: 'text', text: 'loaded' }], isError: false,
+      }),
+    }, { surfaceOp: 'append' })
+    agent.session.append('step/end', { turn: 2, step: 1 })
+
+    const result = await execute(ctx, agent, 'novel_propose_changes', {
+      project_id: 'project-tool',
+      asset_id: 'chapter-tool',
+      base_revision_id: revisionId,
+      operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }],
+      summary: '采用第二个行动方案推进天气变化',
+      generation_strategy: 'action-options-agent-selected',
+      action_plan_count: 3,
+      selected_action_plan: 2,
+    })
+    if (result.isError) throw new Error(`expected lineage proposal success: ${JSON.stringify(result)}`)
+    const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
+    if (project === undefined) throw new Error('expected Novel Project')
+    const retained = await ctx.novelRepository.readChangeSet(
+      project, ChangeSetId((result.value as { changeSetId: string }).changeSetId),
+    )
+    expect(retained.generation).toEqual({
+      sessionId: agent.id,
+      turn: 2,
+      provider: 'test-provider',
+      model: 'test-writer',
+      presetId: 'novel-workbench',
+      skillName: 'chapter-execution',
+      contextManifestId: manifestId,
+      contextPolicies: ['chapter-write'],
+      strategy: 'action-options-agent-selected',
+      actionPlanCount: 3,
+      selectedActionPlan: 2,
+    })
+    const applied = await ctx.novelRepository.applyChangeSet(
+      project, retained.id, { sessionId: agent.id }, undefined,
+      ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
+    expect(applied.status).toBe('applied')
+    expect((await ctx.novelRepository.listAssetRevisions(project, AssetId('chapter-tool')))[0]?.generation)
+      .toEqual(retained.generation)
+
+    await expect(execute(ctx, agent, 'novel_propose_changes', {
+      project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
+      operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }],
+      summary: '坐标不完整', generation_strategy: 'action-options-agent-selected', action_plan_count: 2,
     })).resolves.toMatchObject({ isError: true })
   })
 

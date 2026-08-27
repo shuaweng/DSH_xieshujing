@@ -19,6 +19,7 @@ import {
   type NovelAssetType,
   type NovelAnalysisReport,
   type NovelAnalysisReportKind,
+  type NovelGenerationLineage,
   type NovelOperation,
   type NovelPreferenceCandidate,
   type NovelStoryStateCandidate,
@@ -27,7 +28,7 @@ import {
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 
 /** Physical schema containing revisions, proposals, and recoverable apply intent. */
-export const NOVEL_HISTORY_SCHEMA_VERSION = 7
+export const NOVEL_HISTORY_SCHEMA_VERSION = 8
 /** SQLite application id reserved for DSH Novel history. */
 export const NOVEL_HISTORY_APPLICATION_ID = 0x44534E48
 
@@ -41,6 +42,7 @@ interface RevisionMetadataRow {
   created_at: string
   restored_from_revision_id: string | null
   restored_by_session_id: string | null
+  generation_json: string | null
 }
 
 interface RevisionRow extends RevisionMetadataRow {
@@ -64,6 +66,7 @@ interface ChangeSetRow {
   summary: string
   status: string
   result_revision_id: string | null
+  generation_json: string | null
 }
 
 interface ApplyJournalRow {
@@ -214,7 +217,7 @@ function configure(db: DatabaseSync, path: string): void {
     )
   }
   if (version !== 0 && version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5
-    && version !== 6
+    && version !== 6 && version !== 7
     && version !== NOVEL_HISTORY_SCHEMA_VERSION) {
     throw new NovelRepositoryError(
       `novel repository: history database "${path}" uses unsupported schema ${version}`,
@@ -242,7 +245,8 @@ function configure(db: DatabaseSync, path: string): void {
         origin                TEXT NOT NULL CHECK(origin IN ('initial-scan', 'user-edit', 'agent-apply', 'external-edit')),
         created_at            TEXT NOT NULL,
         restored_from_revision_id TEXT REFERENCES revisions(id),
-        restored_by_session_id TEXT
+        restored_by_session_id TEXT,
+        generation_json       TEXT
       ) STRICT;
       CREATE INDEX IF NOT EXISTS revisions_asset_created
         ON revisions(project_id, asset_id, created_at, id);
@@ -263,7 +267,8 @@ function configure(db: DatabaseSync, path: string): void {
         actor_json         TEXT NOT NULL,
         summary            TEXT NOT NULL,
         status             TEXT NOT NULL CHECK(status IN ('proposed', 'applying', 'applied', 'rejected', 'conflicted')),
-        result_revision_id TEXT REFERENCES revisions(id)
+        result_revision_id TEXT REFERENCES revisions(id),
+        generation_json    TEXT
       ) STRICT;
       CREATE INDEX IF NOT EXISTS change_sets_asset
         ON change_sets(project_id, asset_id, id);
@@ -355,6 +360,9 @@ function configure(db: DatabaseSync, path: string): void {
     if (version > 0 && version < 3 && !changeSetColumns.some(column => column.name === 'asset_type')) {
       db.exec("ALTER TABLE change_sets ADD COLUMN asset_type TEXT NOT NULL DEFAULT 'manuscript.chapter'")
     }
+    if (version > 0 && version < 8 && !changeSetColumns.some(column => column.name === 'generation_json')) {
+      db.exec('ALTER TABLE change_sets ADD COLUMN generation_json TEXT')
+    }
     const revisionColumns = db.prepare('PRAGMA table_info(revisions)').all() as Array<{ name: string }>
     if (version > 0 && version < 7) {
       if (!revisionColumns.some(column => column.name === 'restored_from_revision_id')) {
@@ -363,6 +371,9 @@ function configure(db: DatabaseSync, path: string): void {
       if (!revisionColumns.some(column => column.name === 'restored_by_session_id')) {
         db.exec('ALTER TABLE revisions ADD COLUMN restored_by_session_id TEXT')
       }
+    }
+    if (version > 0 && version < 8 && !revisionColumns.some(column => column.name === 'generation_json')) {
+      db.exec('ALTER TABLE revisions ADD COLUMN generation_json TEXT')
     }
     if (version === 0) db.exec(`PRAGMA application_id = ${NOVEL_HISTORY_APPLICATION_ID}`)
     if (version < NOVEL_HISTORY_SCHEMA_VERSION) db.exec(`PRAGMA user_version = ${NOVEL_HISTORY_SCHEMA_VERSION}`)
@@ -407,11 +418,12 @@ export class NovelHistory {
     const row = this.db.prepare(`
       SELECT id, project_id, asset_id, parent_revision_id, project_relative_path,
              serialized_utf8, content_hash, origin, created_at,
-             restored_from_revision_id, restored_by_session_id
+             restored_from_revision_id, restored_by_session_id, generation_json
       FROM revisions WHERE id = ?
     `).get(revisionId) as RevisionRow | undefined
     if (row === undefined) return undefined
     const restore = restoreProvenance(row)
+    const generation = generationLineageFromJson(row.generation_json)
     return {
       revision: {
         id: RevisionId(row.id),
@@ -423,6 +435,7 @@ export class NovelHistory {
         origin: revisionOrigin(row.origin),
         createdAt: row.created_at,
         ...restore,
+        ...generation === undefined ? {} : { generation },
       },
       projectRelativePath: row.project_relative_path,
     }
@@ -439,7 +452,7 @@ export class NovelHistory {
       SELECT revisions.id, revisions.project_id, revisions.asset_id,
              revisions.parent_revision_id, revisions.content_hash, revisions.origin,
              revisions.created_at, revisions.restored_from_revision_id,
-             revisions.restored_by_session_id
+             revisions.restored_by_session_id, revisions.generation_json
       FROM revisions
       LEFT JOIN asset_heads
         ON asset_heads.project_id = revisions.project_id
@@ -450,6 +463,7 @@ export class NovelHistory {
     `).all(projectId, assetId) as unknown as RevisionMetadataRow[]
     return rows.map((row) => {
       const restore = restoreProvenance(row)
+      const generation = generationLineageFromJson(row.generation_json)
       return {
         id: RevisionId(row.id),
         projectId: ProjectId(row.project_id),
@@ -459,6 +473,7 @@ export class NovelHistory {
         origin: revisionOrigin(row.origin),
         createdAt: row.created_at,
         ...restore,
+        ...generation === undefined ? {} : { generation },
       }
     })
   }
@@ -467,7 +482,7 @@ export class NovelHistory {
   changeSetByResultRevision(revisionId: RevisionId): ChangeSet | undefined {
     const row = this.db.prepare(`
       SELECT id, project_id, asset_id, base_revision_id, operations_json,
-             asset_type, actor_json, summary, status, result_revision_id
+             asset_type, actor_json, summary, status, result_revision_id, generation_json
       FROM change_sets WHERE result_revision_id = ? AND status = 'applied'
       ORDER BY id LIMIT 1
     `).get(revisionId) as ChangeSetRow | undefined
@@ -759,8 +774,8 @@ export class NovelHistory {
     this.db.prepare(`
       INSERT INTO change_sets (
         id, project_id, asset_id, asset_type, base_revision_id,
-        operations_json, actor_json, summary, status, result_revision_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        operations_json, actor_json, summary, status, result_revision_id, generation_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       changeSet.id,
       changeSet.projectId,
@@ -772,6 +787,7 @@ export class NovelHistory {
       changeSet.summary,
       changeSet.status,
       changeSet.resultRevisionId ?? null,
+      changeSet.generation === undefined ? null : JSON.stringify(changeSet.generation),
     )
   }
 
@@ -783,7 +799,7 @@ export class NovelHistory {
   changeSet(changeSetId: ChangeSetId): ChangeSet | undefined {
     const row = this.db.prepare(`
       SELECT id, project_id, asset_id, base_revision_id, operations_json,
-             asset_type, actor_json, summary, status, result_revision_id
+             asset_type, actor_json, summary, status, result_revision_id, generation_json
       FROM change_sets WHERE id = ?
     `).get(changeSetId) as ChangeSetRow | undefined
     return row === undefined ? undefined : changeSetFromRow(row, this.decodeOperations)
@@ -896,8 +912,8 @@ export class NovelHistory {
       INSERT INTO revisions (
         id, project_id, asset_id, parent_revision_id, project_relative_path,
         serialized_utf8, content_hash, origin, created_at,
-        restored_from_revision_id, restored_by_session_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        restored_from_revision_id, restored_by_session_id, generation_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       revision.id,
       revision.projectId,
@@ -910,6 +926,7 @@ export class NovelHistory {
       revision.createdAt,
       revision.restoredFromRevisionId ?? null,
       revision.restoredBySessionId ?? null,
+      revision.generation === undefined ? null : JSON.stringify(revision.generation),
     )
   }
 
@@ -1001,6 +1018,7 @@ function changeSetFromRow(
     if (error instanceof NovelRepositoryError && error.code === 'NOVEL_HISTORY_CORRUPT') throw error
     throw corrupt(`ChangeSet operations for Asset type ${JSON.stringify(row.asset_type)} are invalid`, error)
   }
+  const generation = generationLineageFromJson(row.generation_json)
   return {
     id: ChangeSetId(row.id),
     projectId: ProjectId(row.project_id),
@@ -1012,6 +1030,80 @@ function changeSetFromRow(
     summary: row.summary,
     status: row.status as ChangeSet['status'],
     ...(row.result_revision_id === null ? {} : { resultRevisionId: RevisionId(row.result_revision_id) }),
+    ...(generation === undefined ? {} : { generation }),
+  }
+}
+
+function generationLineageFromJson(value: string | null): NovelGenerationLineage | undefined {
+  if (value === null) return undefined
+  return validateGenerationLineage(parseJson(value, 'generation lineage'))
+}
+
+/** Validate and clone bounded Agent-generation provenance before it enters durable history. */
+export function validateGenerationLineage(value: unknown): NovelGenerationLineage {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw corrupt('generation lineage is not an object')
+  }
+  const record = value as Record<string, unknown>
+  const strategy = record['strategy']
+  if (!['direct', 'action-options-agent-selected', 'action-options-user-selected'].includes(String(strategy))) {
+    throw corrupt('generation lineage strategy is invalid')
+  }
+  const requiredString = (key: string): string => {
+    const field = record[key]
+    if (typeof field !== 'string' || field.length === 0 || field.length > 300 || field !== field.trim()) {
+      throw corrupt(`generation lineage ${key} is invalid`)
+    }
+    return field
+  }
+  const optionalString = (key: string): string | undefined => {
+    if (record[key] === undefined) return undefined
+    return requiredString(key)
+  }
+  const optionalPositiveInteger = (key: string): number | undefined => {
+    const field = record[key]
+    if (field === undefined) return undefined
+    if (!Number.isSafeInteger(field) || Number(field) < 1) throw corrupt(`generation lineage ${key} is invalid`)
+    return Number(field)
+  }
+  const contextPolicies = record['contextPolicies']
+  if (contextPolicies !== undefined && (!Array.isArray(contextPolicies)
+    || contextPolicies.length > 16
+    || contextPolicies.some(item => typeof item !== 'string' || item.length === 0 || item.length > 100))) {
+    throw corrupt('generation lineage contextPolicies is invalid')
+  }
+  const actionPlanCount = optionalPositiveInteger('actionPlanCount')
+  const selectedActionPlan = optionalPositiveInteger('selectedActionPlan')
+  if (strategy === 'direct' && (actionPlanCount !== undefined || selectedActionPlan !== undefined)) {
+    throw corrupt('direct generation lineage cannot contain action-plan coordinates')
+  }
+  if (strategy !== 'direct' && (actionPlanCount === undefined || selectedActionPlan === undefined
+    || actionPlanCount < 2 || actionPlanCount > 3 || selectedActionPlan > actionPlanCount)) {
+    throw corrupt('action-option generation lineage is incomplete')
+  }
+  const turn = optionalPositiveInteger('turn')
+  const skillVersion = optionalPositiveInteger('skillVersion')
+  const contextManifestId = optionalString('contextManifestId')
+  if (contextManifestId !== undefined && !/^sha256:[0-9a-f]{64}$/u.test(contextManifestId)) {
+    throw corrupt('generation lineage Context Manifest id is invalid')
+  }
+  const provider = optionalString('provider')
+  const model = optionalString('model')
+  const presetId = optionalString('presetId')
+  const skillName = optionalString('skillName')
+  return {
+    sessionId: requiredString('sessionId') as SessionId,
+    ...(turn === undefined ? {} : { turn }),
+    ...(provider === undefined ? {} : { provider }),
+    ...(model === undefined ? {} : { model }),
+    ...(presetId === undefined ? {} : { presetId }),
+    ...(skillName === undefined ? {} : { skillName }),
+    ...(skillVersion === undefined ? {} : { skillVersion }),
+    ...(contextManifestId === undefined ? {} : { contextManifestId: contextManifestId as `sha256:${string}` }),
+    ...(contextPolicies === undefined ? {} : { contextPolicies: [...contextPolicies] as string[] }),
+    strategy: strategy as NovelGenerationLineage['strategy'],
+    ...(actionPlanCount === undefined ? {} : { actionPlanCount }),
+    ...(selectedActionPlan === undefined ? {} : { selectedActionPlan }),
   }
 }
 

@@ -1233,15 +1233,31 @@ describe('LocalNovelRepository', () => {
       selector: { kind: 'text-range', startUtf16: 2, endUtf16: 4 },
     })
     const owner = SessionId('novel-owner')
+    const generation = {
+      sessionId: owner,
+      turn: 4,
+      provider: 'test-provider',
+      model: 'test-writer',
+      presetId: 'novel-workbench',
+      skillName: 'chapter-execution',
+      skillVersion: 1,
+      contextManifestId: `sha256:${'a'.repeat(64)}` as const,
+      contextPolicies: ['chapter-write'],
+      strategy: 'action-options-agent-selected' as const,
+      actionPlanCount: 3,
+      selectedActionPlan: 2,
+    }
     const proposed = await ctx.novelRepository.proposeChangeSet(novel, {
       assetId: asset!.asset.id,
       baseRevisionId: asset!.revisionId,
       operations: [{ kind: 'replace-text', selector: selection.selector, replacement: '放晴' }],
       actor: { kind: 'agent', sessionId: owner },
       summary: '把天气改为放晴',
+      generation,
     })
 
     expect(proposed.status).toBe('proposed')
+    expect(proposed.generation).toEqual(generation)
     expect(await readFile(path, 'utf8')).toBe(original)
     await expect(ctx.novelRepository.applyChangeSet(
       novel,
@@ -1253,6 +1269,8 @@ describe('LocalNovelRepository', () => {
     expect(applied.resultRevisionId).toMatch(/^revision_/u)
     expect((await ctx.novelRepository.readAsset(novel, asset!.asset.id)).content)
       .toEqual({ kind: 'manuscript', body: '白港放晴了。' })
+    expect((await ctx.novelRepository.listAssetRevisions(novel, asset!.asset.id))[0]?.generation)
+      .toEqual(generation)
     await expect(ctx.novelRepository.applyChangeSet(novel, proposed.id, { sessionId: owner }))
       .resolves.toEqual(applied)
   })
@@ -1380,7 +1398,7 @@ describe('LocalNovelRepository', () => {
     },
   )
 
-  it('migrates an identified version-one history database to Revision restore schema seven', async () => {
+  it('migrates an identified version-one history database to generation-lineage schema eight', async () => {
     const dir = await tempDir()
     const path = join(dir, 'history.sqlite')
     const { DatabaseSync } = await import('node:sqlite')
@@ -1391,11 +1409,11 @@ describe('LocalNovelRepository', () => {
     const history = await openHistory(path, 100, decodeHistoryOperations)
     history.close()
     const migrated = new DatabaseSync(path)
-    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(7)
+    expect((migrated.prepare('PRAGMA user_version').get() as { user_version: number }).user_version).toBe(8)
     expect((migrated.prepare('PRAGMA table_info(change_sets)').all() as Array<{ name: string }>).map(row => row.name))
-      .toContain('asset_type')
+      .toEqual(expect.arrayContaining(['asset_type', 'generation_json']))
     expect((migrated.prepare('PRAGMA table_info(revisions)').all() as Array<{ name: string }>).map(row => row.name))
-      .toEqual(expect.arrayContaining(['restored_from_revision_id', 'restored_by_session_id']))
+      .toEqual(expect.arrayContaining(['restored_from_revision_id', 'restored_by_session_id', 'generation_json']))
     const tables = migrated.prepare(`
       SELECT name FROM sqlite_master
       WHERE type = 'table' AND name IN ('change_sets', 'apply_journal', 'analysis_reports', 'revision_finalizations', 'preference_candidates', 'story_state_candidates')

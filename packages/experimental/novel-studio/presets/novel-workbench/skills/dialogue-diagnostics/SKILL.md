@@ -3,7 +3,8 @@ name: dialogue-diagnostics
 description: 专项诊断对白的声音同质化、生硬、信息倾泻、潜台词缺失、功能单一、节奏与权力关系失配；只诊断，不直接改写。
 whenToUse: "[当前对白选区/章节引用与希望检查的场景关系]"
 user-invocable: true
-novelContextPolicy: selection-review
+metadata:
+  novelContextPolicy: selection-review
 ---
 
 # Dialogue Diagnostics

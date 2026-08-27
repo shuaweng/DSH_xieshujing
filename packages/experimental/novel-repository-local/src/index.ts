@@ -33,6 +33,7 @@ import NovelRepository, {
   type InitializeNovelProjectRequest,
   type NovelProjectSnapshot,
   type NovelAnalysisReport,
+  type NovelGenerationLineage,
   type NovelPreferenceCandidate,
   type NovelStoryStateCandidate,
   type PutNovelPreferenceCandidateRequest,
@@ -57,7 +58,7 @@ import {
   manuscriptChapterTypeDefinition,
 } from './content.ts'
 import { hitApplyFault } from './apply-fault.ts'
-import { NovelHistory, openHistory, type ApplyJournal } from './history.ts'
+import { NovelHistory, openHistory, validateGenerationLineage, type ApplyJournal } from './history.ts'
 import { parseProjectManifest, serializeProjectManifest } from './manifest.ts'
 
 const PROJECT_MANIFEST = 'novel.yaml'
@@ -936,6 +937,7 @@ export class LocalNovelRepository extends NovelRepository {
       }
       validateProjectSingleton(materialized.parsed, definition, catalog)
       validateParentRelationship(materialized.parsed, definition, catalog)
+      const generation = generationForActor(request.generation, request.actor, 'NOVEL_ASSET_INVALID')
       const outcome = await this.ctx.fs.writeText(
         target,
         new TextDecoder().decode(materialized.serializedUtf8),
@@ -949,6 +951,7 @@ export class LocalNovelRepository extends NovelRepository {
         undefined,
         materialized.serializedUtf8,
         request.actor.kind === 'agent' ? 'agent-apply' : 'user-edit',
+        generation,
       )
       state.history.commitRevision(revision, projectRelativePath)
       const observed = observedAsset(project, projectRelativePath, target, outcome.version, materialized.parsed, revision)
@@ -1065,6 +1068,7 @@ export class LocalNovelRepository extends NovelRepository {
       if (summary.length === 0 || summary.length > 500 || request.summary !== summary) {
         throw invalidChangeSet('summary must be 1 to 500 characters without surrounding whitespace')
       }
+      const generation = generationForActor(request.generation, request.actor)
       const changeSet: ChangeSet = {
         id: ChangeSetId(`changeset_${randomUUID()}`),
         projectId: project.id,
@@ -1075,6 +1079,7 @@ export class LocalNovelRepository extends NovelRepository {
         actor: { ...request.actor },
         summary,
         status: 'proposed',
+        ...(generation === undefined ? {} : { generation }),
       }
       state.history.proposeChangeSet(changeSet)
       return cloneChangeSet(changeSet)
@@ -1162,6 +1167,7 @@ export class LocalNovelRepository extends NovelRepository {
         changeSet.baseRevisionId,
         materialized.serializedUtf8,
         createdAt,
+        changeSet.generation,
       )
       changeSet = state.history.finalizeApply(changeSet.id, revision, journal.projectRelativePath)
       const observed = observedAsset(
@@ -1441,6 +1447,7 @@ export class LocalNovelRepository extends NovelRepository {
         changeSet.baseRevisionId,
         journal.afterUtf8,
         journal.createdAt,
+        changeSet.generation,
       )
       state.history.finalizeApply(changeSet.id, revision, journal.projectRelativePath)
     }
@@ -1573,6 +1580,7 @@ function newRevision(
   parentRevisionId: RevisionIdValue | undefined,
   serializedUtf8: Uint8Array,
   origin: RevisionOrigin,
+  generation?: NovelGenerationLineage,
 ): AssetRevision {
   return {
     id: RevisionId(`revision_${randomUUID()}`),
@@ -1583,6 +1591,7 @@ function newRevision(
     contentHash: contentHash(serializedUtf8),
     origin,
     createdAt: new Date().toISOString(),
+    ...(generation === undefined ? {} : { generation }),
   }
 }
 
@@ -1593,6 +1602,7 @@ function preparedRevision(
   parentRevisionId: RevisionIdValue,
   serializedUtf8: Uint8Array,
   createdAt: string,
+  generation?: NovelGenerationLineage,
 ): AssetRevision {
   return {
     id,
@@ -1603,7 +1613,35 @@ function preparedRevision(
     contentHash: contentHash(serializedUtf8),
     origin: 'agent-apply',
     createdAt,
+    ...(generation === undefined ? {} : { generation }),
   }
+}
+
+function generationForActor(
+  value: NovelGenerationLineage | undefined,
+  actor: CreateAssetRequest['actor'] | ProposeChangeSetRequest['actor'],
+  invalidCode: 'NOVEL_ASSET_INVALID' | 'NOVEL_CHANGESET_INVALID' = 'NOVEL_CHANGESET_INVALID',
+): NovelGenerationLineage | undefined {
+  if (value === undefined) return undefined
+  if (actor.kind !== 'agent') {
+    throw new NovelRepositoryError(
+      'novel repository: generation lineage is only valid for an Agent action',
+      invalidCode,
+    )
+  }
+  let generation: NovelGenerationLineage
+  try {
+    generation = validateGenerationLineage(value)
+  } catch (error) {
+    throw new NovelRepositoryError('novel repository: generation lineage is invalid', invalidCode, { cause: error })
+  }
+  if (generation.sessionId !== actor.sessionId) {
+    throw new NovelRepositoryError(
+      'novel repository: generation lineage Session does not match the Agent actor',
+      invalidCode,
+    )
+  }
+  return generation
 }
 
 function restoredRevision(
@@ -1724,6 +1762,14 @@ function cloneChangeSet(value: ChangeSet): ChangeSet {
     ...value,
     actor: { ...value.actor },
     operations: structuredClone(value.operations),
+    ...(value.generation === undefined ? {} : {
+      generation: {
+        ...value.generation,
+        ...(value.generation.contextPolicies === undefined
+          ? {}
+          : { contextPolicies: [...value.generation.contextPolicies] }),
+      },
+    }),
   }
 }
 

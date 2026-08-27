@@ -11,7 +11,7 @@
 - 应在现有 base 与 Web App 组合包之后加入本 bundle。它会先插入 Host Asset 类型注册表、独立的自由策划/全书指导 Host/Client contribution 与 `novel-repository-local`，随后加入 context、绑定 Revision 的分析服务、Remote、独立 Client adapter 和 `novel-workbench`。
 - 普通 `ui-layout` 始终是唯一根与布局服务拥有者。Novel Workbench 通过按 selector 路由的 `shell.workbench` chain 贡献按 preset 限定的 `novel` surface，因此原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染与 Session service 仍保持权威。
 - 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含需用户批准的 `novel_initialize_project`、`novel_list`、`novel_search`、`novel_create`、`novel_get`、显式只读的 `novel_get_analysis`、`novel_propose_changes` 与 `novel_present`；不包含通用 shell 或文件系统修改工具。
-- 同一 Preset 通过标准按需 `skill` 工具挂载十个包内自包含写作/审稿 Skill：新书启动、大纲/beat 设计、章节执行、文风改写、文风审查、场景推进、对白诊断、精确 Revision 章节审稿、草稿/定稿偏好提取与定稿正文 Story State 提取。每个 Skill 声明一个闭集 `novelContextPolicy`；Skill 可以教授方法并选择有边界的上下文策略，但不能扩大 Novel 工具权限。
+- 同一 Preset 通过标准按需 `skill` 工具挂载十个包内自包含写作/审稿 Skill：新书启动、大纲/beat 设计、章节执行、文风改写、文风审查、场景推进、对白诊断、精确 Revision 章节审稿、草稿/定稿偏好提取与定稿正文 Story State 提取。每个 Skill 声明一个闭集 `novelContextPolicy`；Skill 可以教授方法并选择有边界的上下文策略，但不能扩大 Novel 工具权限。章节执行与场景推进现在会从自由章纲、已确认 Story State、本书风格与必要前文提炼临时执行草案。普通场景直接推进；关键或高不确定场景可以比较 2–3 个短行动方案，等待用户选择或由 Agent 明确选择一项，随后仍默认只通过现有 ChangeSet 流程生成一个正文候选。
 - 绑定 Revision 的分析服务为工作台提供确定性 NOAI 扫描、固定 one-shot 审稿人、偏好 worker 与 Story State worker。它们都只收到冻结的有界材料、`skill` 工具与严格 Schema，且不拥有 Asset 修改权限；只有面向用户的 Host 流程可以保留定稿，并通过 ChangeSet 应用已采纳候选。
 - 历史作者 Revision 是只读证据。作者可以显式对照并把其中一版恢复为新的、受版本保护的当前 Revision；恢复绝不倒退历史，会把该 Asset 的陈旧提案标为冲突、保留绑定 Revision 的分析证据，并在章节 Canon 可能变化时要求复查 Story State。
 - `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
@@ -61,6 +61,6 @@ Preset 组合与 Skill 目录在页面和选区变化时保持稳定。Skill 正
 - **当前资产范围**：Host 与 Client 注册表已安装 `manuscript.chapter`、自由 `planning.outline`、绑定章节的 `planning.chapter-outline`，以及项目级唯一 `book.brief` / `book.style-profile` / `book.story-state`，并支持一个活动类型化选区和单操作 ChangeSet；人物、灵感、关系与大纲结构编辑仍暂缓。
 - **只有人工审阅的定稿学习**：用户可以把精确章节 Revision 标记为定稿，并审阅草稿/定稿偏好候选；没有自动提升、偏好 RAG、跨书作者画像、排序或模型训练。
 - **没有语义搜索或实时文件事件**：已有有边界的词法 Asset 检索；关系、语义排序、文件监听和浏览器失效事件流尚未实现。
-- **只有首批 Context Compiler 策略**：任务选择保持显式，关系扩展保持确定。Story State 仍是精确自由文本；语义检索、策略摘要、按模型 token 预算和 Scene Contract 后续可以接在编译器接缝后，而无需改变 V3 冻结 Manifest 的回放契约。
+- **只有首批 Context Compiler 策略**：任务选择保持显式，关系扩展保持确定。Story State 仍是精确自由文本；Scene Execution V1 的草案是请求局部 Skill 指导，不是持久类型化 Contract。语义检索、策略摘要、按模型 token 预算和类型化 Scene Contract 后续可以接在编译器接缝后，而无需改变 V3 冻结 Manifest 的回放契约。
 - **仅首批 Skill**：目前改造十个高频启动、写作、诊断、审稿、偏好与状态提取方法。旧的直接文件 Novel Skills 有意不挂载到 Workbench Preset；更多方法会随目标 Asset 类型落地而按 Asset 语义迁移。
 - **没有通用编排**：固定只读审稿人已经落地，但可编辑 Role Profile、Task Blackboard、`novel_delegate` 和多 Agent 工作流尚未实现。

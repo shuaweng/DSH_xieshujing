@@ -28,6 +28,7 @@ import NovelRepository, {
   type TextRangeSelector,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
 import { FsTargetKey, type FileSystem, type FsTarget } from '@deepseek-ai/dsh-fs'
+import { SessionId } from '@deepseek-ai/dsh-session'
 import { describe, expect, it, vi } from 'vitest'
 import NovelRepositoryRemote from '../src/index.ts'
 import type { NovelContextWorksetDescriptor } from '../src/types.ts'
@@ -374,8 +375,12 @@ describe('NovelRepositoryRemote Host service', () => {
       projectId: snapshot.asset.projectId,
       assetId: snapshot.asset.id,
       contentHash: snapshot.contentHash,
-      origin: 'initial-scan',
+      origin: 'agent-apply',
       createdAt: '2026-08-25T08:00:00.000Z',
+      generation: {
+        sessionId: SessionId('agent-1'),
+        strategy: 'direct',
+      },
     }]
     repository.restoreResult = {
       snapshot: { ...snapshot, revisionId: RevisionId('revision-restored') },
@@ -486,8 +491,9 @@ describe('NovelRepositoryRemote Host service', () => {
     disposeContext()
     await expect(ctx.novelRepositoryRemote.asset(agent, AssetId('chapter-1'), null, signal))
       .resolves.toMatchObject({ title: '第一章', content: { kind: 'manuscript', body: '旧正文' } })
-    await expect(ctx.novelRepositoryRemote.revisions(agent, AssetId('chapter-1'), signal))
-      .resolves.toEqual([expect.objectContaining({ id: 'revision-1', origin: 'initial-scan' })])
+    const revisions = await ctx.novelRepositoryRemote.revisions(agent, AssetId('chapter-1'), signal)
+    expect(revisions).toEqual([expect.objectContaining({ id: 'revision-1', origin: 'agent-apply' })])
+    expect(revisions[0]).not.toHaveProperty('generation')
     await expect(ctx.novelRepositoryRemote.restoreAsset(agent, {
       assetId: AssetId('chapter-1'),
       baseRevisionId: RevisionId('revision-2'),

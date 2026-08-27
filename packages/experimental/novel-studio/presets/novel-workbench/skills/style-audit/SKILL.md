@@ -3,7 +3,8 @@ name: style-audit
 description: 诊断正文的 AI 味、解释腔、句法节奏、信息释放、作者腔钩子与连载拉力；只给有证据和优先级的问题单，不直接改稿。
 whenToUse: "[当前正文选区/章节引用与审查重点]"
 user-invocable: true
-novelContextPolicy: selection-review
+metadata:
+  novelContextPolicy: selection-review
 ---
 
 # Style Audit

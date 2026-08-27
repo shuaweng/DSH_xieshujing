@@ -3,7 +3,8 @@ name: outline-beat-design
 description: 设计或修订自由格式的书纲、卷纲与章纲；梳理推进、兑现、钩子和章节职责，而不把大纲变成固定字段表单。需要直接写正文时改用 chapter-execution。
 whenToUse: "[当前大纲引用、章节引用，或需要规划的书/卷/章范围]"
 user-invocable: true
-novelContextPolicy: outline-edit
+metadata:
+  novelContextPolicy: outline-edit
 ---
 
 # Outline Beat Design

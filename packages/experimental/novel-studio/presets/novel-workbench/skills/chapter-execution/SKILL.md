@@ -3,7 +3,9 @@ name: chapter-execution
 description: 基于版本化正文、大纲与章纲起草、续写或内容级改写章节；允许推进剧情，但严格守住用户范围与已确认事实。只磨表达不改剧情时用 rewrite-to-style。
 whenToUse: "[当前章节/选区引用、章纲引用，或明确的起草与续写目标]"
 user-invocable: true
-novelContextPolicy: chapter-write
+metadata:
+  novelContextPolicy: chapter-write
+  novelSkillVersion: 1
 ---
 
 # Chapter Execution
@@ -17,9 +19,28 @@ novelContextPolicy: chapter-write
 3. 短试写或方案讨论直接回复聊天。用户明确要求落库的新章节用 `novel_create`，一次提交 `manuscript.chapter` 的标题与完整正文，不要求作者先创建空容器；已有章节的正式修改使用 `novel_propose_changes`。空章节写入或正文追加使用 `insert-text`，改写已有文字使用 `replace-text`，改章节名使用 `update-title`。对已存在的未命名空章节，应把 `update-title` 与 `insert-text` 合并在一个 ChangeSet 中，并严格采用 `novel_get` 返回的 operation 说明。
 4. ChangeSet 只是提案。没有 applied 结果，不得说“已经写入”或“已经修改”。项目没有概述或风格资产时照常执行，不得虚构；一次写作观察也不能自动沉淀为长期偏好。
 
-## 执行前校准
+## 临时写作执行草案
 
-明确：本章推进什么、哪些事实不能变、哪些信息不能提前说破、目标文气、章末局面。新章还要检查近几章是否重复同一种冲突、解法、场景容器和章末钩子；如果章节职责本身不清，先用 `outline-beat-design` 完成章纲。
+落笔前，从自由章纲、Story State、本书风格和必要前文中提炼一份短小的内部执行草案。它不是新 Asset，也不是要求作者填表；只服务本轮写作，至少明确：
+
+- 本章/本场的核心职责和 POV；
+- 开始时人物的目标、处境、认知与情绪；
+- 必须发生的变化，以及结束时被改变的处境、关系、认知、资源或风险；
+- 本轮必须保留的事实、允许释放的信息和不能提前说破的信息；
+- 期望的读者感受与结尾推进力；
+- 与近几章相比需要避开的重复冲突、解法、场景容器或钩子。
+
+材料足够时直接在内部完成，不把模板强加给作者，也不为形式完整而补造设定。章节职责本身不清时，先用 `outline-beat-design` 修正章纲。
+
+## 行动方案门槛
+
+普通承接、目标清楚的场景直接执行，不额外制造方案。只有以下关键或高不确定场景才先生成 2–3 个短行动方案：章节开头、核心对抗、揭秘、重大情绪转折、伏笔回收、章末钩子，用户明确要求多个方案，或现有材料支持数条明显不同的推进路径。
+
+行动方案描述人物采取什么行动、阻力如何回应、信息怎样释放、局面如何改变；它们必须是不同的戏剧行动，不是同一段正文换文风。每个方案保持短小，先比较人物逻辑、Story State、信息边界、与前文的重复度、张力和后续空间：
+
+- 用户要求自己选择时，展示方案并停下，等待选择后再落稿；
+- 用户把选择权交给 Agent 时，说明一句选择理由后直接采用最合适的一项；
+- 默认只生成一个正文候选。只有用户明确要求多个完整候选时才生成多个。
 
 ## 落稿原则
 
@@ -31,4 +52,4 @@ novelContextPolicy: chapter-write
 
 ## 修改边界
 
-局部任务只提案局部范围，不重写整章。若用户只要求文风调整，转用 `rewrite-to-style`；若只要求诊断，不创建 ChangeSet。输出后简短说明依据了哪些 Revision、改变了什么、现在是聊天草稿、新 Asset 还是待审 ChangeSet。
+局部任务只提案局部范围，不重写整章。若用户只要求文风调整，转用 `rewrite-to-style`；若只要求诊断，不创建 ChangeSet。正式落稿继续使用现有 `novel_create` / `novel_propose_changes`：直接执行传 `generation_strategy: direct`；Agent 从短方案中选择时传 `action-options-agent-selected` 及方案总数和一基序号；用户选择时传 `action-options-user-selected` 及同样坐标。工具只记录小型 Lineage，不记录方案正文。输出后简短说明依据了哪些 Revision、采用了什么推进策略、改变了什么，以及现在是聊天草稿、新 Asset 还是待审 ChangeSet。

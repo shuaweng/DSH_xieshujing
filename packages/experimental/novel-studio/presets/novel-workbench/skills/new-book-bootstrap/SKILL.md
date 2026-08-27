@@ -3,7 +3,8 @@ name: new-book-bootstrap
 description: 从一句设想、题材方向或零散灵感启动一本新小说；在用户批准后初始化当前项目，再与作者确认读者预期、核心机制、主角驱动力和开篇策略，按需创建工作台原生资产。
 whenToUse: "[原始设想、题材与受众、已有概述/大纲引用，或明确的开书目标]"
 user-invocable: true
-novelContextPolicy: outline-edit
+metadata:
+  novelContextPolicy: outline-edit
 ---
 
 # New Book Bootstrap
