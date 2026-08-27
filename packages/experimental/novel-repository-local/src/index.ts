@@ -40,6 +40,7 @@ import NovelRepository, {
   type PutNovelAnalysisReportRequest,
   type RevisionId as RevisionIdValue,
   type RevisionOrigin,
+  type ReorderAssetsRequest,
   type SaveAssetContentRequest,
   type SearchAssetsRequest,
   type SelectionRef,
@@ -235,6 +236,7 @@ export class LocalNovelRepository extends NovelRepository {
       root: { ...root },
       manifest: { ...manifest },
       contentRoots,
+      assetOrder: parsed.assetOrder,
     }
   }
 
@@ -306,6 +308,7 @@ export class LocalNovelRepository extends NovelRepository {
       id: ProjectId(`project-${randomUUID()}`),
       title,
       contentRoots: { manuscript: 'manuscript', planning: 'planning' },
+      assetOrder: {},
     })
     if (new TextEncoder().encode(text).byteLength > this.config.manifestMaxBytes) {
       throw new NovelRepositoryError(
@@ -331,9 +334,90 @@ export class LocalNovelRepository extends NovelRepository {
   ): Promise<readonly AssetSummary[]> {
     return await this.withProject(project, async (state) => {
       const catalog = await this.scan(project, state, signal, sandboxPolicy)
-      return [...catalog.values()]
-        .sort((left, right) => left.summary.asset.projectRelativePath.localeCompare(right.summary.asset.projectRelativePath))
-        .map(value => cloneSummary(value.summary))
+      const manifestBytes = await this.readBounded(
+        project.manifest,
+        this.config.manifestMaxBytes,
+        'NOVEL_PROJECT_MANIFEST_TOO_LARGE',
+        signal,
+      )
+      const manifest = parseProjectManifest(new TextDecoder().decode(manifestBytes), project.manifest.displayPath)
+      if (manifest.id !== project.id) {
+        throw new NovelRepositoryError('novel repository: project identity changed while listing Assets', 'NOVEL_PROJECT_ID_CONFLICT')
+      }
+      return orderedSummaries(catalog, manifest.assetOrder)
+    })
+  }
+
+  override async reorderAssets(
+    project: NovelProjectSnapshot,
+    request: ReorderAssetsRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSummary[]> {
+    return await this.withProject(project, async (state) => {
+      const catalog = await this.scan(project, state, signal, sandboxPolicy)
+      this.ctx.novelAssetTypes.get(request.type)
+      const current = [...catalog.values()]
+        .filter(value => value.summary.asset.type === request.type)
+        .map(value => value.summary.asset.id)
+      const received = [...request.orderedAssetIds]
+      if (received.length !== current.length || new Set(received).size !== received.length) {
+        throw new NovelRepositoryError(
+          'novel repository: reordered Asset ids must contain every current Asset of the requested type exactly once',
+          'NOVEL_ASSET_INVALID',
+        )
+      }
+      const currentSet = new Set(current)
+      if (received.some(id => !currentSet.has(id))) {
+        throw new NovelRepositoryError(
+          'novel repository: reordered Asset ids must contain every current Asset of the requested type exactly once',
+          'NOVEL_ASSET_INVALID',
+        )
+      }
+
+      const before = await this.ctx.fs.stat(project.manifest, signal)
+      if (before?.type !== 'file') {
+        throw new NovelRepositoryError('novel repository: project manifest changed during reorder', 'NOVEL_PROJECT_MANIFEST_INVALID')
+      }
+      const manifestBytes = await this.readBounded(
+        project.manifest,
+        this.config.manifestMaxBytes,
+        'NOVEL_PROJECT_MANIFEST_TOO_LARGE',
+        signal,
+      )
+      const after = await this.ctx.fs.stat(project.manifest, signal)
+      if (after?.type !== 'file' || after.version !== before.version) {
+        throw new NovelRepositoryError('novel repository: project manifest changed during reorder', 'NOVEL_PROJECT_MANIFEST_INVALID')
+      }
+      const parsed = parseProjectManifest(new TextDecoder().decode(manifestBytes), project.manifest.displayPath)
+      if (parsed.id !== project.id) {
+        throw new NovelRepositoryError('novel repository: project identity changed during reorder', 'NOVEL_PROJECT_ID_CONFLICT')
+      }
+      const assetOrder = { ...parsed.assetOrder, [request.type]: received }
+      const text = serializeProjectManifest({ ...parsed, assetOrder })
+      if (new TextEncoder().encode(text).byteLength > this.config.manifestMaxBytes) {
+        throw new NovelRepositoryError(
+          `novel repository: reordered project manifest exceeds ${this.config.manifestMaxBytes} bytes`,
+          'NOVEL_PROJECT_MANIFEST_TOO_LARGE',
+        )
+      }
+      try {
+        await this.ctx.fs.writeText(
+          project.manifest,
+          text,
+          { kind: 'replaceIfVersion', version: after.version },
+          signal,
+          sandboxPolicy,
+        )
+      } catch (error: unknown) {
+        if (!(error instanceof FsError) || error.code !== 'FS_STALE_VERSION') throw error
+        throw new NovelRepositoryError(
+          'novel repository: project manifest changed during reorder',
+          'NOVEL_PROJECT_MANIFEST_INVALID',
+          { cause: error },
+        )
+      }
+      return orderedSummaries(catalog, assetOrder)
     })
   }
 
@@ -1374,6 +1458,33 @@ function observedAsset(
       title: parsed.title,
     },
   }
+}
+
+function orderedSummaries(
+  catalog: ReadonlyMap<AssetId, ObservedAsset>,
+  assetOrder: Readonly<Record<string, readonly AssetId[]>>,
+): readonly AssetSummary[] {
+  const indexes = new Map<string, ReadonlyMap<AssetId, number>>()
+  for (const [type, ids] of Object.entries(assetOrder)) {
+    indexes.set(type, new Map(ids.map((id, index) => [id, index])))
+  }
+  return [...catalog.values()]
+    .sort((left, right) => {
+      const leftAsset = left.summary.asset
+      const rightAsset = right.summary.asset
+      if (leftAsset.type === rightAsset.type) {
+        const typeIndexes = indexes.get(leftAsset.type)
+        const leftIndex = typeIndexes?.get(leftAsset.id)
+        const rightIndex = typeIndexes?.get(rightAsset.id)
+        if (leftIndex !== undefined || rightIndex !== undefined) {
+          if (leftIndex === undefined) return 1
+          if (rightIndex === undefined) return -1
+          if (leftIndex !== rightIndex) return leftIndex - rightIndex
+        }
+      }
+      return leftAsset.projectRelativePath.localeCompare(rightAsset.projectRelativePath)
+    })
+    .map(value => cloneSummary(value.summary))
 }
 
 function cloneSnapshot(value: AssetSnapshot): AssetSnapshot {

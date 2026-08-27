@@ -1,6 +1,6 @@
 /** Project explorer for manuscript chapters and the two-level freeform outline hierarchy. */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type DragEvent } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
@@ -8,6 +8,7 @@ import type {
   NovelAssetDescriptor,
   NovelAssetDocument,
   NovelProjectDescriptor,
+  ReorderNovelAssetsRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type { NovelAssetRendererRegistry } from './renderers.tsx'
 import type { createNovelWorkbenchStore } from './store.ts'
@@ -18,6 +19,7 @@ export interface ExplorerInjected {
   load: (sessionId: SessionId) => Promise<{ project?: NovelProjectDescriptor; assets: readonly NovelAssetDescriptor[] }>
   open: (sessionId: SessionId, assetId: string) => Promise<NovelAssetDocument>
   create: (sessionId: SessionId, request: CreateNovelAssetRequest) => Promise<NovelAssetDocument>
+  reorder: (sessionId: SessionId, request: ReorderNovelAssetsRequest) => Promise<readonly NovelAssetDescriptor[]>
   onRefresh: (listener: () => void) => () => void
 }
 
@@ -27,7 +29,7 @@ type ExplorerProps = PropsRuntime<'novel.explorer'>
   & InjectFace<ExplorerInjected>
 
 /** Session-aware navigator; paths organize files while semantic parent ids organize outlines. */
-export function Explorer({ useSessions, useStore, actions, renderers, load, open, create, onRefresh, t }: ExplorerProps) {
+export function Explorer({ useSessions, useStore, actions, renderers, load, open, create, reorder, onRefresh, t }: ExplorerProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
   const state = useStore(value => ({
     assets: value.assets, project: value.project, document: value.document,
@@ -36,6 +38,7 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
   }))
   const activeAssetId = useRef(state.active)
   const [creating, setCreating] = useState(false)
+  const [reordering, setReordering] = useState(false)
 
   useEffect(() => { if (state.active !== undefined) activeAssetId.current = state.active }, [state.active])
   useEffect(() => onRefresh(() => { actions.refresh() }), [actions, onRefresh])
@@ -112,6 +115,29 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
       setCreating(false)
     }
   }
+  const reorderChapters = async (orderedAssetIds: readonly NovelAssetDescriptor['id'][]) => {
+    if (sessionId === undefined || state.project === undefined || reordering) return
+    const previous = state.assets
+    const positions = new Map(orderedAssetIds.map((id, index) => [id, index]))
+    const optimistic = [...state.assets].sort((left, right) => {
+      if (left.type !== 'manuscript.chapter' || right.type !== 'manuscript.chapter') return 0
+      return (positions.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(right.id) ?? Number.MAX_SAFE_INTEGER)
+    })
+    actions.assetsReordered(optimistic)
+    setReordering(true)
+    try {
+      const assets = await reorder(sessionId, {
+        type: 'manuscript.chapter',
+        orderedAssetIds,
+      })
+      actions.assetsReordered(assets)
+    } catch (error: unknown) {
+      actions.assetsReordered(previous)
+      actions.fail(errorMessage(error))
+    } finally {
+      setReordering(false)
+    }
+  }
 
   let characterCount: number | undefined
   if (state.document !== undefined && state.draft !== undefined) {
@@ -151,7 +177,8 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
         />
         <AssetGroup title={t('chapters')} assets={manuscripts} active={state.active} unit={t('chapterUnit')}
           titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')}
-          creating={creating} addLabel={t('addChapter')} createAsset={createChapter} />
+          creating={creating} addLabel={t('addChapter')} createAsset={createChapter}
+          reorderAssets={reorderChapters} reorderDisabled={reordering} dragLabel={t('dragChapter')} />
         <OutlineGroup
           roots={roots}
           all={outlines}
@@ -239,19 +266,40 @@ function OutlineGroup({ roots, all, active, creating, titleOf, openAsset, create
   </details>
 }
 
-function AssetButton({ asset, active, title, openAsset, details }: {
+function AssetButton({ asset, active, title, openAsset, details, drag }: {
   readonly asset: NovelAssetDescriptor
   readonly active: string | undefined
   readonly title: string
   readonly openAsset: (assetId: string) => void
   readonly details?: string
+  readonly drag?: {
+    readonly dragging: boolean
+    readonly dropPosition?: 'before' | 'after'
+    readonly label: string
+    readonly onDragStart: (event: DragEvent<HTMLButtonElement>) => void
+    readonly onDragOver: (event: DragEvent<HTMLButtonElement>) => void
+    readonly onDragEnd: () => void
+    readonly onDrop: (event: DragEvent<HTMLButtonElement>) => void
+  }
 }) {
   return <button type="button" className={css.assetButton} data-active={asset.id === active || undefined}
-    onClick={() => { openAsset(asset.id) }}><span>{title}</span>{details === undefined ? null : <small>{details}</small>}</button>
+    draggable={drag !== undefined}
+    data-dragging={drag?.dragging || undefined}
+    data-drop-position={drag?.dropPosition}
+    aria-label={drag === undefined ? undefined : `${title}，${drag.label}`}
+    onDragStart={drag?.onDragStart}
+    onDragOver={drag?.onDragOver}
+    onDragEnd={drag?.onDragEnd}
+    onDrop={drag?.onDrop}
+    onClick={() => { openAsset(asset.id) }}>
+    <span>{title}</span>{details === undefined ? null : <small>{details}</small>}
+    {drag === undefined ? null : <i className={css.dragGrip} aria-hidden="true">⋮⋮</i>}
+  </button>
 }
 
 function AssetGroup({
   title, assets, active, unit, titleOf, openAsset, characterCount, characters, creating, addLabel, createAsset,
+  reorderAssets, reorderDisabled = false, dragLabel,
 }: {
   readonly title: string
   readonly assets: readonly NovelAssetDescriptor[]
@@ -264,7 +312,30 @@ function AssetGroup({
   readonly creating?: boolean
   readonly addLabel?: string
   readonly createAsset?: () => Promise<void>
+  readonly reorderAssets?: (orderedAssetIds: readonly NovelAssetDescriptor['id'][]) => Promise<void>
+  readonly reorderDisabled?: boolean
+  readonly dragLabel?: string
 }) {
+  const [draggingId, setDraggingId] = useState<NovelAssetDescriptor['id']>()
+  const [dropTarget, setDropTarget] = useState<{ id: NovelAssetDescriptor['id']; position: 'before' | 'after' }>()
+  const finishDrag = () => { setDraggingId(undefined); setDropTarget(undefined) }
+  const dropAsset = (event: DragEvent<HTMLButtonElement>, targetId: NovelAssetDescriptor['id']) => {
+    event.preventDefault()
+    const sourceId = draggingId
+    const rectangle = event.currentTarget.getBoundingClientRect()
+    const observedTarget = {
+      id: targetId,
+      position: event.clientY < rectangle.top + rectangle.height / 2 ? 'before' as const : 'after' as const,
+    }
+    const target = dropTarget?.id === targetId ? dropTarget : observedTarget
+    finishDrag()
+    if (sourceId === undefined || sourceId === targetId || reorderAssets === undefined) return
+    const ids = assets.map(asset => asset.id).filter(id => id !== sourceId)
+    const targetIndex = ids.indexOf(targetId)
+    if (targetIndex < 0) return
+    ids.splice(targetIndex + (target.position === 'after' ? 1 : 0), 0, sourceId)
+    void reorderAssets(ids)
+  }
   return <details className={css.assetGroup} open>
     <summary><strong>{title}</strong><small>{assets.length} {unit}</small></summary>
     {addLabel !== undefined && createAsset !== undefined
@@ -278,6 +349,26 @@ function AssetGroup({
       return <AssetButton
         key={asset.id} asset={asset} active={active} title={titleOf(asset)} openAsset={openAsset}
         {...(details === undefined ? {} : { details })}
+        {...(reorderAssets === undefined || dragLabel === undefined ? {} : { drag: {
+          dragging: draggingId === asset.id,
+          ...(dropTarget?.id === asset.id ? { dropPosition: dropTarget.position } : {}),
+          label: dragLabel,
+          onDragStart: (event: DragEvent<HTMLButtonElement>) => {
+            if (reorderDisabled) { event.preventDefault(); return }
+            event.dataTransfer.effectAllowed = 'move'
+            event.dataTransfer.setData('text/plain', asset.id)
+            setDraggingId(asset.id)
+          },
+          onDragOver: (event: DragEvent<HTMLButtonElement>) => {
+            if (draggingId === undefined || draggingId === asset.id || reorderDisabled) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'move'
+            const rectangle = event.currentTarget.getBoundingClientRect()
+            setDropTarget({ id: asset.id, position: event.clientY < rectangle.top + rectangle.height / 2 ? 'before' : 'after' })
+          },
+          onDragEnd: finishDrag,
+          onDrop: (event: DragEvent<HTMLButtonElement>) => { dropAsset(event, asset.id) },
+        } })}
       />
     })}</div>
   </details>

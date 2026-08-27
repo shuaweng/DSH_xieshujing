@@ -6,7 +6,7 @@
 
 ## 项目声明
 
-Novel Project 是包含普通 UTF-8 `novel.yaml` 文件的 Workspace 根目录。该清单是项目标识、格式版本、标题和命名内容根目录的权威；它不是 Asset 清单，也不枚举作者文件。
+Novel Project 是包含普通 UTF-8 `novel.yaml` 文件的 Workspace 根目录。该清单是项目标识、格式版本、标题、命名内容根目录以及可选精确类型 Asset 顺序的权威；除稳定 ID 顺序序列外，它不枚举作者文件。
 
 ```yaml
 kind: novel-project

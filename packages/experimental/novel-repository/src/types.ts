@@ -145,6 +145,8 @@ export interface NovelProjectSnapshot {
   readonly manifest: FsTarget
   /** Canonical content roots keyed by their manifest names. */
   readonly contentRoots: Readonly<Record<string, FsTarget>>
+  /** Optional authored Asset sequences keyed by exact Asset type. */
+  readonly assetOrder: Readonly<Record<string, readonly AssetId[]>>
 }
 
 /** Minimal authored input for activating one existing directory as a Novel Project. */
@@ -189,6 +191,14 @@ export interface SearchAssetsRequest {
   readonly types?: readonly NovelAssetType[]
   /** Positive bounded result count requested by the Consumer. */
   readonly limit?: number
+}
+
+/** Complete authored order for the current Assets of one exact type. */
+export interface ReorderAssetsRequest {
+  /** Registered Asset type whose current rows are being reordered. */
+  readonly type: NovelAssetType
+  /** Every current Asset id of that type, exactly once, in the desired order. */
+  readonly orderedAssetIds: readonly AssetId[]
 }
 
 /** One exact current Revision discovered by the repository search seam. */

@@ -19,6 +19,7 @@ import NovelRepository, {
   type NovelSelectionInput,
   type PutNovelAnalysisReportRequest,
   type ProposeChangeSetRequest,
+  type ReorderAssetsRequest,
   type SaveAssetContentRequest,
   type SearchAssetsRequest,
   type SelectionRef,
@@ -42,6 +43,7 @@ class StubNovelRepository extends NovelRepository {
   revisions: readonly AssetRevisionSummary[] = []
   reports: readonly NovelAnalysisReport[] = []
   initializations: string[] = []
+  reorders: ReorderAssetsRequest[] = []
 
   override discoverProject(_root: FsTarget): Promise<NovelProjectSnapshot | undefined> {
     return Promise.resolve(this.project)
@@ -59,12 +61,21 @@ class StubNovelRepository extends NovelRepository {
         manuscript: { targetKey: FsTargetKey('manuscript'), displayPath: `${root.displayPath}/manuscript` },
         planning: { targetKey: FsTargetKey('planning'), displayPath: `${root.displayPath}/planning` },
       },
+      assetOrder: {},
     }
     this.project = project
     return Promise.resolve(project)
   }
 
   override listAssets(): Promise<readonly AssetSummary[]> {
+    return Promise.resolve(this.assets)
+  }
+
+  override reorderAssets(
+    _project: NovelProjectSnapshot,
+    request: ReorderAssetsRequest,
+  ): Promise<readonly AssetSummary[]> {
+    this.reorders.push(request)
     return Promise.resolve(this.assets)
   }
 
@@ -209,6 +220,7 @@ describe('NovelRepositoryRemote Host service', () => {
       root,
       manifest,
       contentRoots: { manuscript: chapters },
+      assetOrder: {},
     }
     const remoteFiber = ctx.plugin(NovelRepositoryRemote)
     await remoteFiber
@@ -321,6 +333,7 @@ describe('NovelRepositoryRemote Host service', () => {
       root,
       manifest,
       contentRoots: { manuscript: chapters },
+      assetOrder: {},
     }
     const snapshot: AssetSnapshot = {
       asset: {
@@ -419,6 +432,16 @@ describe('NovelRepositoryRemote Host service', () => {
       revisionId: 'revision-1',
       contentHash: snapshot.contentHash,
       title: '第一章',
+    }])
+    await expect(ctx.novelRepositoryRemote.reorderAssets(agent, {
+      type: 'manuscript.chapter', orderedAssetIds: [AssetId('chapter-1')],
+    }, signal)).resolves.toEqual([{
+      id: 'chapter-1', projectId: 'project-1', type: 'manuscript.chapter',
+      projectRelativePath: 'manuscript/chapter-1.md', revisionId: 'revision-1',
+      contentHash: snapshot.contentHash, title: '第一章',
+    }])
+    expect(repository.reorders).toEqual([{
+      type: 'manuscript.chapter', orderedAssetIds: [AssetId('chapter-1')],
     }])
     await expect(ctx.novelRepositoryRemote.search(agent, {
       query: '旧', types: ['manuscript.chapter'], limit: 3,
@@ -542,6 +565,7 @@ describe('NovelRepositoryRemote Host service', () => {
         root,
         manifest,
         contentRoots: { manuscript: chapters },
+        assetOrder: {},
       }
       const remoteFiber = ctx.plugin(NovelRepositoryRemote, { descriptorMaxBytes })
       await remoteFiber
@@ -597,6 +621,7 @@ describe('NovelRepositoryRemote Host service', () => {
       root,
       manifest,
       contentRoots: { manuscript: chapters },
+      assetOrder: {},
     }
     repository.assets = [{
       asset: {

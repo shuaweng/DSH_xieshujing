@@ -94,6 +94,12 @@ export interface CreateNovelAssetRequest {
   readonly content: NovelWireValue
 }
 
+/** Browser request to persist the complete order of one current Asset type. */
+export interface ReorderNovelAssetsRequest {
+  readonly type: string
+  readonly orderedAssetIds: readonly AssetId[]
+}
+
 /** Browser-safe typed Asset content bound to one exact Revision. */
 export interface NovelAssetDocument extends NovelAssetDescriptor {
   readonly content: NovelWireValue

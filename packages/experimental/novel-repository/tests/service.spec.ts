@@ -19,6 +19,7 @@ import NovelRepository, {
   type NovelAnalysisReport,
   type NovelSelectionInput,
   type ProposeChangeSetRequest,
+  type ReorderAssetsRequest,
   type PutNovelAnalysisReportRequest,
   type SaveAssetContentRequest,
   type SearchAssetsRequest,
@@ -33,6 +34,13 @@ class StubNovelRepository extends NovelRepository {
   }
 
   override listAssets(): Promise<readonly AssetSummary[]> {
+    return Promise.resolve([])
+  }
+
+  override reorderAssets(
+    _project: NovelProjectSnapshot,
+    _request: ReorderAssetsRequest,
+  ): Promise<readonly AssetSummary[]> {
     return Promise.resolve([])
   }
 

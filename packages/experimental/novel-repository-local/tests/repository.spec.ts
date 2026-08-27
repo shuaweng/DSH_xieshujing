@@ -253,6 +253,40 @@ describe('LocalNovelRepository', () => {
     })).rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
   })
 
+  it('persists chapter order in the project manifest without creating chapter Revisions', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await writeFile(join(dir, 'novel.yaml'), manifest())
+    const ctx = await boot(dir)
+    const novel = await project(ctx)
+    const first = await ctx.novelRepository.createAsset(novel, {
+      type: 'manuscript.chapter', title: '第一章', content: { kind: 'manuscript', body: '一。' },
+      actor: { kind: 'user', sessionId: SessionId('session-user') },
+    })
+    const second = await ctx.novelRepository.createAsset(novel, {
+      type: 'manuscript.chapter', title: '第二章', content: { kind: 'manuscript', body: '二。' },
+      actor: { kind: 'user', sessionId: SessionId('session-user') },
+    })
+
+    const reordered = await ctx.novelRepository.reorderAssets(novel, {
+      type: 'manuscript.chapter', orderedAssetIds: [second.asset.id, first.asset.id],
+    })
+    expect(reordered.map(item => item.asset.id)).toEqual([second.asset.id, first.asset.id])
+    expect((await ctx.novelRepository.listAssets(novel)).map(item => item.asset.id))
+      .toEqual([second.asset.id, first.asset.id])
+    expect(await ctx.novelRepository.listAssetRevisions(novel, first.asset.id)).toHaveLength(1)
+    expect(await ctx.novelRepository.listAssetRevisions(novel, second.asset.id)).toHaveLength(1)
+    const rediscovered = await project(ctx)
+    expect((await ctx.novelRepository.listAssets(rediscovered)).map(item => item.asset.id))
+      .toEqual([second.asset.id, first.asset.id])
+    expect(parseProjectManifest(await readFile(join(dir, 'novel.yaml'), 'utf8'), 'novel.yaml').assetOrder)
+      .toEqual({ 'manuscript.chapter': [second.asset.id, first.asset.id] })
+
+    await expect(ctx.novelRepository.reorderAssets(rediscovered, {
+      type: 'manuscript.chapter', orderedAssetIds: [first.asset.id],
+    })).rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
+  })
+
   it('discovers a second registered Asset type without repository type branches', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))

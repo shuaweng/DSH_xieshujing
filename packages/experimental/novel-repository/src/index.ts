@@ -28,6 +28,7 @@ import type {
   NovelPreferenceCandidate,
   PreferenceCandidateId,
   RevisionFinalization,
+  ReorderAssetsRequest,
   ProposeChangeSetRequest,
   RevisionId,
   SaveAssetContentRequest,
@@ -80,6 +81,7 @@ export type {
   ReplaceTextOperation,
   RevisionOrigin,
   RevisionFinalization,
+  ReorderAssetsRequest,
   SaveAssetContentRequest,
   SearchAssetsRequest,
   SelectionRef,
@@ -134,10 +136,25 @@ export abstract class NovelRepository extends Service {
    * @param project - validated Project declaration returned by this provider.
    * @param signal - optional cancellation for filesystem and history work.
    * @param sandboxPolicy - optional per-call write policy used if reconciliation must recover an apply journal.
-   * @returns current typed Asset rows in deterministic project-path order.
+   * @returns current typed Asset rows in authored manifest order with deterministic project-path fallback.
    */
   abstract listAssets(
     project: NovelProjectSnapshot,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSummary[]>
+
+  /**
+   * Persist the complete author-selected order for one Asset type without changing Asset Revisions.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - exact type and every current Asset id of that type in desired order.
+   * @param signal - optional cancellation before manifest publication.
+   * @param sandboxPolicy - optional per-call policy governing manifest publication.
+   * @returns the current catalog sorted with the committed order.
+   */
+  abstract reorderAssets(
+    project: NovelProjectSnapshot,
+    request: ReorderAssetsRequest,
     signal?: AbortSignal,
     sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<readonly AssetSummary[]>

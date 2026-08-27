@@ -8,7 +8,10 @@ import type {} from '@deepseek-ai/dsh-experimental-novel-repository-client/clien
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { AssetId, ChangeSetId, RevisionId } from '@deepseek-ai/dsh-experimental-novel-repository/types'
-import type { CreateNovelAssetRequest } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
+import type {
+  CreateNovelAssetRequest,
+  ReorderNovelAssetsRequest,
+} from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-agent-preset/client'
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
@@ -176,6 +179,10 @@ export function apply(ctx: Context): void {
       create: async (sessionId, request: CreateNovelAssetRequest) => await unwrapRemote(
         remote.createAsset(sessionId, request),
         'create Novel Asset',
+      ),
+      reorder: async (sessionId, request: ReorderNovelAssetsRequest) => await unwrapRemote(
+        remote.reorderAssets(sessionId, request),
+        'reorder Novel Assets',
       ),
       onRefresh: (listener) => {
         refreshListeners.add(listener)

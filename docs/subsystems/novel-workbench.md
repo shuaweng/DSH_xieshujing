@@ -6,7 +6,7 @@ The experimental Novel workbench gives a human author and an Agent the same stab
 
 ## Project declaration
 
-A Novel Project is a Workspace root containing a regular UTF-8 `novel.yaml`. The manifest is authoritative for project identity, format version, title, and named content roots; it is not an Asset manifest and does not enumerate authored files.
+A Novel Project is a Workspace root containing a regular UTF-8 `novel.yaml`. The manifest is authoritative for project identity, format version, title, named content roots, and optional exact-type Asset ordering; it does not enumerate authored files beyond those stable-ID order sequences.
 
 ```yaml
 kind: novel-project

@@ -14,6 +14,7 @@ import type { InputTriggerSource, ReferenceInsert } from '@deepseek-ai/dsh-clien
 import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type {
   NovelChangeSetDescriptor,
+  NovelAssetDescriptor,
   NovelAssetDocument,
   NovelAssetSearchResult,
   NovelAnalysisReportDescriptor,
@@ -78,6 +79,7 @@ const renderers = { get: () => manuscriptChapterRenderer } as never
 
 async function openStub(): Promise<NovelAssetDocument> { return chapter() }
 async function createStub(): Promise<NovelAssetDocument> { return chapter() }
+async function reorderStub(_sessionId: SessionId, _request: unknown): Promise<readonly NovelAssetDescriptor[]> { return [] }
 const canvasAnalysisStubs = {
   initialize: async () => ({
     schema: 1 as const, id: 'project-1' as never, title: '白港', rootDisplayPath: '/story',
@@ -948,7 +950,7 @@ describe('Explorer', () => {
     let refresh: (() => void) | undefined
     const onRefresh = vi.fn((listener: () => void) => { refresh = listener; return () => { refresh = undefined } })
     const view = render(<Explorer
-      create={createStub}
+      create={createStub} reorder={reorderStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={load} open={open} onRefresh={onRefresh} t={t}
     />)
@@ -975,6 +977,7 @@ describe('Explorer', () => {
     })
     const create = vi.fn(async () => created)
     const view = render(<Explorer
+      reorder={reorderStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={async () => ({ project: { title: '国运擂台' } as never, assets: [] })}
       open={vi.fn()} create={create} onRefresh={() => () => {}} t={t}
@@ -991,11 +994,42 @@ describe('Explorer', () => {
     expect(view.getByText(zh.newChapterTitle)).toBeTruthy()
   })
 
+  it('reorders chapters from the dragged row and keeps the returned catalog order', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const first = chapter()
+    const second = chapter({
+      id: 'asset-chapter-2' as never,
+      title: '第二章',
+      projectRelativePath: 'manuscript/chapter-2.md',
+    })
+    const descriptors = [first, second].map(({ content: _content, ...descriptor }) => descriptor)
+    const reorder = vi.fn(async (_sid: SessionId, request: { orderedAssetIds: readonly string[] }) =>
+      request.orderedAssetIds.map(id => descriptors.find(asset => asset.id === id)!))
+    const view = render(<Explorer
+      create={createStub} reorder={reorder as never}
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
+      renderers={renderers} load={async () => ({ project: { title: '白港' } as never, assets: descriptors })}
+      open={async (_sid, id) => id === first.id ? first : second} onRefresh={() => () => {}} t={t}
+    />)
+    await waitFor(() => { expect(view.getByText('第二章')).toBeTruthy() })
+    const dataTransfer = { effectAllowed: 'none', dropEffect: 'none', setData: vi.fn() }
+    fireEvent.dragStart(view.getByText('第一章').closest('button')!, { dataTransfer })
+    const secondButton = view.getByText('第二章').closest('button')!
+    fireEvent.dragOver(secondButton, { dataTransfer })
+    await waitFor(() => { expect(secondButton.getAttribute('data-drop-position')).toBe('after') })
+    fireEvent.drop(secondButton, { dataTransfer })
+    await waitFor(() => { expect(reorder).toHaveBeenCalledWith(SID, {
+      type: 'manuscript.chapter',
+      orderedAssetIds: [second.id, first.id],
+    }) })
+    expect(store.getSnapshot().assets.map(asset => asset.id)).toEqual([second.id, first.id])
+  })
+
   it('shows absent-project and load/open failures, including non-Error failures', async () => {
     async function mountWith(load: () => Promise<never> | Promise<{ assets: never[] }>, open = vi.fn()) {
       const store = createNovelWorkbenchStore().create()
       const view = render(<Explorer
-        create={createStub}
+        create={createStub} reorder={reorderStub}
         useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
         renderers={renderers} load={load as never} open={open} onRefresh={() => () => {}} t={t}
       />)
@@ -1014,7 +1048,7 @@ describe('Explorer', () => {
     const store = createNovelWorkbenchStore().create()
     const descriptor = { ...chapter(), content: undefined } as never
     const openFailure = render(<Explorer
-      create={createStub}
+      create={createStub} reorder={reorderStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers}
       load={async () => ({ project: {} as never, assets: [descriptor] })}
@@ -1055,6 +1089,7 @@ describe('Explorer', () => {
     const create = vi.fn(async () => created)
     const open = vi.fn(async (_sid: SessionId, id: string) => [manuscript, book, volume, created].find(asset => asset.id === id)!)
     const view = render(<Explorer
+      reorder={reorderStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={async () => ({ project: { title: '白港' } as never, assets: descriptors })}
       open={open} create={create} onRefresh={() => () => {}} t={t}
@@ -1089,6 +1124,7 @@ describe('Explorer', () => {
     const create = vi.fn(async (_sid: SessionId, request: CreateNovelAssetRequest) =>
       request.type === 'book.brief' ? createdBrief : createdStyle)
     const view = render(<Explorer
+      reorder={reorderStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers}
       load={async () => ({ project: { title: '白港' } as never, assets: [{ ...manuscript, content: undefined }] as never })}
@@ -1119,7 +1155,7 @@ describe('Explorer', () => {
         resolveLoad = resolve; rejectLoad = reject
       })
       const view = render(<Explorer
-        create={createStub}
+        create={createStub} reorder={reorderStub}
         useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
         renderers={renderers} load={() => promise} open={vi.fn()} onRefresh={() => () => {}} t={t}
       />)
@@ -1134,7 +1170,7 @@ describe('Explorer', () => {
     act(() => { store.actions.loaded({} as never, [{ ...chapter(), content: undefined }] as never) })
     const open = vi.fn()
     const view = render(<Explorer
-      create={createStub}
+      create={createStub} reorder={reorderStub}
       useStore={hookOf(store)} actions={{ ...store.actions, reset: vi.fn() }}
       useSessions={sessionHook(undefined) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={vi.fn()} open={open} onRefresh={() => () => {}} t={t}

@@ -2,6 +2,7 @@
 
 import { parseDocument, stringify } from 'yaml'
 import {
+  AssetId,
   NovelRepositoryError,
   ProjectId,
 } from '@deepseek-ai/dsh-experimental-novel-repository'
@@ -15,6 +16,7 @@ export interface ParsedProjectManifest {
   readonly id: ProjectIdValue
   readonly title: string
   readonly contentRoots: Readonly<Record<string, string>>
+  readonly assetOrder: Readonly<Record<string, readonly AssetId[]>>
 }
 
 /**
@@ -23,13 +25,15 @@ export interface ParsedProjectManifest {
  * @returns the complete YAML marker text written by project initialization.
  */
 export function serializeProjectManifest(value: ParsedProjectManifest): string {
-  return stringify({
+  const serialized = {
     kind: 'novel-project',
     schema: value.schema,
     id: value.id,
     title: value.title,
     contentRoots: value.contentRoots,
-  }, { lineWidth: 0 })
+    ...(Object.keys(value.assetOrder).length === 0 ? {} : { assetOrder: value.assetOrder }),
+  }
+  return stringify(serialized, { lineWidth: 0 })
 }
 
 /** Whether a parsed YAML value is a plain record candidate. */
@@ -128,5 +132,27 @@ export function parseProjectManifest(text: string, path: string): ParsedProjectM
     roots[name] = root
   }
 
-  return { schema: 1, id: ProjectId(id), title, contentRoots: roots }
+  const assetOrderValue = value['assetOrder']
+  if (assetOrderValue !== undefined && !isRecord(assetOrderValue)) {
+    invalid(path, 'assetOrder must be a mapping when present')
+  }
+  const assetOrder: Record<string, readonly AssetId[]> = {}
+  for (const [type, ids] of Object.entries(assetOrderValue ?? {})) {
+    if (type.trim().length === 0 || type.trim() !== type) {
+      invalid(path, 'assetOrder keys must be non-empty Asset type strings without surrounding whitespace')
+    }
+    if (!Array.isArray(ids)) invalid(path, `assetOrder.${type} must be an Asset id sequence`)
+    const seen = new Set<string>()
+    const orderedIds = ids.map((id): AssetId => {
+      if (typeof id !== 'string' || id.trim().length === 0 || id.trim() !== id) {
+        invalid(path, `assetOrder.${type} must contain non-empty Asset ids without surrounding whitespace`)
+      }
+      if (seen.has(id)) invalid(path, `assetOrder.${type} must not contain duplicate Asset ids`)
+      seen.add(id)
+      return AssetId(id)
+    })
+    assetOrder[type] = orderedIds
+  }
+
+  return { schema: 1, id: ProjectId(id), title, contentRoots: roots, assetOrder }
 }

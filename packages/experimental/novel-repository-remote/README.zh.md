@@ -10,6 +10,7 @@
 
 - `NovelRepositoryRemote` 使用 Host service key `novelRepositoryRemote` 注册，消费 `ctx.novelRepository`、`ctx.fs` 与 `ctx.sandboxPolicy`，并导出 wire namespace `novelRepository`。
 - `novelRepository/discover` 解析被寻址 Agent Session 的工作目录，将校验委托给当前 Novel Repository 提供方，并且只在提供方找不到 `novel.yaml` 时返回 `undefined`。
+- `novelRepository/reorderAssets` 校验并替换某个精确 Asset 类型完整的稳定 ID 顺序，然后返回权威的已排序浏览器目录。
 - `novelRepository/initialize` 使用同一个精确 Session 根目录与 sandbox policy 初始化尚不存在的项目。它会原样返回已发现项目，并把只创建冲突校验委托给 Repository 提供方。
 - `NovelProjectDescriptor` 包含稳定项目 id、schema、标题与显示路径。它不会向浏览器暴露文件系统 target key 或可变的提供方对象。
 - `assets`、`createAsset`、`asset` 和 `saveAsset` 只投影浏览器安全的 id、语义父级 id、元数据和无损 JSON Asset 内容。浏览器创建只提交类型、标题、父级与内容，身份和路径由 Repository 拥有。`captureSelection` 携带类型定义的 JSON selector，并返回包含规范 `dsh-novel:` 引用的可读 Markdown mention。

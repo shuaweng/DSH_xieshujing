@@ -49,6 +49,7 @@ import type {
   NovelSelectionDescriptor,
   NovelWireValue,
   SaveNovelAssetRequest,
+  ReorderNovelAssetsRequest,
 } from './types.ts'
 
 export type {
@@ -71,6 +72,7 @@ export type {
   NovelSelectionDescriptor,
   NovelWireValue,
   SaveNovelAssetRequest,
+  ReorderNovelAssetsRequest,
 } from './types.ts'
 
 const DEFAULT_DESCRIPTOR_MAX_BYTES = 256 * 1024
@@ -180,6 +182,43 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     }))
     assertResponseBytes(assets, this.responseMaxBytes, 'asset catalog')
     return assets
+  }
+
+  /**
+   * Persist one complete type-specific Asset order through the project manifest.
+   * @param agent - addressed Agent whose Session selects the project and write policy.
+   * @param request - exact type and every current Asset id of that type in desired order.
+   * @param signal - caller cancellation before publication.
+   * @returns the current browser catalog sorted with the committed order.
+   */
+  @Remote('reorderAssets')
+  async reorderAssets(
+    agent: Agent,
+    request: ReorderNovelAssetsRequest,
+    signal: AbortSignal,
+  ): Promise<NovelAssetDescriptor[]> {
+    const project = await this.requireProject(agent, signal)
+    const assets = await this.ctx.novelRepository.reorderAssets(
+      project,
+      {
+        type: request.type as NovelAssetType,
+        orderedAssetIds: request.orderedAssetIds,
+      },
+      signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
+    const descriptors = assets.map(summary => ({
+      id: summary.asset.id,
+      projectId: summary.asset.projectId,
+      type: summary.asset.type,
+      ...(summary.asset.parentId === undefined ? {} : { parentId: summary.asset.parentId }),
+      projectRelativePath: summary.asset.projectRelativePath,
+      revisionId: summary.revisionId,
+      contentHash: summary.contentHash,
+      title: summary.title,
+    }))
+    assertResponseBytes(descriptors, this.responseMaxBytes, 'reordered asset catalog')
+    return descriptors
   }
 
   /**

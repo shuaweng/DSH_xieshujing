@@ -37,6 +37,7 @@ type Actions = {
   loaded: (draft: NovelWorkbenchState, project: NovelProjectDescriptor, assets: readonly NovelAssetDescriptor[]) => void
   uninitialized: (draft: NovelWorkbenchState) => void
   assetCreated: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
+  assetsReordered: (draft: NovelWorkbenchState, assets: readonly NovelAssetDescriptor[]) => void
   open: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   saved: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   edit: (draft: NovelWorkbenchState, content: NovelWireValue) => void
@@ -100,6 +101,10 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       assetCreated: (draft, document) => {
         const descriptor = descriptorOf(document)
         draft.assets = [...draft.assets.filter(asset => asset.id !== descriptor.id), descriptor]
+      },
+      assetsReordered: (draft, assets) => {
+        draft.assets = [...assets]
+        delete draft.error
       },
       open: (draft, document) => {
         draft.document = document

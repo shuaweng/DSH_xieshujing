@@ -68,9 +68,17 @@
 .volumeList { display: flex; flex-direction: column; gap: 2px; margin-left: 14px; padding-left: 7px; border-left: 1px solid color-mix(in srgb, var(--novel-chrome-border) 82%, transparent); }
 .volumeList .assetButton { padding-block: 7px; }
 .addVolume { width: 100%; }
-.assetButton { display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 10px 9px; border: 1px solid transparent; border-radius: 8px; color: inherit; background: transparent; text-align: left; cursor: pointer; transition: border-color 140ms ease, color 140ms ease, background 140ms ease; }
+.assetButton { position: relative; display: flex; flex-direction: column; gap: 5px; width: 100%; padding: 10px 24px 10px 9px; border: 1px solid transparent; border-radius: 8px; color: inherit; background: transparent; text-align: left; cursor: pointer; transition: opacity 120ms ease, transform 120ms ease, box-shadow 120ms ease, border-color 140ms ease, color 140ms ease, background 140ms ease; }
 .assetButton:hover { background: color-mix(in srgb, var(--novel-chrome-strong) 72%, transparent); }
 .assetButton[data-active] { border-color: color-mix(in srgb, var(--novel-accent) 30%, transparent); color: var(--novel-accent); background: color-mix(in srgb, var(--novel-accent) 12%, var(--novel-chrome-strong)); }
+.assetButton[draggable='true'] { cursor: grab; }
+.assetButton[draggable='true']:active { cursor: grabbing; }
+.assetButton[data-dragging] { z-index: 2; opacity: .58; box-shadow: 0 7px 16px color-mix(in srgb, var(--novel-chrome-text) 14%, transparent); transform: scale(.985); }
+.assetButton[data-drop-position]::before { position: absolute; right: 5px; left: 5px; height: 2px; border-radius: 2px; content: ''; background: var(--novel-accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--novel-accent) 18%, transparent); }
+.assetButton[data-drop-position='before']::before { top: -3px; }
+.assetButton[data-drop-position='after']::before { bottom: -3px; }
+.dragGrip { position: absolute; top: 50%; right: 7px; color: var(--novel-chrome-muted); font-size: 13px; font-style: normal; letter-spacing: -4px; opacity: 0; transform: translateY(-50%); transition: opacity 120ms ease, color 120ms ease; }
+.assetButton:hover .dragGrip, .assetButton:focus-visible .dragGrip, .assetButton[data-dragging] .dragGrip { color: var(--novel-accent); opacity: .72; }
 .assetButton span { overflow: hidden; font-size: 13px; font-weight: 580; text-overflow: ellipsis; white-space: nowrap; }
 .assetButton small, .muted { overflow: hidden; color: var(--novel-chrome-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .chapterCount { display: flex; min-height: 36px; align-items: center; gap: 5px; padding: 0 16px; border-top: 1px solid var(--ds-color-border-subtle); color: var(--ds-color-text-tertiary); background: var(--ds-color-bg-primary); font-size: 11px; font-variant-numeric: tabular-nums; }

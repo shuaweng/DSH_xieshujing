@@ -10,6 +10,7 @@ This experimental Host Consumer exposes Novel Project discovery plus bounded typ
 
 - `NovelRepositoryRemote` registers under Host service key `novelRepositoryRemote`, consumes `ctx.novelRepository`, `ctx.fs`, and `ctx.sandboxPolicy`, and exports the wire namespace `novelRepository`.
 - `novelRepository/discover` resolves the addressed Agent Session's working directory, delegates validation to the active Novel Repository provider, and returns `undefined` only when the provider finds no `novel.yaml`.
+- `novelRepository/reorderAssets` validates and replaces one exact Asset type's complete stable-ID order, then returns the authoritative reordered browser catalog.
 - `novelRepository/initialize` uses that same exact Session root and sandbox policy to initialize an absent project. It returns an already discovered project unchanged and delegates create-only conflict checks to the Repository provider.
 - `NovelProjectDescriptor` contains the stable project id, schema, title, and display paths. It never exposes filesystem target keys or mutable provider objects to the browser.
 - `assets`, `createAsset`, `asset`, and `saveAsset` project only browser-safe ids, semantic parent ids, metadata, and lossless JSON Asset content. Browser creation supplies type/title/parent/content while the Repository owns identity and path. `captureSelection` carries a type-defined JSON selector and returns a readable Markdown mention containing the canonical `dsh-novel:` reference.
