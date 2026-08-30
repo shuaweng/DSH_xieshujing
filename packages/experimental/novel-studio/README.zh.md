@@ -1,10 +1,12 @@
-# @deepseek-ai/dsh-experimental-novel-studio
+# 写书鲸 — `@xieshujing/dsh-plugin`
 
 [English](README.md) | 中文
 
 ## 用途
 
 这个实验包是可安装、保持中立的 Novel Studio bundle。它组合文件优先 Novel Repository、持久上下文、安全模型工具、浏览器 Remote 和 Agent 原生工作台，但不改变宿主 Profile 的默认 Agent Preset。专门用于写作的 Profile 可以在其上另行叠加导出的 `dedicated-profile.patch.yml`。
+
+源码包在当前 monorepo 中仍保持私有实验状态。受支持的分发边界是由 `pnpm run pack:xieshujing` 组装出的写书鲸单包产物；把该产物发布到远程 registry 刻意留到后续阶段。
 
 ## 行为
 
@@ -16,6 +18,28 @@
 - 历史作者 Revision 是只读证据。作者可以显式对照并把其中一版恢复为新的、受版本保护的当前 Revision；恢复绝不倒退历史，会把该 Asset 的陈旧提案标为冲突、保留绑定 Revision 的分析证据，并在章节 Canon 可能变化时要求复查 Story State。
 - `NovelStudioPaths` 通过 `ctx.agentPresets.registerRoot()` 注册包内 Preset 根。该贡献的 effect 生命周期属于本 bundle，不会替换其他包的根目录配置，并在 bundle 卸载时消失。
 - 安装本 bundle 不会改变宿主 Profile 的默认 Preset。默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。产品若明确把某一 Profile 专用于写作，可以应用 `dedicated-profile.patch.yml`，只把该 Profile 的无显式选择会话默认值改为 `novel-workbench`。
+
+## 本地单包产物
+
+先构建 Host 与 Client 两个 library face，再组装一个可安装 tarball：
+
+```sh
+npm run build:lib:host
+npm run build:lib:client
+pnpm run pack:xieshujing
+```
+
+产物位于 `.artifacts/xieshujing-plugin/xieshujing-dsh-plugin-<version>.tgz`。它在一个面向用户的 `@xieshujing/dsh-plugin` 门面中携带九个私有 Novel 实现包，而 DSH 框架与 UI 包仍是由目标 Profile 提供的 peer dependency，因而不会额外加载第二套 Cordis 或 Agent runtime。
+
+只需一条插件命令即可把 tarball 安装到现有 Web Profile：
+
+```sh
+pnpm dsh plugin --profile web add \
+  "$PWD/.artifacts/xieshujing-plugin/xieshujing-dsh-plugin-0.1.1-rc.2.tgz"
+pnpm dsh --profile web --port 3082 --no-open
+```
+
+这种中立安装会增加 `novel-workbench` Preset 及其工作台 surface，但不会修改 Profile 默认 Preset。只有明确创建“纯写作 Profile”时才应用 `dedicated-profile.patch.yml`。打包命令完全在本地确定性执行，不访问 GitHub，也不向 npm 发布。
 
 ## 从源码 checkout 启动
 
@@ -62,6 +86,7 @@ Preset 组合与 Skill 目录在页面和选区变化时保持稳定。Skill 正
 ## 已知限制与暂缓事项
 
 - **没有已发布 Profile 入口**：调用方必须在 base 与 Web App 之后显式安装本 bundle；没有内建 `novel-studio` CLI template 或路由切换器。导出的 dedicated patch 可以改变 Profile 默认值，但刻意不负责安装软件包。
+- **尚无远程分发**：PR-B 只生成并验证本地单包 `.tgz`；registry 发布、兼容矩阵自动化，以及干净外部环境中的安装/卸载门禁仍属于后续发布工作。当前产物面向匹配的 DSH `0.1.1-rc.2` 包族。
 - **当前资产范围**：Host 与 Client 注册表已安装 `manuscript.chapter`、自由 `planning.outline`、绑定章节的 `planning.chapter-outline`，以及项目级唯一 `book.brief` / `book.style-profile` / `book.story-state`，并支持一个活动类型化选区和单操作 ChangeSet；人物、灵感、关系与大纲结构编辑仍暂缓。
 - **只有人工审阅的定稿学习**：用户可以把精确章节 Revision 标记为定稿，并审阅草稿/定稿偏好候选；没有自动提升、偏好 RAG、跨书作者画像、排序或模型训练。
 - **没有语义搜索或实时文件事件**：已有有边界的词法 Asset 检索；关系、语义排序、文件监听和浏览器失效事件流尚未实现。

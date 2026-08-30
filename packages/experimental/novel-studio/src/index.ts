@@ -24,7 +24,7 @@ export class NovelStudioPaths extends Service {
   constructor(ctx: Context) {
     super(ctx, 'novelStudioPaths')
     ctx.agentPresets.registerRoot({
-      id: '@deepseek-ai/dsh-experimental-novel-studio',
+      id: '@xieshujing/dsh-plugin',
       root: { path: this.presetRoot, trust: 'system' },
     })
   }

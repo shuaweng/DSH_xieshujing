@@ -1,10 +1,12 @@
-# @deepseek-ai/dsh-experimental-novel-studio
+# WriteBookWhale (写书鲸) — `@xieshujing/dsh-plugin`
 
 English | [中文](README.zh.md)
 
 ## Purpose
 
 This experimental package is the installable, neutral Novel Studio bundle. It composes the file-backed Novel Repository, durable context, safe model tools, browser Remote, and Agent-native workbench without changing the host Profile's default Agent Preset. A dedicated writing Profile may layer the separately exported `dedicated-profile.patch.yml` on top.
+
+The source package remains private and experimental inside this monorepo. The supported distribution boundary is the branded single-package artifact assembled by `pnpm run pack:xieshujing`; publishing that artifact to a registry is intentionally deferred.
 
 ## Behavior
 
@@ -16,6 +18,28 @@ This experimental package is the installable, neutral Novel Studio bundle. It co
 - Historical authored Revisions are read-only evidence. The author can explicitly compare and restore one as a new guarded current Revision; restore never rewinds history, conflicts stale proposals for that Asset, retains Revision-bound analysis evidence, and asks for Story State review when chapter Canon may have changed.
 - `NovelStudioPaths` registers the package-owned Preset root through `ctx.agentPresets.registerRoot()`. The contribution is effect-scoped to this bundle, never replaces another package's root configuration, and disappears if the bundle unloads.
 - Installing the bundle leaves the host Profile's default Preset unchanged. The default `web` and `headless` compositions also remain free of the Novel Repository, context resolver, Novel Remote, workbench, and Novel tools. A product that intentionally dedicates one Profile to writing can apply `dedicated-profile.patch.yml`, which changes only that Profile's unnamed-session default to `novel-workbench`.
+
+## Local one-package artifact
+
+Build both library faces, then assemble one installable tarball:
+
+```sh
+npm run build:lib:host
+npm run build:lib:client
+pnpm run pack:xieshujing
+```
+
+The result is written to `.artifacts/xieshujing-plugin/xieshujing-dsh-plugin-<version>.tgz`. It carries the nine private Novel implementation packages under one public-facing `@xieshujing/dsh-plugin` facade, while DSH framework and UI packages remain peer dependencies supplied by the target Profile. This avoids loading a second Cordis or Agent runtime.
+
+Install the tarball into an existing Web Profile with one plugin command:
+
+```sh
+pnpm dsh plugin --profile web add \
+  "$PWD/.artifacts/xieshujing-plugin/xieshujing-dsh-plugin-0.1.1-rc.2.tgz"
+pnpm dsh --profile web --port 3082 --no-open
+```
+
+This neutral installation adds the `novel-workbench` Preset and its workbench surface but leaves the Profile's default Preset unchanged. Apply `dedicated-profile.patch.yml` only when intentionally creating a writing-only Profile. The packing command is local and deterministic: it neither contacts GitHub nor publishes to npm.
 
 ## Source checkout launch
 
@@ -62,6 +86,7 @@ The Preset composition and Skill catalog are stable across page and selection ch
 ## Known Limitations and Deferred Work
 
 - **No shipped Profile entry** — callers must explicitly install this bundle after base and Web App; there is no built-in `novel-studio` CLI template or route switcher. The exported dedicated patch changes a Profile default but intentionally does not install packages.
+- **No remote distribution yet** — PR-B produces and verifies a local one-package `.tgz`; registry publication, compatibility-matrix automation, and a clean external install/uninstall gate remain release work. The artifact currently targets the matching DSH `0.1.1-rc.2` package family.
 - **Current asset scope** — the Host and Client registries install `manuscript.chapter`, freeform `planning.outline`, chapter-bound `planning.chapter-outline`, and project-singleton `book.brief` / `book.style-profile` / `book.story-state`, with one active type-defined selection and one-operation ChangeSets. Characters, ideas, relations, and structural outline edits remain deferred.
 - **Review-gated finalization learning only** — the user may mark an exact chapter Revision final and review a draft/final preference candidate. There is no automatic promotion, preference RAG, cross-book author profile, ranking, or model training.
 - **No semantic search or live file events** — bounded lexical Asset search is shipped; relations, semantic ranking, file watching, and browser invalidation streams are deferred.

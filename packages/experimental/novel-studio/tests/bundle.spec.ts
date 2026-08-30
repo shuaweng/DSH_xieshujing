@@ -159,7 +159,7 @@ describe('experimental Novel Studio bundle', () => {
     await fiber.await()
     expect(ctx.novelStudioPaths.presetRoot).toBe(resolve(packageRoot, 'presets'))
     expect(contributions).toEqual([{
-      id: '@deepseek-ai/dsh-experimental-novel-studio',
+      id: '@xieshujing/dsh-plugin',
       root: { path: resolve(packageRoot, 'presets'), trust: 'system' },
     }])
     await fiber.dispose()
