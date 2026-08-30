@@ -1,0 +1,4 @@
+.DS_Store
+*.tgz
+
+# The generated node_modules subtree contains WriteBookWhale's bundled private runtime and is intentionally versioned.
