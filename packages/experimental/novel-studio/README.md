@@ -6,7 +6,7 @@ English | [中文](README.zh.md)
 
 This experimental package is the installable, neutral Novel Studio bundle. It composes the file-backed Novel Repository, durable context, safe model tools, browser Remote, and Agent-native workbench without changing the host Profile's default Agent Preset. A dedicated writing Profile may layer the separately exported `dedicated-profile.patch.yml` on top.
 
-The source package remains private and experimental inside this monorepo. The supported distribution boundary is the branded single-package artifact assembled by `pnpm run pack:xieshujing`; publishing that artifact to a registry is intentionally deferred.
+The source package remains private and experimental inside this monorepo. The supported public boundary is the prebuilt `@xieshujing/dsh-plugin` package: `pnpm run pack:xieshujing` produces its tarball, while `pnpm run export:xieshujing-repository` produces the standalone GitHub repository tree from the same staging function. npm registry publication remains deferred.
 
 ## Behavior
 
@@ -40,6 +40,14 @@ pnpm dsh --profile web --port 3082 --no-open
 ```
 
 This neutral installation adds the `novel-workbench` Preset and its workbench surface but leaves the Profile's default Preset unchanged. Apply `dedicated-profile.patch.yml` only when intentionally creating a writing-only Profile. The packing command is local and deterministic: it neither contacts GitHub nor publishes to npm.
+
+Export the exact prebuilt tree used by the public GitHub repository:
+
+```sh
+pnpm run export:xieshujing-repository
+```
+
+The result is written to `.artifacts/xieshujing-repository`. It contains no install-time build or prepare script: the generated `lib` payload and the nine private Novel implementation packages are already present, while DSH framework packages remain peer dependencies. This tree is the release input for the public repository's `main` branch; the monorepo integration history remains on its separate integration branch.
 
 ## Source checkout launch
 
@@ -86,7 +94,7 @@ The Preset composition and Skill catalog are stable across page and selection ch
 ## Known Limitations and Deferred Work
 
 - **No shipped Profile entry** — callers must explicitly install this bundle after base and Web App; there is no built-in `novel-studio` CLI template or route switcher. The exported dedicated patch changes a Profile default but intentionally does not install packages.
-- **No remote distribution yet** — PR-B produces and verifies a local one-package `.tgz`; registry publication, compatibility-matrix automation, and a clean external install/uninstall gate remain release work. The artifact currently targets the matching DSH `0.1.1-rc.2` package family.
+- **GitHub distribution is release-family pinned** — the standalone public repository distributes the same prebuilt package tree and tagged `.tgz` produced locally. npm registry publication and a broader compatibility matrix remain deferred. The current release targets the matching DSH `0.1.1-rc.2` package family.
 - **Current asset scope** — the Host and Client registries install `manuscript.chapter`, freeform `planning.outline`, chapter-bound `planning.chapter-outline`, and project-singleton `book.brief` / `book.style-profile` / `book.story-state`, with one active type-defined selection and one-operation ChangeSets. Characters, ideas, relations, and structural outline edits remain deferred.
 - **Review-gated finalization learning only** — the user may mark an exact chapter Revision final and review a draft/final preference candidate. There is no automatic promotion, preference RAG, cross-book author profile, ranking, or model training.
 - **No semantic search or live file events** — bounded lexical Asset search is shipped; relations, semantic ranking, file watching, and browser invalidation streams are deferred.

@@ -18,7 +18,7 @@ DSH framework, service, and UI packages remain peer dependencies supplied by the
 
 The package's Preset root owner is the stable facade id `@xieshujing/dsh-plugin`, whether running from source or from the staged artifact. Installation remains neutral: it contributes `novel-workbench` but does not change the destination Profile's default Preset. A separate dedicated patch remains an explicit product policy.
 
-`pnpm run pack:xieshujing` writes a deterministic local tarball under `.artifacts/xieshujing-plugin`. The command does not publish or contact GitHub. Remote hosting, registry publication, version-channel automation, and external clean-install/uninstall acceptance remain a later release boundary.
+`pnpm run pack:xieshujing` writes a deterministic local tarball under `.artifacts/xieshujing-plugin`. The command does not publish or contact GitHub. PR-C reuses the same staging function to export the standalone public GitHub repository and adds external installation gates; npm registry publication remains a later release boundary.
 
 ## Testing
 
@@ -40,4 +40,4 @@ The package's Preset root owner is the stable facade id `@xieshujing/dsh-plugin`
 
 A developer can now build one `.tgz` and install WriteBookWhale through the existing DSH plugin command instead of linking ten source packages. The tarball is roughly the Novel implementation closure, not a second DSH installation. Uninstalling the facade removes its plugin rows and Preset contribution while authored Novel Project files remain ordinary user data.
 
-The artifact is intentionally version-coupled to the matching DSH release family through peer ranges. PR-C must validate a clean external Profile, document the supported DSH matrix, add install/upgrade/uninstall acceptance, and choose GitHub/npm distribution. Until then, PR-B is locally installable but not advertised as a public registry release.
+The artifact is intentionally version-coupled to the matching DSH release family through peer ranges. PR-C distributes this exact package tree through GitHub, documents the supported DSH matrix, and validates external installation; npm publication is still deferred. PR-B therefore remains the package-boundary decision, while PR-C owns its public repository and release process.

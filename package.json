@@ -139,6 +139,7 @@
     "release:verify-packed-install": "tsx scripts/release/verify-packed-install.ts",
     "release:publish": "tsx scripts/release/publish.ts",
     "pack:xieshujing": "node --import tsx/esm scripts/package-xieshujing-plugin.ts",
+    "export:xieshujing-repository": "node --import tsx/esm scripts/package-xieshujing-plugin.ts --repository",
     "dsh": "node --import tsx/esm apps/cli/src/bin.ts",
     "demo:code-mode": "node scripts/demo-code-mode.mjs",
     "demo:cordis": "node scripts/demo-cordis.mjs",

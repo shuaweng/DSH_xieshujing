@@ -19,6 +19,12 @@ import { pathToFileURL } from 'node:url'
 const PRODUCT_NAME = '@xieshujing/dsh-plugin'
 const SOURCE_FACADE = 'packages/experimental/novel-studio'
 const SOURCE_PACKAGE_NAME = '@deepseek-ai/dsh-experimental-novel-studio'
+const DISTRIBUTION_FILES = `${SOURCE_FACADE}/distribution`
+const PUBLIC_REPOSITORY = 'https://github.com/shuaweng/DSH_xieshujing'
+const PUBLIC_ASSETS = [
+  ['packages/experimental/novel-workbench/src/client/assets/brand/xieshujing-logo-horizontal-web.png', 'assets/xieshujing-logo.png'],
+  ['packages/experimental/novel-workbench/src/client/assets/brand/xieshujing-app-icon-256.png', 'assets/xieshujing-app-icon.png'],
+] as const
 
 /** Private implementation packages carried inside the public-facing facade. */
 export const INTERNAL_PACKAGE_DIRS = [
@@ -51,6 +57,10 @@ interface PackageManifest {
   files?: string[]
   license?: string
   repository?: unknown
+  homepage?: string
+  bugs?: { url: string }
+  keywords?: string[]
+  engines?: Record<string, string>
   dependencies?: Record<string, string>
   peerDependencies?: Record<string, string>
   optionalDependencies?: Record<string, string>
@@ -178,6 +188,24 @@ function copyDocumentation(sourceRoot: string, destinationRoot: string): void {
   }
 }
 
+function copyDistributionFiles(root: string, destinationRoot: string, version: string): void {
+  const sourceRoot = resolve(root, DISTRIBUTION_FILES)
+  for (const file of walkFiles(sourceRoot)) {
+    const source = join(sourceRoot, ...file.split('/'))
+    const destination = join(destinationRoot, ...file.split('/'))
+    mkdirSync(dirname(destination), { recursive: true })
+    const rendered = readFileSync(source, 'utf8')
+      .replaceAll('{{PLUGIN_VERSION}}', version)
+      .replaceAll('{{DSH_VERSION}}', version)
+    writeFileSync(destination, rendered)
+  }
+  for (const [source, destination] of PUBLIC_ASSETS) {
+    const publicPath = join(destinationRoot, ...destination.split('/'))
+    mkdirSync(dirname(publicPath), { recursive: true })
+    copyFileSync(resolve(root, source), publicPath)
+  }
+}
+
 function stagedInternalManifest(
   manifest: PackageManifest,
   versions: ReadonlyMap<string, string>,
@@ -265,10 +293,32 @@ export function stagePluginPackage(root: string, directory: string): StagedPlugi
     name: PRODUCT_NAME,
     version: sourceManifest.version,
     description: '写书鲸：面向 DeepSeek Harness 的原生小说创作工作台',
-    files: [...(sourceManifest.files ?? []), 'README.zh.md'],
+    files: [
+      ...(sourceManifest.files ?? []),
+      'README.zh.md',
+      'README.en.md',
+      'COMPATIBILITY.md',
+      'SECURITY.md',
+      'NOTICE.md',
+      'assets/**/*',
+    ],
     dependencies: sortedRecord(dependencies),
     peerDependencies: sortedRecord(peers),
     bundledDependencies: [...internalNames].sort(),
+    repository: {
+      type: 'git',
+      url: `git+${PUBLIC_REPOSITORY}.git`,
+    },
+    homepage: `${PUBLIC_REPOSITORY}#readme`,
+    bugs: { url: `${PUBLIC_REPOSITORY}/issues` },
+    keywords: [
+      'ai-writing',
+      'deepseek-harness',
+      'dsh-plugin',
+      'novel-writing',
+      'writing-assistant',
+    ],
+    engines: { node: '^22.19.0 || >=24.0.0' },
   }
   if (sourceManifest.type !== undefined) manifest.type = sourceManifest.type
   if (sourceManifest.main !== undefined) manifest.main = sourceManifest.main
@@ -285,7 +335,19 @@ export function stagePluginPackage(root: string, directory: string): StagedPlugi
   }
   writeFileSync(patchPath, patch.replaceAll(SOURCE_PACKAGE_NAME, PRODUCT_NAME))
 
+  copyDistributionFiles(root, directory, sourceManifest.version)
+
   return { directory, manifest, internalPackageNames: internalNames }
+}
+
+/**
+ * Export the exact prebuilt package tree used as the standalone Git repository.
+ * @param root repository root containing the DSH workspace.
+ * @param output empty destination receiving the distributable repository tree.
+ * @returns staged manifest and carried internal package names.
+ */
+export function exportPluginRepository(root: string, output: string): StagedPluginPackage {
+  return stagePluginPackage(root, output)
 }
 
 function npmPack(
@@ -347,6 +409,12 @@ export function packPluginPackage(root: string, output: string): PackedPluginPac
 
 function main(): void {
   const root = resolve(import.meta.dirname, '..')
+  if (process.argv[2] === '--repository') {
+    const output = resolve(root, process.argv[3] ?? '.artifacts/xieshujing-repository')
+    exportPluginRepository(root, output)
+    process.stdout.write(`${output}\n`)
+    return
+  }
   const output = resolve(root, process.argv[2] ?? '.artifacts/xieshujing-plugin')
   const packed = packPluginPackage(root, output)
   const bytes = statSync(packed.tarball).size

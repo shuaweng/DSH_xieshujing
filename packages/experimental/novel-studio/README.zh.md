@@ -6,7 +6,7 @@
 
 这个实验包是可安装、保持中立的 Novel Studio bundle。它组合文件优先 Novel Repository、持久上下文、安全模型工具、浏览器 Remote 和 Agent 原生工作台，但不改变宿主 Profile 的默认 Agent Preset。专门用于写作的 Profile 可以在其上另行叠加导出的 `dedicated-profile.patch.yml`。
 
-源码包在当前 monorepo 中仍保持私有实验状态。受支持的分发边界是由 `pnpm run pack:xieshujing` 组装出的写书鲸单包产物；把该产物发布到远程 registry 刻意留到后续阶段。
+源码包在当前 monorepo 中仍保持私有实验状态。受支持的公开边界是预构建的 `@xieshujing/dsh-plugin` 包：`pnpm run pack:xieshujing` 生成其 tarball，`pnpm run export:xieshujing-repository` 则通过同一个暂存函数生成独立 GitHub 仓库树。npm registry 发布仍刻意留到后续阶段。
 
 ## 行为
 
@@ -40,6 +40,14 @@ pnpm dsh --profile web --port 3082 --no-open
 ```
 
 这种中立安装会增加 `novel-workbench` Preset 及其工作台 surface，但不会修改 Profile 默认 Preset。只有明确创建“纯写作 Profile”时才应用 `dedicated-profile.patch.yml`。打包命令完全在本地确定性执行，不访问 GitHub，也不向 npm 发布。
+
+导出公共 GitHub 仓库所使用的同一份预构建目录树：
+
+```sh
+pnpm run export:xieshujing-repository
+```
+
+结果位于 `.artifacts/xieshujing-repository`。其中没有安装时 build 或 prepare script：生成的 `lib` payload 与九个私有 Novel 实现包已经就位，DSH 框架包则仍保持 peer dependency。这棵目录是公共仓库 `main` 分支的发布输入；monorepo 集成历史继续保留在独立的 integration 分支。
 
 ## 从源码 checkout 启动
 
@@ -86,7 +94,7 @@ Preset 组合与 Skill 目录在页面和选区变化时保持稳定。Skill 正
 ## 已知限制与暂缓事项
 
 - **没有已发布 Profile 入口**：调用方必须在 base 与 Web App 之后显式安装本 bundle；没有内建 `novel-studio` CLI template 或路由切换器。导出的 dedicated patch 可以改变 Profile 默认值，但刻意不负责安装软件包。
-- **尚无远程分发**：PR-B 只生成并验证本地单包 `.tgz`；registry 发布、兼容矩阵自动化，以及干净外部环境中的安装/卸载门禁仍属于后续发布工作。当前产物面向匹配的 DSH `0.1.1-rc.2` 包族。
+- **GitHub 分发仍锁定 release family**：独立公共仓库分发的预构建包目录与带 tag 的 `.tgz` 和本地产物完全相同。npm registry 发布及更广兼容矩阵仍暂缓；当前 release 面向匹配的 DSH `0.1.1-rc.2` 包族。
 - **当前资产范围**：Host 与 Client 注册表已安装 `manuscript.chapter`、自由 `planning.outline`、绑定章节的 `planning.chapter-outline`，以及项目级唯一 `book.brief` / `book.style-profile` / `book.story-state`，并支持一个活动类型化选区和单操作 ChangeSet；人物、灵感、关系与大纲结构编辑仍暂缓。
 - **只有人工审阅的定稿学习**：用户可以把精确章节 Revision 标记为定稿，并审阅草稿/定稿偏好候选；没有自动提升、偏好 RAG、跨书作者画像、排序或模型训练。
 - **没有语义搜索或实时文件事件**：已有有边界的词法 Asset 检索；关系、语义排序、文件监听和浏览器失效事件流尚未实现。

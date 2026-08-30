@@ -18,7 +18,7 @@ DSH 框架、服务与 UI 包仍作为 peer dependency，由目标 Profile 提�
 
 无论从源码还是从暂存产物运行，包内 Preset 根目录 owner 都使用稳定门面 id `@xieshujing/dsh-plugin`。安装仍保持中立：它贡献 `novel-workbench`，但不修改目标 Profile 的默认 Preset；单独的 dedicated patch 继续表示明确的产品策略。
 
-`pnpm run pack:xieshujing` 会在 `.artifacts/xieshujing-plugin` 下生成确定性的本地 tarball。该命令不发布，也不访问 GitHub。远程托管、registry 发布、版本通道自动化和外部干净环境的安装/卸载验收仍属于后续发布边界。
+`pnpm run pack:xieshujing` 会在 `.artifacts/xieshujing-plugin` 下生成确定性的本地 tarball。该命令不发布，也不访问 GitHub。PR-C 复用同一个暂存函数导出独立公共 GitHub 仓库，并加入外部安装门禁；npm registry 发布仍属于后续发布边界。
 
 ## 测试
 
@@ -40,4 +40,4 @@ DSH 框架、服务与 UI 包仍作为 peer dependency，由目标 Profile 提�
 
 开发者现在可以构建一个 `.tgz`，通过现有 DSH 插件命令安装写书鲸，不再需要链接十个源码包。tarball 携带的是 Novel 实现闭包，而不是第二套 DSH。卸载门面会移除其插件行与 Preset contribution，但作者创建的 Novel Project 文件仍是普通用户数据，不会随插件消失。
 
-该产物通过 peer 范围有意与匹配的 DSH release family 绑定。PR-C 仍需在干净外部 Profile 中验收、记录支持的 DSH 矩阵、加入安装/升级/卸载测试，并选择 GitHub/npm 分发方式。在那之前，PR-B 已可本地安装，但不会被宣传为公共 registry 版本。
+该产物通过 peer 范围有意与匹配的 DSH release family 绑定。PR-C 会通过 GitHub 分发完全相同的包目录、记录支持的 DSH 矩阵并验证外部安装；npm 发布仍暂缓。因此，PR-B 继续负责包边界决策，PR-C 则负责公共仓库与 release 流程。

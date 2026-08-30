@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  exportPluginRepository,
   inspectStagedPackage,
   INTERNAL_PACKAGE_DIRS,
   stagePluginPackage,
@@ -58,5 +59,25 @@ describe('WriteBookWhale one-package artifact', () => {
       'node_modules/@deepseek-ai/dsh-experimental-novel-repository-remote/lib/typert.host.js',
     ]))
     expect(existsSync(join(staged.directory, 'dedicated-profile.patch.yml'))).toBe(true)
+  })
+
+  it('exports a prebuilt public repository without install-time code execution', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'xieshujing-repository-test-'))
+    temporaryDirectories.push(directory)
+    const exported = exportPluginRepository(repositoryRoot, directory)
+    const readme = readFileSync(join(directory, 'README.md'), 'utf8')
+
+    expect(exported.manifest.repository).toEqual({
+      type: 'git',
+      url: 'git+https://github.com/shuaweng/DSH_xieshujing.git',
+    })
+    expect(exported.manifest.engines).toEqual({ node: '^22.19.0 || >=24.0.0' })
+    expect(exported.manifest).not.toHaveProperty('scripts')
+    expect(readme).toContain('dsh plugin --profile web add')
+    expect(readme).not.toContain('{{PLUGIN_VERSION}}')
+    expect(existsSync(join(directory, 'LICENSE'))).toBe(true)
+    expect(existsSync(join(directory, 'assets/xieshujing-logo.png'))).toBe(true)
+    expect(existsSync(join(directory, '.github/workflows/verify.yml'))).toBe(true)
+    expect(existsSync(join(directory, 'scripts/verify-distribution.mjs'))).toBe(true)
   })
 })
