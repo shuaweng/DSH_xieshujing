@@ -18,6 +18,8 @@ import type {
   NovelAssetRevisionDescriptor,
   NovelSelectionDescriptor,
   NovelProjectDescriptor,
+  NovelSkillSettingsDescriptor,
+  ReplaceNovelSkillSettingsRequest,
   RestoreNovelAssetDescriptor,
   RestoreNovelAssetRequest,
   SaveNovelAssetRequest,
@@ -40,6 +42,11 @@ export interface CanvasInjected {
   ) => Promise<readonly NovelAnalysisReportDescriptor[]>
   scanNoAi: (sessionId: SessionId, assetId: string, revisionId: string) => Promise<NovelAnalysisReportDescriptor>
   reviewChapter: (sessionId: SessionId, assetId: string, revisionId: string) => Promise<NovelAnalysisReportDescriptor>
+  skills: (sessionId: SessionId) => Promise<NovelSkillSettingsDescriptor>
+  replaceSkillSettings: (
+    sessionId: SessionId,
+    request: ReplaceNovelSkillSettingsRequest,
+  ) => Promise<NovelSkillSettingsDescriptor>
   finalizations: (sessionId: SessionId, assetId: string) => Promise<readonly NovelRevisionFinalizationDescriptor[]>
   preferenceCandidates: (
     sessionId: SessionId, assetId: string, revisionId: string,
@@ -107,7 +114,7 @@ export function Canvas({
   useSessions, useStore, actions, renderers, initialize, open, revisions, restore, analysisReports, scanNoAi, reviewChapter,
   finalizations, preferenceCandidates, storyStateCandidates, finalizeChapter, acceptPreference, rejectPreference,
   acceptStoryState, rejectStoryState,
-  create, save, capture, appendReference,
+  create, save, capture, appendReference, skills, replaceSkillSettings,
   reportContextFocus = ignoreContextFocus, reportProjectStatus = ignoreProjectStatus, t,
 }: CanvasProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
@@ -119,6 +126,10 @@ export function Canvas({
   const [reports, setReports] = useState<readonly NovelAnalysisReportDescriptor[]>([])
   const [analysisBusy, setAnalysisBusy] = useState(false)
   const [analysisError, setAnalysisError] = useState<string>()
+  const [skillsOpen, setSkillsOpen] = useState(false)
+  const [skillSettings, setSkillSettings] = useState<NovelSkillSettingsDescriptor>()
+  const [skillsBusy, setSkillsBusy] = useState(false)
+  const [skillsError, setSkillsError] = useState<string>()
   const [finalizationItems, setFinalizationItems] = useState<readonly NovelRevisionFinalizationDescriptor[]>([])
   const [preferenceCandidate, setPreferenceCandidate] = useState<NovelPreferenceCandidateDescriptor>()
   const [storyCandidate, setStoryCandidate] = useState<NovelStoryStateCandidateDescriptor>()
@@ -173,6 +184,19 @@ export function Canvas({
     setRestorePreview(undefined)
     setRestoreNotice(undefined)
   }, [state.document?.id])
+
+  useEffect(() => {
+    if (!skillsOpen || sessionId === undefined) return
+    let live = true
+    setSkillsBusy(true)
+    setSkillsError(undefined)
+    void skills(sessionId).then((value) => {
+      if (live) setSkillSettings(value)
+    }).catch((cause: unknown) => {
+      if (live) setSkillsError(errorMessage(cause))
+    }).finally(() => { if (live) setSkillsBusy(false) })
+    return () => { live = false }
+  }, [sessionId, skills, skillsOpen])
 
   useEffect(() => {
     if (sessionId === undefined || state.document === undefined) { setRevisionItems([]); return }
@@ -325,6 +349,28 @@ export function Canvas({
     setAnalysisError(undefined)
   }
 
+  const openSkills = () => {
+    setChapterOutlineOpen(false)
+    setAnalysisMode(undefined)
+    setPreferenceOpen(false)
+    setSkillsOpen(true)
+  }
+
+  const toggleSkill = async (name: string) => {
+    if (sessionId === undefined || skillSettings === undefined || skillsBusy) return
+    const target = skillSettings.skills.find(skill => skill.name === name)
+    if (target === undefined) return
+    const disabled = skillSettings.skills
+      .filter(skill => skill.name === name ? skill.enabled : !skill.enabled)
+      .map(skill => skill.name)
+    setSkillsBusy(true)
+    setSkillsError(undefined)
+    try {
+      setSkillSettings(await replaceSkillSettings(sessionId, { disabled }))
+    } catch (cause: unknown) { setSkillsError(errorMessage(cause)) }
+    finally { setSkillsBusy(false) }
+  }
+
   const markFinal = async () => {
     if (sessionId === undefined || state.document?.type !== 'manuscript.chapter') return
     setPreferenceBusy(true)
@@ -405,9 +451,11 @@ export function Canvas({
     characterCount={characterCount} chapterOutlineAvailable={state.document.type === 'manuscript.chapter'}
     chapterOutlineOpen={chapterOutlineOpen}
     analysisMode={analysisMode} analysisBusy={analysisBusy}
+    skillsOpen={skillsOpen} skillsBusy={skillsBusy}
     openChapterOutline={() => { setChapterOutlineOpen(true) }}
     runNoAi={() => { void runAnalysis('noai-scan') }}
     runReview={() => { openChapterReview() }}
+    openSkills={openSkills}
     setSkin={actions.setReaderSkin} setFont={actions.setReaderFont} setFontSize={actions.setReaderFontSize} t={t}
   />
   return <div className={css.editorShell} data-reader-shell="">
@@ -500,6 +548,14 @@ export function Canvas({
       error={analysisError}
       rerun={() => { void runAnalysis(analysisMode) }}
       close={() => { setAnalysisMode(undefined); setAnalysisError(undefined) }}
+      t={t}
+    />}
+    {skillsOpen && <SkillDrawer
+      settings={skillSettings}
+      busy={skillsBusy}
+      error={skillsError}
+      toggle={(name) => { void toggleSkill(name) }}
+      close={() => { setSkillsOpen(false); setSkillsError(undefined) }}
       t={t}
     />}
     {preferenceOpen && state.document.type === 'manuscript.chapter' && <PreferenceDrawer
@@ -733,6 +789,46 @@ function AnalysisDrawer({ kind, revisionId, report, busy, error, rerun, close, t
   </div>
 }
 
+function SkillDrawer({ settings, busy, error, toggle, close, t }: {
+  readonly settings: NovelSkillSettingsDescriptor | undefined
+  readonly busy: boolean
+  readonly error: string | undefined
+  readonly toggle: (name: string) => void
+  readonly close: () => void
+  readonly t: CanvasProps['t']
+}) {
+  return <div className={css.chapterOutlineBackdrop} onMouseDown={close}>
+    <aside className={css.analysisDrawer} role="dialog" aria-modal="true" aria-label={t('skills')}
+      onMouseDown={(event) => { event.stopPropagation() }}>
+      <header className={css.analysisHeader}>
+        <div><strong>{t('skills')}</strong><small>{t('skillsSessionScope')}</small></div>
+        <div><button type="button" onClick={close}>{t('collapseChapterOutline')} ›</button></div>
+      </header>
+      {error !== undefined && <p className={css.chapterOutlineError} role="alert">{error}</p>}
+      <div className={css.skillBody}>
+        <p className={css.skillIntroduction}>{t('skillsDescription')}</p>
+        {busy && settings === undefined && <p className={css.analysisEmpty}>{t('loadingSkills')}</p>}
+        {settings !== undefined && settings.skills.length === 0
+          && <p className={css.analysisEmpty}>{t('noPresetSkills')}</p>}
+        {settings !== undefined && settings.skills.length > 0 && <div className={css.skillList}>
+          {settings.skills.map(skill => <article className={css.skillRow} key={skill.name}>
+            <div><header><code>{skill.name}</code><span>{skill.enabled ? t('skillEnabled') : t('skillDisabled')}</span></header>
+              <p>{skill.description}</p>
+              {skill.whenToUse !== undefined && <small>{skill.whenToUse}</small>}
+            </div>
+            <label className={css.skillSwitch}>
+              <input type="checkbox" checked={skill.enabled} disabled={busy}
+                aria-label={`${skill.name} · ${skill.enabled ? t('skillEnabled') : t('skillDisabled')}`}
+                onChange={() => { toggle(skill.name) }} />
+              <span aria-hidden="true" />
+            </label>
+          </article>)}
+        </div>}
+      </div>
+    </aside>
+  </div>
+}
+
 function PreferenceDrawer({
   revisionId, candidate, notice, storyCandidate, storyNotice, busy, error,
   accept, reject, acceptStoryState, rejectStoryState, close, t,
@@ -861,7 +957,8 @@ function ReportFindings({ findings, mode, t }: {
 
 function ReaderControls({
   activeSkin, activeFont, fontSize, characterCount, chapterOutlineAvailable, chapterOutlineOpen,
-  analysisMode, analysisBusy, openChapterOutline, runNoAi, runReview, setSkin, setFont, setFontSize, t,
+  analysisMode, analysisBusy, skillsOpen, skillsBusy, openChapterOutline, runNoAi, runReview, openSkills,
+  setSkin, setFont, setFontSize, t,
 }: {
   readonly activeSkin: NovelReaderSkin
   readonly activeFont: NovelReaderFont
@@ -871,9 +968,12 @@ function ReaderControls({
   readonly chapterOutlineOpen: boolean
   readonly analysisMode: 'chapter-review' | 'noai-scan' | undefined
   readonly analysisBusy: boolean
+  readonly skillsOpen: boolean
+  readonly skillsBusy: boolean
   readonly openChapterOutline: () => void
   readonly runNoAi: () => void
   readonly runReview: () => void
+  readonly openSkills: () => void
   readonly setSkin: (skin: NovelReaderSkin) => void
   readonly setFont: (font: NovelReaderFont) => void
   readonly setFontSize: (size: number) => void
@@ -908,6 +1008,9 @@ function ReaderControls({
       </div>
     </section>}
     <div className={css.readerDock}>
+      <button type="button" className={css.skillTrigger} aria-label={t('skills')}
+        aria-expanded={skillsOpen} disabled={skillsBusy} onClick={openSkills}><SkillIcon /></button>
+      <span className={css.dockDivider} aria-hidden="true" />
       {chapterOutlineAvailable && <><button type="button" className={css.chapterOutlineTrigger} aria-label={t('chapterOutline')}
         aria-expanded={chapterOutlineOpen} onClick={openChapterOutline}><ChapterOutlineIcon /></button>
       <button type="button" className={css.reviewTrigger} aria-label={t('chapterReview')}
@@ -933,6 +1036,12 @@ function ChapterOutlineIcon() {
 function ReviewIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.8"
     strokeLinecap="round" strokeLinejoin="round" d="M8 4.5h8M9 3h6v3H9zM6 5.5H5a2 2 0 0 0-2 2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7.5a2 2 0 0 0-2-2h-1M7 11l2 2 4-4m-6 9h10" /></svg>
+}
+
+function SkillIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" strokeWidth="1.7"
+    strokeLinecap="round" strokeLinejoin="round"
+    d="M5 5.5h6M5 9h9M5 12.5h5M16.5 12.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8.8-1.7ZM6.5 16l.65 1.35 1.35.65-1.35.65L6.5 20l-.65-1.35L4.5 18l1.35-.65L6.5 16Z" /></svg>
 }
 
 function chapterOutlineBody(document: NovelAssetDocument): string {
@@ -992,10 +1101,13 @@ function severityLabel(value: string, t: CanvasProps['t']): string {
 function reviewDimensionLabel(value: string | undefined, t: CanvasProps['t']): string {
   if (value === 'plot') return t('dimensionPlot')
   if (value === 'causality') return t('dimensionCausality')
+  if (value === 'logic') return t('dimensionLogic')
   if (value === 'character') return t('dimensionCharacter')
   if (value === 'pacing') return t('dimensionPacing')
   if (value === 'hook') return t('dimensionHook')
   if (value === 'style') return t('dimensionStyle')
+  if (value === 'immersion') return t('dimensionImmersion')
+  if (value === 'ai-pattern') return t('dimensionAiPattern')
   return value ?? t('analysisFinding')
 }
 

@@ -81,6 +81,7 @@ const renderers = { get: () => manuscriptChapterRenderer } as never
 async function openStub(): Promise<NovelAssetDocument> { return chapter() }
 async function createStub(): Promise<NovelAssetDocument> { return chapter() }
 async function reorderStub(_sessionId: SessionId, _request: unknown): Promise<readonly NovelAssetDescriptor[]> { return [] }
+async function deleteStub() { return { deletedAssetIds: [], assets: [] } }
 const canvasAnalysisStubs = {
   initialize: async () => ({
     schema: 1 as const, id: 'project-1' as never, title: '白港', rootDisplayPath: '/story',
@@ -91,6 +92,14 @@ const canvasAnalysisStubs = {
   analysisReports: async () => [],
   scanNoAi: async () => analysisReport('noai-scan'),
   reviewChapter: async () => analysisReport('chapter-review'),
+  skills: async () => ({
+    version: 1 as const,
+    skills: [{ name: 'chapter-review', description: '严格审查章节', enabled: true }],
+  }),
+  replaceSkillSettings: async (_sessionId: SessionId, request: { readonly disabled: readonly string[] }) => ({
+    version: 1 as const,
+    skills: [{ name: 'chapter-review', description: '严格审查章节', enabled: !request.disabled.includes('chapter-review') }],
+  }),
   finalizations: async () => [],
   preferenceCandidates: async () => [],
   storyStateCandidates: async () => [],
@@ -651,6 +660,27 @@ describe('Canvas', () => {
     expect(shortReferenceLabel('😀 一\n二')).toBe('[😀 一 二]')
   })
 
+  it('shows current-preset Skills and persists a per-Session disable choice', async () => {
+    const store = createNovelWorkbenchStore().create()
+    act(() => { store.actions.open(chapter()) })
+    const skills = vi.fn(canvasAnalysisStubs.skills)
+    const replaceSkillSettings = vi.fn(canvasAnalysisStubs.replaceSkillSettings)
+    const view = render(<Canvas
+      {...canvasAnalysisStubs}
+      skills={skills} replaceSkillSettings={replaceSkillSettings}
+      open={openStub} create={createStub}
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+      save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
+    />)
+
+    fireEvent.click(view.getByRole('button', { name: zh.skills }))
+    const dialog = await view.findByRole('dialog', { name: zh.skills })
+    expect(within(dialog).getByText('chapter-review')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: `chapter-review · ${zh.skillEnabled}` }))
+    await waitFor(() => { expect(replaceSkillSettings).toHaveBeenCalledWith(SID, { disabled: ['chapter-review'] }) })
+    await waitFor(() => { expect(within(dialog).getByText(zh.skillDisabled)).toBeTruthy() })
+  })
+
   it('creates a chapter-bound freeform plan from the manuscript bar and references it to the Agent', async () => {
     const store = createNovelWorkbenchStore().create()
     const document = chapter()
@@ -1015,14 +1045,14 @@ describe('Explorer', () => {
     let refresh: (() => void) | undefined
     const onRefresh = vi.fn((listener: () => void) => { refresh = listener; return () => { refresh = undefined } })
     const view = render(<Explorer
-      create={createStub} reorder={reorderStub}
+      create={createStub} reorder={reorderStub} delete={deleteStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={load} open={open} onRefresh={onRefresh} t={t}
     />)
     await waitFor(() => { expect(view.getByText('第一章')).toBeTruthy() })
     await waitFor(() => { expect(store.getSnapshot().document?.id).toBe(first.id) })
-    expect(view.getByText(zh.chapters).parentElement?.textContent).toContain('2 章')
-    expect(view.getByText(zh.outline).parentElement?.textContent).toContain('0 项')
+    expect(view.getByText(`${zh.chapters}（2${zh.chapterUnit}）`)).toBeTruthy()
+    expect(view.getByText(`${zh.outline}（0${zh.assetUnit}）`)).toBeTruthy()
     fireEvent.click(view.getByText('第二章'))
     await waitFor(() => { expect(store.getSnapshot().document?.id).toBe(second.id) })
     await waitFor(() => { expect(view.getByText('第二章').closest('button')?.getAttribute('data-active')).toBe('true') })
@@ -1042,14 +1072,14 @@ describe('Explorer', () => {
     })
     const create = vi.fn(async () => created)
     const view = render(<Explorer
-      reorder={reorderStub}
+      reorder={reorderStub} delete={deleteStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={async () => ({ project: { title: '国运擂台' } as never, assets: [] })}
       open={vi.fn()} create={create} onRefresh={() => () => {}} t={t}
     />)
 
-    await waitFor(() => { expect(view.getByText(`＋ ${zh.addChapter}`)).toBeTruthy() })
-    fireEvent.click(view.getByText(`＋ ${zh.addChapter}`))
+    await waitFor(() => { expect(view.getByRole('button', { name: `＋${zh.addChapter}` })).toBeTruthy() })
+    fireEvent.click(view.getByRole('button', { name: `＋${zh.addChapter}` }))
     await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
       type: 'manuscript.chapter',
       title: zh.newChapterTitle,
@@ -1057,6 +1087,40 @@ describe('Explorer', () => {
     }) })
     expect(store.getSnapshot().document?.id).toBe(created.id)
     expect(view.getByText(zh.newChapterTitle)).toBeTruthy()
+  })
+
+  it('deletes an Asset after confirmation and removes it from the current catalog', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const first = chapter()
+    const second = chapter({
+      id: 'asset-chapter-2' as never,
+      revisionId: 'revision-2' as never,
+      title: '第二章',
+      projectRelativePath: 'manuscript/chapter-2.md',
+    })
+    const descriptors = [first, second].map(({ content: _content, ...descriptor }) => descriptor)
+    const deleteAsset = vi.fn(async () => ({
+      deletedAssetIds: [first.id],
+      assets: [descriptors[1]!],
+    }))
+    const view = render(<Explorer
+      create={createStub} reorder={reorderStub} delete={deleteAsset}
+      useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
+      renderers={renderers} load={async () => ({ project: { title: '白港' } as never, assets: descriptors })}
+      open={async (_sid, id) => id === first.id ? first : second} onRefresh={() => () => {}} t={t}
+    />)
+    await waitFor(() => { expect(view.getByText('第一章')).toBeTruthy() })
+    fireEvent.click(view.getByRole('button', { name: `${zh.deleteAsset} 第一章` }))
+    const dialog = view.getByRole('dialog', { name: '第一章' })
+    expect(within(dialog).getByText(zh.deleteAssetConfirm.replace('{title}', '第一章'))).toBeTruthy()
+    expect(deleteAsset).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: zh.confirmDeleteAsset }))
+    await waitFor(() => { expect(deleteAsset).toHaveBeenCalledWith(SID, {
+      assetId: first.id,
+      baseRevisionId: first.revisionId,
+    }) })
+    await waitFor(() => { expect(view.queryByText('第一章')).toBeNull() })
+    expect(store.getSnapshot().assets.map(asset => asset.id)).toEqual([second.id])
   })
 
   it('reorders chapters from the dragged row and keeps the returned catalog order', async () => {
@@ -1071,7 +1135,7 @@ describe('Explorer', () => {
     const reorder = vi.fn(async (_sid: SessionId, request: { orderedAssetIds: readonly string[] }) =>
       request.orderedAssetIds.map(id => descriptors.find(asset => asset.id === id)!))
     const view = render(<Explorer
-      create={createStub} reorder={reorder as never}
+      create={createStub} reorder={reorder as never} delete={deleteStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={async () => ({ project: { title: '白港' } as never, assets: descriptors })}
       open={async (_sid, id) => id === first.id ? first : second} onRefresh={() => () => {}} t={t}
@@ -1094,7 +1158,7 @@ describe('Explorer', () => {
     async function mountWith(load: () => Promise<never> | Promise<{ assets: never[] }>, open = vi.fn()) {
       const store = createNovelWorkbenchStore().create()
       const view = render(<Explorer
-        create={createStub} reorder={reorderStub}
+        create={createStub} reorder={reorderStub} delete={deleteStub}
         useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
         renderers={renderers} load={load as never} open={open} onRefresh={() => () => {}} t={t}
       />)
@@ -1113,7 +1177,7 @@ describe('Explorer', () => {
     const store = createNovelWorkbenchStore().create()
     const descriptor = { ...chapter(), content: undefined } as never
     const openFailure = render(<Explorer
-      create={createStub} reorder={reorderStub}
+      create={createStub} reorder={reorderStub} delete={deleteStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers}
       load={async () => ({ project: {} as never, assets: [descriptor] })}
@@ -1124,7 +1188,7 @@ describe('Explorer', () => {
     await waitFor(() => { expect(store.getSnapshot().error).toBe('open failed') })
   })
 
-  it('renders the semantic book-to-volume hierarchy and creates a freeform volume outline', async () => {
+  it('keeps the book outline singular while creating volume outlines beneath it', async () => {
     const store = createNovelWorkbenchStore().create()
     const manuscript = chapter()
     const { parentId: _chapterParent, ...book } = chapterOutline({
@@ -1142,31 +1206,34 @@ describe('Explorer', () => {
       projectRelativePath: 'planning/volume.md',
       content: { kind: 'outline', level: 'volume', body: '自由卷纲' },
     })
-    const created = chapterOutline({
+    const createdVolume = chapterOutline({
       id: 'outline-volume-2' as never,
       type: 'planning.outline',
       parentId: book.id,
-      title: '新卷纲',
-      projectRelativePath: 'planning/new-volume.md',
+      title: zh.newVolumeOutlineTitle,
+      projectRelativePath: 'planning/volume-2.md',
       content: { kind: 'outline', level: 'volume', body: '' },
     })
     const descriptors = [manuscript, book, volume].map(({ content: _content, ...descriptor }) => descriptor)
-    const create = vi.fn(async () => created)
-    const open = vi.fn(async (_sid: SessionId, id: string) => [manuscript, book, volume, created].find(asset => asset.id === id)!)
+    const create = vi.fn(async () => createdVolume)
+    const open = vi.fn(async (_sid: SessionId, id: string) => [manuscript, book, volume].find(asset => asset.id === id)!)
     const view = render(<Explorer
-      reorder={reorderStub}
+      reorder={reorderStub} delete={deleteStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={async () => ({ project: { title: '白港' } as never, assets: descriptors })}
       open={open} create={create} onRefresh={() => () => {}} t={t}
     />)
     await waitFor(() => { expect(view.getByText('全书大纲')).toBeTruthy() })
     expect(view.getByText('第一卷卷纲')).toBeTruthy()
-    fireEvent.click(view.getByText(`＋ ${zh.addVolumeOutline}`))
+    expect(view.queryByRole('button', { name: `＋${zh.addBookOutline}` })).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: `＋${zh.addVolumeOutline}` }))
     await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
-      type: 'planning.outline', title: zh.newVolumeOutlineTitle, parentId: book.id,
+      type: 'planning.outline',
+      title: zh.newVolumeOutlineTitle,
+      parentId: book.id,
       content: { kind: 'outline', level: 'volume', body: '' },
     }) })
-    expect(store.getSnapshot().document?.id).toBe(created.id)
+    expect(store.getSnapshot().document?.id).toBe(createdVolume.id)
   })
 
   it('renders project-level book guidance and lets the author create each singleton Asset', async () => {
@@ -1197,32 +1264,31 @@ describe('Explorer', () => {
       request.type === 'book.brief' ? createdBrief
         : request.type === 'book.style-profile' ? createdStyle : createdStoryState)
     const view = render(<Explorer
-      reorder={reorderStub}
+      reorder={reorderStub} delete={deleteStub}
       useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers}
       load={async () => ({ project: { title: '白港' } as never, assets: [{ ...manuscript, content: undefined }] as never })}
       open={async () => manuscript} create={create} onRefresh={() => () => {}} t={t}
     />)
-    await waitFor(() => { expect(view.getByText(zh.bookGuidance)).toBeTruthy() })
-    expect(view.getByText(zh.bookGuidance).parentElement?.textContent).toContain('0 项')
-    fireEvent.click(view.getByText(`＋ ${zh.addBookBrief}`))
+    await waitFor(() => { expect(view.getByText(`${zh.bookGuidance}（0${zh.assetUnit}）`)).toBeTruthy() })
+    fireEvent.click(view.getByRole('button', { name: `＋${zh.addBookBrief}` }))
     await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
       type: 'book.brief', title: zh.newBookBriefTitle, content: { kind: 'book-brief', body: '' },
     }) })
     expect(view.getByText(zh.newBookBriefTitle)).toBeTruthy()
-    fireEvent.click(view.getByText(`＋ ${zh.addBookStyleProfile}`))
+    fireEvent.click(view.getByRole('button', { name: `＋${zh.addBookStyleProfile}` }))
     await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
       type: 'book.style-profile', title: zh.newBookStyleProfileTitle,
       content: { kind: 'book-style-profile', body: '' },
     }) })
     expect(view.getByText(zh.newBookStyleProfileTitle)).toBeTruthy()
-    fireEvent.click(view.getByText(`＋ ${zh.addBookStoryState}`))
+    fireEvent.click(view.getByRole('button', { name: `＋${zh.addBookStoryState}` }))
     await waitFor(() => { expect(create).toHaveBeenCalledWith(SID, {
       type: 'book.story-state', title: zh.newBookStoryStateTitle,
       content: { kind: 'book-story-state', body: '' },
     }) })
     expect(view.getAllByText(zh.newBookStoryStateTitle)).toHaveLength(2)
-    expect(view.getByText(zh.bookGuidance).parentElement?.textContent).toContain('3 项')
+    expect(view.getByText(`${zh.bookGuidance}（3${zh.assetUnit}）`)).toBeTruthy()
   })
 
   it('cancels late load outcomes and ignores chapter clicks without a Session', async () => {
@@ -1234,7 +1300,7 @@ describe('Explorer', () => {
         resolveLoad = resolve; rejectLoad = reject
       })
       const view = render(<Explorer
-        create={createStub} reorder={reorderStub}
+        create={createStub} reorder={reorderStub} delete={deleteStub}
         useStore={hookOf(store) as never} actions={store.actions} useSessions={sessionHook(SID) as never} useWorkspaces={vi.fn() as never}
         renderers={renderers} load={() => promise} open={vi.fn()} onRefresh={() => () => {}} t={t}
       />)
@@ -1249,7 +1315,7 @@ describe('Explorer', () => {
     act(() => { store.actions.loaded({} as never, [{ ...chapter(), content: undefined }] as never) })
     const open = vi.fn()
     const view = render(<Explorer
-      create={createStub} reorder={reorderStub}
+      create={createStub} reorder={reorderStub} delete={deleteStub}
       useStore={hookOf(store)} actions={{ ...store.actions, reset: vi.fn() }}
       useSessions={sessionHook(undefined) as never} useWorkspaces={vi.fn() as never}
       renderers={renderers} load={vi.fn()} open={open} onRefresh={() => () => {}} t={t}

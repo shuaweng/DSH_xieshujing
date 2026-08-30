@@ -151,6 +151,8 @@ export interface NovelProjectSnapshot {
   readonly contentRoots: Readonly<Record<string, FsTarget>>
   /** Optional authored Asset sequences keyed by exact Asset type. */
   readonly assetOrder: Readonly<Record<string, readonly AssetId[]>>
+  /** Logically deleted authored Assets retained on disk for recovery and history replay. */
+  readonly deletedAssetIds?: readonly AssetId[]
 }
 
 /** Minimal authored input for activating one existing directory as a Novel Project. */
@@ -203,6 +205,18 @@ export interface ReorderAssetsRequest {
   readonly type: NovelAssetType
   /** Every current Asset id of that type, exactly once, in the desired order. */
   readonly orderedAssetIds: readonly AssetId[]
+}
+
+/** Guarded user request to remove one current Asset and its semantic descendants. */
+export interface DeleteAssetRequest {
+  readonly assetId: AssetId
+  readonly baseRevisionId: RevisionId
+}
+
+/** Current catalog after one logical deletion publication. */
+export interface DeleteAssetResult {
+  readonly deletedAssetIds: readonly AssetId[]
+  readonly assets: readonly AssetSummary[]
 }
 
 /** One exact current Revision discovered by the repository search seam. */

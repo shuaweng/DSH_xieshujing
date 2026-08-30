@@ -201,7 +201,7 @@ describe('LocalNovelRepository', () => {
     await expect(readFile(join(dir, 'novel.yaml'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('enforces registered project-singleton Asset types for creation and authored scans', async () => {
+  it('enforces project-singleton creation while exposing external duplicates for deletion recovery', async () => {
     const dir = await tempDir()
     await mkdir(join(dir, 'manuscript'))
     await mkdir(join(dir, 'notes'))
@@ -225,8 +225,14 @@ describe('LocalNovelRepository', () => {
       '---', 'novel:', '  schema: 1', '  id: duplicate-note', '  type: bible.test',
       '  title: 外部重复', '---', '外部写入。',
     ].join('\n'))
-    await expect(ctx.novelRepository.listAssets(novel))
-      .rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
+    const conflicted = await ctx.novelRepository.listAssets(novel)
+    expect(conflicted.map(item => item.title).sort()).toEqual(['唯一资料', '外部重复'].sort())
+    const duplicate = conflicted.find(item => item.title === '外部重复')!
+    await expect(ctx.novelRepository.deleteAsset(novel, {
+      assetId: duplicate.asset.id,
+      baseRevisionId: duplicate.revisionId,
+    })).resolves.toMatchObject({ deletedAssetIds: [duplicate.asset.id] })
+    await expect(ctx.novelRepository.listAssets(novel)).resolves.toHaveLength(1)
   })
 
   it('creates a registered typed Asset at a repository-owned path and retains its first Revision', async () => {
@@ -309,6 +315,33 @@ describe('LocalNovelRepository', () => {
     await expect(ctx.novelRepository.reorderAssets(rediscovered, {
       type: 'manuscript.chapter', orderedAssetIds: [first.asset.id],
     })).rejects.toMatchObject({ code: 'NOVEL_ASSET_INVALID' })
+  })
+
+  it('logically deletes a current Asset while retaining its authored file and Revision history', async () => {
+    const dir = await tempDir()
+    await mkdir(join(dir, 'manuscript'))
+    await writeFile(join(dir, 'novel.yaml'), manifest())
+    const ctx = await boot(dir)
+    const novel = await project(ctx)
+    const created = await ctx.novelRepository.createAsset(novel, {
+      type: 'manuscript.chapter', title: '待删除章节', content: { kind: 'manuscript', body: '仍需保留。' },
+      actor: { kind: 'user', sessionId: SessionId('session-user') },
+    })
+
+    const result = await ctx.novelRepository.deleteAsset(novel, {
+      assetId: created.asset.id,
+      baseRevisionId: created.revisionId,
+    })
+
+    expect(result.deletedAssetIds).toEqual([created.asset.id])
+    expect(result.assets).toEqual([])
+    expect(await ctx.novelRepository.listAssets(novel)).toEqual([])
+    expect(await readFile(join(dir, created.asset.projectRelativePath), 'utf8')).toContain('仍需保留。')
+    expect(await ctx.novelRepository.listAssetRevisions(novel, created.asset.id)).toHaveLength(1)
+    expect(parseProjectManifest(await readFile(join(dir, 'novel.yaml'), 'utf8'), 'novel.yaml').deletedAssetIds)
+      .toEqual([created.asset.id])
+    await expect(ctx.novelRepository.readAsset(novel, created.asset.id))
+      .rejects.toMatchObject({ code: 'NOVEL_ASSET_NOT_FOUND' })
   })
 
   it('discovers a second registered Asset type without repository type branches', async () => {

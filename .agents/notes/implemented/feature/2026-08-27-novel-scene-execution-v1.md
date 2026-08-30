@@ -42,6 +42,14 @@ All package-owned Novel Skills now place `novelContextPolicy` under standard Ski
 - Bundle tests parse every packaged Skill frontmatter and verify that each context policy is exposed through standard metadata; the two scene-writing Skills expose version one.
 - Targeted TypeScript builds and the focused repository, tool, and bundle suites pass. Browser automation was intentionally omitted; manual product verification is the handoff for this PR.
 
+## Alternatives considered
+
+**Generate prose directly from the chapter outline.** This preserves the shortest path but leaves dramatic action, resistance, information release, and state change implicit at the point where they most affect scene quality.
+
+**Persist every execution draft as a new Asset.** Permanent Scene Contracts would add author-visible structure and context growth before the temporary execution shape has proved stable.
+
+**Generate several full prose candidates by default.** Full alternatives spend substantially more tokens and create review burden; short action options concentrate exploration on the decision that changes the scene.
+
 ## Consequences
 
 Scene execution is more deliberate without forcing authors into a rigid outline schema or adding persistent context bulk. Lineage is sufficient to compare future Skill and context strategies while remaining small and independent of manuscript length. It does not itself decide which strategy writes better prose; preference learning and any later evaluation system can use these coordinates only when the product has real author decisions to compare.

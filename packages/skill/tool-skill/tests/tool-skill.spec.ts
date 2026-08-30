@@ -157,6 +157,31 @@ async function mintAgentScope(ctx: Context, subject: string | Agent): Promise<{ 
 }
 
 describe('dsh-tool-skill', () => {
+  it('persists per-Session disabled Skills across catalog and loader boundaries', async () => {
+    const home = await tempDir('tool-activation')
+    const ctx = await setup(home)
+    ctx.skills.register({ name: 'strict-review', description: 'Strict review', source: 'runtime', content: 'Review.' })
+    ctx.skills.register({ name: 'scene-drive', description: 'Scene drive', source: 'runtime', content: 'Drive.' })
+    const session = Session.create(SessionId('skill-activation'))
+    const agent = sessionAgent(session)
+    toolSkill.replaceSkillActivationSettings(session, ['strict-review'])
+
+    const messages = await composePrefixForAgent(ctx, agent)
+    expect(JSON.stringify(messages)).toContain('scene-drive')
+    expect(JSON.stringify(messages)).not.toContain('strict-review')
+    expect(toolSkill.skillActivationSettings(session)).toEqual({ version: 1, disabled: ['strict-review'] })
+
+    const result = await ctx.tools.execute({
+      signal: testToolSignal,
+      callId: CallId('disabled-skill'),
+      name: 'skill',
+      arguments: { name: 'strict-review' },
+      agent,
+    })
+    expect(result.isError).toBe(true)
+    expect(JSON.stringify(result.content)).toContain('disabled for this session')
+  })
+
   it('registers the skill tool schema and removes it on dispose', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
@@ -769,7 +794,7 @@ describe('dsh-tool-skill', () => {
       callId: CallId('c1'),
       name: 'skill',
       arguments: { name: 'project-skill' },
-      agent: { session: { header: { cwd: project } } } as never,
+      agent: { session: { header: { cwd: project }, events: [] } } as never,
     })
 
     expect(result.isError).toBe(false)

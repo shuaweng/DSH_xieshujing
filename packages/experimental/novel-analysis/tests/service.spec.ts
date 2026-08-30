@@ -35,7 +35,13 @@ const review = (score: number) => ({
   verdict: score > 80 ? '章节推进清楚，钩子有效。' : '核心行动偏弱，需要收紧。',
   dimensions: [
     { id: 'plot', score, summary: '核心事件保持单一。' },
+    { id: 'logic', score, summary: '行动因果可以复核。' },
+    { id: 'character', score, summary: '人物选择与已知信息一致。' },
+    { id: 'pacing', score, summary: '关键阻力出现及时。' },
     { id: 'hook', score, summary: '章尾留下有效行动问题。' },
+    { id: 'style', score, summary: '叙述声音保持稳定。' },
+    { id: 'immersion', score, summary: '没有明显出戏表达。' },
+    { id: 'ai-pattern', score, summary: '已复核模板化表达。' },
   ],
   findings: [{
     severity: 'medium', category: 'pacing', quote: '白港下雨了',
@@ -195,7 +201,7 @@ describe('NovelAnalysis', () => {
     const signal = new AbortController().signal
     const first = await ctx.novelAnalysis.reviewChapter(agent, AssetId('chapter-analysis'), revisionId, signal)
     expect(first).toMatchObject({
-      kind: 'chapter-review', revisionId, analyzerVersion: 'chapter-review/1',
+      kind: 'chapter-review', revisionId, analyzerVersion: 'chapter-review/2',
       sourceSessionId: agent.id, workerSessionId: 'review-worker-1', data: { version: 1, overallScore: 72 },
     })
     expect(provider.requests[0]).toMatchObject({
@@ -209,6 +215,8 @@ describe('NovelAnalysis', () => {
     expect(promptItem.text).toContain('"policies":["chapter-review"]')
     expect(promptItem.text).toContain('"assetId":"chapter-analysis"')
     expect(promptItem.text).toContain(`"revisionId":"${revisionId}"`)
+    expect(promptItem.text).toContain('<deterministic-noai>')
+    expect(promptItem.text).toContain('禁止礼貌性夸奖')
 
     provider.structured = review(91)
     const second = await ctx.novelAnalysis.reviewChapter(agent, AssetId('chapter-analysis'), revisionId, signal)

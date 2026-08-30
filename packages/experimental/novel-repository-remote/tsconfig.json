@@ -21,6 +21,12 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../skill/skill"
+    },
+    {
+      "path": "../../skill/tool-skill"
+    },
+    {
       "path": "../../util/brand"
     },
     {

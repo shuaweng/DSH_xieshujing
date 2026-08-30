@@ -67,10 +67,11 @@ export const planningOutlineTypeDefinition = {
   type: 'planning.outline',
   contentRoot: 'planning',
   extensions: ['.md'],
+  rootSingleton: true,
   parent: { allowedTypes: ['planning.outline'], maxDepth: 1 },
   model: {
     description: 'A freeform Markdown book outline or volume outline. Its prose, headings, lists, and tables are author-defined.',
-    creationInstructions: 'Create content {"kind":"outline","level":"book"|"volume","body":"<free Markdown>"}. A volume outline requires parent_asset_id naming a book outline; a book outline has no parent.',
+    creationInstructions: 'A project has exactly one parentless book outline. Before creating level "book", confirm none exists. Create content {"kind":"outline","level":"book"|"volume","body":"<free Markdown>"}. A volume outline requires parent_asset_id naming the one book outline.',
     proposalInstructions: 'Rename with {"kind":"update-title","title":"..."}; rewrite free Markdown with {"kind":"replace-text","startUtf16":<integer>,"endUtf16":<integer>,"replacement":"..."}. Submit either one operation or combine one of each in the same operations array. Offsets address the body returned by novel_get. Do not force goal/conflict/turn fields unless the author asks for that format.',
   },
   parse: parseOutline,

@@ -14,6 +14,8 @@ Every catalog message carries the `skill-catalog` source: a `catalog`-form conte
 
 The catalog is omitted when no model-invocable skills are initially available, and also when that agent's tool view restricts away the shipped `skill` tool or resolves a same-name scoped shadow instead. Identity is compared against the definition this plugin registered rather than a lookup of its own name, so the plugin works mounted globally or inside one agent's composition, where `register()` files into that agent's layer alone. Visibility changes participate in the digest, keeping prompt guidance, model-visible schema, and executable dispatch aligned.
 
+`skill/activation` records a latest-wins complete set of disabled Skill names for one Session. Disabled Skills are removed from later catalog replacements, rejected by the model-facing loader, and ignored by explicit `/skill` invocation; re-enabling a Skill leaves prior catalog history intact and republishes the current catalog at the next eligible pre-step. New Skills default to enabled, and settings in one Session do not affect another Session.
+
 `catalogDescriptionMaxLength` controls normalized catalog descriptions; rendering XML-escapes them. Its default is `500` and values must be integers of at least `3`, which reserves room for a truncation ellipsis. The [skill catalog hot-refresh Agent Note](../../../.agents/notes/implemented/feature/2026-07-27-skill-catalog-hot-refresh.md) owns the durable initial catalog and replacement lifecycle.
 
 ## Tool: `skill`
@@ -26,7 +28,7 @@ Execution uses the calling agent's `session.header.cwd` so workspace-sensitive p
 
 Resource guidance resolves only paths or URLs explicitly referenced by the instructions against `resourceBase`; scripts, references, and assets load on demand, and the result does not enumerate a skill directory. Local providers may supply a directory, while remote or embedded providers may supply a URL or opaque loading guidance.
 
-An unresolved name reports that the skill is unknown or no longer available. Invalid names and skills whose `invocation.modelInvocable` is `false` produce distinct error results. `invocation.userInvocable` does not restrict this model-facing tool.
+An unresolved name reports that the skill is unknown or no longer available. Invalid names, Session-disabled Skills, and Skills whose `invocation.modelInvocable` is `false` produce distinct error results. `invocation.userInvocable` does not restrict this model-facing tool.
 
 Tool execution does not add a synthetic context message. Its freshly loaded result is already recorded as the tool result and becomes available to the next model step without duplicating the body. Only the catalog projection adds replacement summaries.
 

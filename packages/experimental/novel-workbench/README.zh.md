@@ -12,10 +12,11 @@
 - 整个工作台按 Preset 限定。只有精确选择 `novel-workbench` 时，才会在 `conversation.input.left`、原生 access/plan 控件旁得到纯图标“小说工作台”开关；其无障碍名称与悬浮提示仍保留完整动作说明。已经开始的 Session 读取已提交摘要，空白 Composer 则读取 Agent preset 选择器所用的同一份只读暂存值。Session 仍从普通 DSH Frame 开始；作者无需切换 preset 或修改作者数据即可展开/收起工作台。切到任何其他 preset 会立即恢复普通 Frame 并移除按钮。
 - 桌面组合把 Agent 对话放在左侧，把正文浏览器与创作画布放在右侧，同时在最外侧保留可折叠的原生 DSH Session 侧栏。无障碍拖拽分隔条（也支持方向键）会按动画帧频率预览 CSS track，并在松开时只提交一次经过边界限制的宽度，因此作者工作台不会随每个 pointer 事件重渲染。
 - 原生 DSH 侧栏仍然可用，可收起或展开以搜索和导航会话。切换 Session 不会替换已选中的小说 surface；切到不符合条件的 preset 会关闭它。
-- 资产浏览器发现当前 Session 的 Novel Project，呈现逻辑“本书”引导分组、稳定的“正文”与“大纲 → 卷纲”分支（包括空分支），可以创建可编辑章节、项目级唯一的本书概述/本书风格和自由大纲/卷纲，打开绑定精确 Revision 的类型化 Asset 文档，并可独立于 DSH Session 侧栏收起。正文章节支持原生拖动排序，先乐观预览，再由 Remote 确认权威顺序，失败时回滚。层级来自语义类型与父级 id，而不是文件路径。
+- 资产浏览器发现当前 Session 的 Novel Project，呈现逻辑“本书”引导分组、稳定的“正文”与“大纲 → 卷纲”分支（包括空分支），可以创建可编辑章节与缺失的项目级唯一书本指导 Asset，打开绑定精确 Revision 的类型化 Asset 文档，并可独立于 DSH Session 侧栏收起。唯一的全书大纲仍只交给 Agent/领域工具创建；每个已显示的全书大纲在其下方提供作用域明确的“新建卷纲”操作。外部遗留的单例冲突仍会显示并允许删除修复，不再拖垮整个 Explorer。删除使用工作台自有且跟随主题的确认弹窗，并保留作者文件与历史。正文章节支持原生拖动排序，先乐观预览，再由 Remote 确认权威顺序，失败时回滚。层级来自语义类型与父级 id，而不是文件路径。
 - 当精确 Session 根目录没有 `novel.yaml` 时，资产浏览器与 Context Tray 会进入中性未初始化状态，不发起 Asset 或上下文工作集请求。画布只要求输入书名，通过与 Agent 工具相同的 Remote/Repository 操作完成初始化，然后刷新为普通资产界面；已有但损坏的清单仍会明确报错。
 - `ctx.novelAssetRenderers` 拥有 effect 作用域内、按精确类型匹配的编辑器、选区描述、可选阅读展示和 Diff contribution。键盘输入只更新浏览器本地脏草稿，不调用 Repository，也不创建永久 Revision。共享画布只会在显式保存，或引用、分析、定稿、Revision 导航等语义 Context Commit Barrier 上发布这份草稿；缺少 renderer 时会明确拒绝，而不是展示误导性的通用编辑器。
 - 内置正文 Renderer 通过同一次带 Revision 保护的保存编辑章节名称与正文、捕获简单 UTF-16 范围、统计排除空白后的作者字符，并启用全高居中的纸张画布。跨整个工作台的底栏及六套联动皮肤、字体和字号控件由所有 Asset Renderer 共用；只有正文额外显示本章字数与章纲入口。
+- 工作台全宽底栏可以打开 Skills 抽屉，列出当前小说 Preset 提供且作者可见的 Skills。每个开关都会为当前 Session 写入一份完整禁用集合：关闭的 Skill 会从 Agent 下一份 Skill 目录中消失，不能再通过 `skill` 工具或显式调用加载，但其他对话不受影响。
 - 章节头部会列出带来源与时间戳的不可变 Revision。打开历史 Revision 时仍使用同一个 Renderer 和分析控件，但标题/正文只读。“恢复此版本”会使用同一 Renderer 展示当前版与选中历史版的对照，并要求用户明确确认；成功后创建新的当前 Revision、标明恢复来源、报告因此冲突的陈旧提案数量，并提醒章节作者复查 Story State，而不是静默回滚 Canon。
 - 仅章节拥有的审稿与 `NOAI` 动作位于底栏。两者都会为当前显示的精确 Revision 打开右侧抽屉。NOAI 会立即运行确定性扫描；打开审稿页本身不会启动模型，只展示已有报告，只有作者明确点击“开始审查”或重跑才启动固定只读审稿人。每种成功报告在每个 Revision 上只保留一份，因此切换历史版本也会切换到对应报告。
 - 章节头部可以把屏幕上的精确 Revision 标记为定稿。满足条件的 Agent 草稿/作者定稿比较会打开偏好抽屉并展示前后证据；候选在作者采纳前不会改变任何内容，采纳后通过 ChangeSet 写入精确“本书风格”Revision，拒绝决策同样可审计。
@@ -41,7 +42,7 @@ Client 包本身不加入隐藏模型内容。显式 mention 与可见 Context T
 
 #### KV Cache 影响
 
-打开资产、编辑草稿、审阅 ChangeSet 和切换面板都不会改变模型工具目录或 system prompt。
+打开资产、编辑草稿和审阅 ChangeSet 都不会改变模型工具目录或 system prompt。切换 Skill 会追加持久的 Session 级设置，并使下一次合格 pre-step 发布一份替换 Skill 目录；它不会修改工具 schema 或其他 Session。
 
 ## 已知限制与延期工作
 

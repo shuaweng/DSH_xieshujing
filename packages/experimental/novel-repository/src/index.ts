@@ -16,6 +16,8 @@ import type {
   AssetSearchResult,
   CaptureSelectionRequest,
   CreateAssetRequest,
+  DeleteAssetRequest,
+  DeleteAssetResult,
   InitializeNovelProjectRequest,
   ChangeSet,
   ChangeSetAuthorization,
@@ -60,6 +62,8 @@ export type {
   AssetSearchResult,
   CaptureSelectionRequest,
   CreateAssetRequest,
+  DeleteAssetRequest,
+  DeleteAssetResult,
   InitializeNovelProjectRequest,
   ChangeSet,
   ChangeSetAuthorization,
@@ -201,6 +205,22 @@ export abstract class NovelRepository extends Service {
     signal?: AbortSignal,
     sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<AssetSnapshot>
+
+  /**
+   * Logically delete one current Asset and every semantic descendant.
+   * Providers retain authored bytes and immutable history for recovery.
+   */
+  deleteAsset(
+    _project: NovelProjectSnapshot,
+    _request: DeleteAssetRequest,
+    _signal?: AbortSignal,
+    _sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<DeleteAssetResult> {
+    return Promise.reject(new NovelRepositoryError(
+      'novel repository: the active provider does not support Asset deletion',
+      'NOVEL_ASSET_INVALID',
+    ))
+  }
 
   /**
    * Read either the reconciled current head or one retained immutable Revision.

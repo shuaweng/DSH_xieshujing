@@ -6,6 +6,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
 import type { SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
+import { isSessionSkillEnabled } from '@deepseek-ai/dsh-tool-skill'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import {
   AssetId,
@@ -28,7 +29,7 @@ import { scanNoAi, type NoAiScanOptions, type NoAiScanReport } from './noai.ts'
 export * from './noai.ts'
 
 const NOAI_ANALYZER_VERSION = 'noai-rules/2'
-const REVIEW_ANALYZER_VERSION = 'chapter-review/1'
+const REVIEW_ANALYZER_VERSION = 'chapter-review/2'
 const PREFERENCE_EXTRACTOR_VERSION = 'final-preference/1'
 const STORY_STATE_EXTRACTOR_VERSION = 'story-state/1'
 const DEFAULT_MIN_CHARACTERS = 300
@@ -39,7 +40,7 @@ const DEFAULT_WARN_HIGH_FINDINGS = 3
 
 /** One scored chapter-review dimension returned by the fixed worker. */
 export interface ChapterReviewDimension {
-  readonly id: 'plot' | 'causality' | 'character' | 'pacing' | 'hook' | 'style'
+  readonly id: 'plot' | 'logic' | 'character' | 'pacing' | 'hook' | 'style' | 'immersion' | 'ai-pattern'
   readonly score: number
   readonly summary: string
 }
@@ -189,6 +190,9 @@ export class NovelAnalysis extends Service {
     revisionId: RevisionId,
     signal: AbortSignal,
   ): Promise<NovelAnalysisReport> {
+    if (!isSessionSkillEnabled(agent.session, 'chapter-review')) {
+      throw new Error('novel analysis: chapter-review Skill is disabled for this Session')
+    }
     const project = await this.resolveProject(agent, signal)
     const assets = await this.ctx.novelRepository.listAssets(
       project, signal, this.ctx.sandboxPolicy.resolve({ session: agent.session }),
@@ -211,7 +215,22 @@ export class NovelAnalysis extends Service {
       }],
       includeWorkset: true,
     }, signal)
-    const prompt = `先调用 skill 加载 chapter-review 方法，然后审查下面由 Novel Context Compiler 冻结的材料。必须提交结构化报告。各维度 id 只能使用 plot、causality、character、pacing、hook、style；评分为 0 到 100 的整数。finding 必须给准确短引文、诊断和可执行修法。不得修改任何资产。\n\n${compiled.text}`
+    const chapterText = this.ctx.novelAssetTypes.get(chapter.asset.type).modelText(chapter)
+    const noAi = scanNoAi(chapterText, noAiOptions(this.config))
+    const noAiEvidence = JSON.stringify({
+      analyzerVersion: NOAI_ANALYZER_VERSION,
+      sampleLevel: noAi.sampleLevel,
+      riskScore: noAi.riskScore,
+      counts: noAi.counts,
+      findings: noAi.findings.slice(0, 16).map(finding => ({
+        ruleId: finding.ruleId,
+        label: finding.label,
+        severity: finding.severity,
+        evidence: finding.evidence,
+        advice: finding.advice,
+      })),
+    })
+    const prompt = `先调用 skill 加载 chapter-review 方法，然后对 Novel Context Compiler 冻结的材料执行严格审稿。你的职责是挑错，不是鼓励作者；禁止礼貌性夸奖、空泛肯定和默认高分。必须完整提交八个维度，id 依次覆盖 plot、logic、character、pacing、hook、style、immersion、ai-pattern，评分为 0 到 100 的整数且不得重复。90 分以上仅用于几乎无需修改的罕见成稿；80 分代表仍有明确缺陷；70 分代表存在影响阅读的问题；60 分以下代表需要实质重写。逐项检查剧情推进、逻辑与连续性、人物可信度、节奏、追读钩子、文风表达、出戏点、AI 味与模板化。finding 必须给正文中的准确短引文、具体诊断和可执行修法；不要限制为少量问题，也不要把同一问题拆成凑数条目。不得修改任何资产。\n\n下面的确定性 NOAI 扫描只提供候选证据；你必须结合上下文复核，成立则写入 ai-pattern finding，不成立则不要照抄：\n<deterministic-noai>${noAiEvidence}</deterministic-noai>\n\n${compiled.text}`
     const run = await this.ctx.subagents.start(this.config.subagentProvider, {
       label: `章节审稿 · ${title}`,
       parent: agent,
@@ -219,7 +238,7 @@ export class NovelAnalysis extends Service {
       prompt: [{ type: 'text', text: prompt }],
       maxDepth: 1,
       toolFilter: { allow: ['skill'] },
-      persona: '你是只读的网络小说章节审稿人。只根据给定冻结材料找出会伤害追读、连贯性和人物可信度的问题；不得改稿或声称资产已修改。',
+      persona: '你是苛刻、克制、证据导向的只读网络小说责任编辑。你的工作是系统性找出文本中的缺陷，而不是附和作者。凡是 AI 模板腔、出戏表达、逻辑漏洞、人物失真、节奏拖沓、信息重复和无效钩子，都要用原文证据指出。不要为了显得友善抬高分数，不写礼貌性夸奖；不得改稿或声称资产已修改。',
       outputSchema: REVIEW_SCHEMA,
     })
     const result = await settleRun(run)
@@ -556,7 +575,7 @@ const REVIEW_SCHEMA: ObjectJsonSchema = {
       items: {
         type: 'object', additionalProperties: false,
         properties: {
-          id: { type: 'string', enum: ['plot', 'causality', 'character', 'pacing', 'hook', 'style'] },
+          id: { type: 'string', enum: ['plot', 'logic', 'character', 'pacing', 'hook', 'style', 'immersion', 'ai-pattern'] },
           score: { type: 'integer' },
           summary: { type: 'string' },
         },
@@ -692,17 +711,20 @@ function decodeReview(value: unknown): ChapterReviewReport {
     || !['insufficient', 'usable', 'strong'].includes(String(value['sampleLevel']))
     || !Number.isSafeInteger(value['overallScore']) || Number(value['overallScore']) < 0 || Number(value['overallScore']) > 100
     || !normalizedText(value['verdict'])
-    || !Array.isArray(value['dimensions']) || value['dimensions'].length < 1 || value['dimensions'].length > 6
+    || !Array.isArray(value['dimensions']) || value['dimensions'].length !== 8
     || !Array.isArray(value['findings']) || value['findings'].length > 50
     || !Array.isArray(value['priorities']) || value['priorities'].length > 12) {
     throw new Error('novel analysis: chapter reviewer returned a malformed report')
   }
   const dimensions = value['dimensions'].map((item): ChapterReviewDimension => {
-    if (!isRecord(item) || !['plot', 'causality', 'character', 'pacing', 'hook', 'style'].includes(String(item['id']))
+    if (!isRecord(item) || !['plot', 'logic', 'character', 'pacing', 'hook', 'style', 'immersion', 'ai-pattern'].includes(String(item['id']))
       || !Number.isSafeInteger(item['score']) || Number(item['score']) < 0 || Number(item['score']) > 100
       || !normalizedText(item['summary'], 1_000)) throw new Error('novel analysis: reviewer dimension is invalid')
     return { id: item['id'] as ChapterReviewDimension['id'], score: item['score'] as number, summary: item['summary'] }
   })
+  if (new Set(dimensions.map(item => item.id)).size !== dimensions.length) {
+    throw new Error('novel analysis: reviewer dimensions must be unique')
+  }
   const findings = value['findings'].map((item): ChapterReviewFinding => {
     if (!isRecord(item) || !['high', 'medium', 'low'].includes(String(item['severity']))
       || !normalizedText(item['category'], 200) || !normalizedText(item['quote'], 500)

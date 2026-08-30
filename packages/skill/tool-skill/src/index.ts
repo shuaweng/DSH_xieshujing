@@ -10,7 +10,7 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { UserMessage } from '@deepseek-ai/dsh-session'
+import type { Session, UserMessage } from '@deepseek-ai/dsh-session'
 import {
   escapeText,
   isModelInvocable,
@@ -23,6 +23,75 @@ import {
 
 export const name = 'tool-skill'
 export const inject = ['agents', 'tools', 'skills']
+
+/** Latest-wins, per-Session Skill availability chosen by the author. */
+export interface SkillActivationSettings {
+  readonly version: 1
+  readonly disabled: readonly string[]
+}
+
+declare module '@deepseek-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /** Complete replacement of the disabled Skill set for this Session. */
+    'skill/activation': SkillActivationSettings
+  }
+}
+
+/**
+ * Fold the latest durable Skill activation snapshot, defaulting new Skills to enabled.
+ * @param session - Session whose append-only events own the activation state.
+ * @returns the newest valid complete disabled-name set.
+ */
+export function skillActivationSettings(session: Pick<Session, 'events'>): SkillActivationSettings {
+  const events = session.events
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event?.type !== 'skill/activation') continue
+    const data: unknown = event.data
+    if (typeof data !== 'object' || data === null
+      || (data as { version?: unknown }).version !== 1
+      || !Array.isArray((data as { disabled?: unknown }).disabled)
+      || !(data as { disabled: unknown[] }).disabled.every(value => typeof value === 'string' && isSkillName(value))) {
+      continue
+    }
+    return {
+      version: 1,
+      disabled: Object.freeze([...(data as { disabled: string[] }).disabled]),
+    }
+  }
+  return { version: 1, disabled: [] }
+}
+
+/**
+ * Test whether one Skill remains available in the addressed Session.
+ * @param session - Session whose activation state applies.
+ * @param skillName - Exact Skill name to test.
+ * @returns whether catalog publication and loading remain enabled.
+ */
+export function isSessionSkillEnabled(session: Pick<Session, 'events'>, skillName: string): boolean {
+  return !skillActivationSettings(session).disabled.includes(skillName)
+}
+
+/**
+ * Append one normalized complete replacement of the Session's disabled Skill set.
+ * @param session - Session that durably owns the author choice.
+ * @param disabled - Exact Skill names disabled after this event.
+ * @returns the normalized snapshot appended to the Session.
+ * @throws when a name is not a valid Skill name.
+ */
+export function replaceSkillActivationSettings(
+  session: Session,
+  disabled: readonly string[],
+): SkillActivationSettings {
+  const normalized = [...new Set(disabled)]
+  for (const skillName of normalized) {
+    if (!isSkillName(skillName)) throw new TypeError(`invalid disabled skill name ${JSON.stringify(skillName)}`)
+  }
+  normalized.sort()
+  const settings: SkillActivationSettings = { version: 1, disabled: normalized }
+  session.append('skill/activation', settings)
+  return settings
+}
 
 const DEFAULT_CATALOG_DESCRIPTION_MAX_LENGTH = 500
 /**
@@ -138,6 +207,9 @@ export function apply(ctx: Context, config: Config = {}): void {
       if (!isModelInvocable(summary)) {
         throw new Error(`skill "${args.name}" is not available for model invocation`)
       }
+      if (exec.agent !== undefined && !isSessionSkillEnabled(exec.agent.session, args.name)) {
+        throw new Error(`skill "${args.name}" is disabled for this session`)
+      }
       const skill = await ctx.skills.get(args.name, lookup)
       if (!skill) {
         throw new Error(`skill "${args.name}" is unknown or no longer available`)
@@ -186,6 +258,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     const lookup = { cwd: agent.session.header.cwd, signal, scope: agent }
     const injections: UserMessage[] = []
     for (const name of names) {
+      if (!isSessionSkillEnabled(agent.session, name)) continue
       const skill = await ctx.skills.get(name, lookup)
       signal.throwIfAborted()
       // Unknown names and user-disabled skills stay plain prose: the
@@ -223,7 +296,8 @@ export function apply(ctx: Context, config: Config = {}): void {
       : { skills: [], complete: true }
     signal.throwIfAborted()
     if (!snapshot.complete) return decision
-    const skills = snapshot.skills.filter(isModelInvocable)
+    const skills = snapshot.skills.filter(skill => isModelInvocable(skill)
+      && isSessionSkillEnabled(agent.session, skill.name))
     const entries = catalogSourceEntries(skills, catalogDescriptionMaxLength)
     const digest = digestCatalogEntries(entries)
     const history = catalogHistory(agent)

@@ -13,6 +13,7 @@
     { "path": "../../fs/fs" },
     { "path": "../../sandbox/sandbox-policy" },
     { "path": "../../subagent/subagent" },
+    { "path": "../../skill/tool-skill" },
     { "path": "../../core/tools" },
     { "path": "../novel-repository" },
     { "path": "../novel-context" },

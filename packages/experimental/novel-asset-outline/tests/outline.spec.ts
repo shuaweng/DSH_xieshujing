@@ -69,6 +69,7 @@ describe('freeform planning Host definitions', () => {
     const contribution = ctx.plugin({ inject: ['novelAssetTypes'], apply })
     await contribution
     expect(ctx.novelAssetTypes.get('planning.outline')).toBe(planningOutlineTypeDefinition)
+    expect(planningOutlineTypeDefinition.rootSingleton).toBe(true)
     expect(ctx.novelAssetTypes.get('planning.chapter-outline')).toBe(chapterOutlineTypeDefinition)
     expect(ctx.novelAssetTypes.get('book.brief')).toBe(bookBriefTypeDefinition)
     expect(ctx.novelAssetTypes.get('book.style-profile')).toBe(bookStyleProfileTypeDefinition)

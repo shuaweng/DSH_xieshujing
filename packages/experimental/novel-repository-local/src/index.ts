@@ -30,6 +30,8 @@ import NovelRepository, {
   type ChangeSet,
   type ChangeSetAuthorization,
   type CreateAssetRequest,
+  type DeleteAssetRequest,
+  type DeleteAssetResult,
   type InitializeNovelProjectRequest,
   type NovelProjectSnapshot,
   type NovelAnalysisReport,
@@ -243,6 +245,7 @@ export class LocalNovelRepository extends NovelRepository {
       manifest: { ...manifest },
       contentRoots,
       assetOrder: parsed.assetOrder,
+      deletedAssetIds: parsed.deletedAssetIds,
     }
   }
 
@@ -315,6 +318,7 @@ export class LocalNovelRepository extends NovelRepository {
       title,
       contentRoots: { manuscript: 'manuscript', planning: 'planning' },
       assetOrder: {},
+      deletedAssetIds: [],
     })
     if (new TextEncoder().encode(text).byteLength > this.config.manifestMaxBytes) {
       throw new NovelRepositoryError(
@@ -339,7 +343,7 @@ export class LocalNovelRepository extends NovelRepository {
     sandboxPolicy?: SandboxExecutionPolicy,
   ): Promise<readonly AssetSummary[]> {
     return await this.withProject(project, async (state) => {
-      const catalog = await this.scan(project, state, signal, sandboxPolicy)
+      const catalog = await this.scan(project, state, signal, sandboxPolicy, true)
       const manifestBytes = await this.readBounded(
         project.manifest,
         this.config.manifestMaxBytes,
@@ -449,7 +453,7 @@ export class LocalNovelRepository extends NovelRepository {
     }
     const types = request.types === undefined ? undefined : new Set(request.types)
     return await this.withProject(project, async (state) => {
-      const catalog = await this.scan(project, state, signal, sandboxPolicy)
+      const catalog = await this.scan(project, state, signal, sandboxPolicy, true)
       const lowered = query.toLocaleLowerCase()
       const results: AssetSearchResult[] = []
       for (const observed of catalog.values()) {
@@ -491,7 +495,7 @@ export class LocalNovelRepository extends NovelRepository {
     return await this.withProject(project, async (state) => {
       signal?.throwIfAborted()
       if (revisionId === undefined) {
-        const asset = (await this.scan(project, state, signal, sandboxPolicy)).get(assetId)
+        const asset = (await this.scan(project, state, signal, sandboxPolicy, true)).get(assetId)
         if (asset === undefined) throw assetNotFound(assetId)
         return cloneSnapshot(asset.snapshot)
       }
@@ -960,6 +964,85 @@ export class LocalNovelRepository extends NovelRepository {
     })
   }
 
+  override async deleteAsset(
+    project: NovelProjectSnapshot,
+    request: DeleteAssetRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<DeleteAssetResult> {
+    return await this.withProject(project, async (state) => {
+      const catalog = await this.scan(project, state, signal, sandboxPolicy, true)
+      const current = catalog.get(request.assetId)
+      if (current === undefined) throw assetNotFound(request.assetId)
+      if (current.snapshot.revisionId !== request.baseRevisionId) throw staleRevision(request.baseRevisionId)
+
+      const deleted = new Set<AssetId>([request.assetId])
+      let grew = true
+      while (grew) {
+        grew = false
+        for (const observed of catalog.values()) {
+          if (observed.parsed.parentId !== undefined && deleted.has(observed.parsed.parentId)
+            && !deleted.has(observed.parsed.id)) {
+            deleted.add(observed.parsed.id)
+            grew = true
+          }
+        }
+      }
+
+      const before = await this.ctx.fs.stat(project.manifest, signal)
+      if (before?.type !== 'file') throw new NovelRepositoryError(
+        'novel repository: project manifest changed during Asset deletion',
+        'NOVEL_PROJECT_MANIFEST_INVALID',
+      )
+      const manifestBytes = await this.readBounded(
+        project.manifest,
+        this.config.manifestMaxBytes,
+        'NOVEL_PROJECT_MANIFEST_TOO_LARGE',
+        signal,
+      )
+      const after = await this.ctx.fs.stat(project.manifest, signal)
+      if (after?.type !== 'file' || after.version !== before.version) throw new NovelRepositoryError(
+        'novel repository: project manifest changed during Asset deletion',
+        'NOVEL_PROJECT_MANIFEST_INVALID',
+      )
+      const parsed = parseProjectManifest(new TextDecoder().decode(manifestBytes), project.manifest.displayPath)
+      if (parsed.id !== project.id) throw new NovelRepositoryError(
+        'novel repository: project identity changed during Asset deletion',
+        'NOVEL_PROJECT_ID_CONFLICT',
+      )
+      const deletedAssetIds = [...new Set([...parsed.deletedAssetIds, ...deleted])]
+      const assetOrder = Object.fromEntries(Object.entries(parsed.assetOrder)
+        .map(([type, ids]) => [type, ids.filter(id => !deleted.has(id))]))
+      const text = serializeProjectManifest({ ...parsed, assetOrder, deletedAssetIds })
+      if (new TextEncoder().encode(text).byteLength > this.config.manifestMaxBytes) throw new NovelRepositoryError(
+        `novel repository: deleted-Asset manifest exceeds ${this.config.manifestMaxBytes} bytes`,
+        'NOVEL_PROJECT_MANIFEST_TOO_LARGE',
+      )
+      try {
+        await this.ctx.fs.writeText(
+          project.manifest,
+          text,
+          { kind: 'replaceIfVersion', version: after.version },
+          signal,
+          sandboxPolicy,
+        )
+      } catch (error: unknown) {
+        if (!(error instanceof FsError) || error.code !== 'FS_STALE_VERSION') throw error
+        throw new NovelRepositoryError(
+          'novel repository: project manifest changed during Asset deletion',
+          'NOVEL_PROJECT_MANIFEST_INVALID',
+          { cause: error },
+        )
+      }
+      for (const id of deleted) state.catalog.delete(id)
+      state.history.conflictProposedChangeSets(project.id, [...deleted])
+      return {
+        deletedAssetIds: [...deleted],
+        assets: orderedSummaries(state.catalog, assetOrder),
+      }
+    })
+  }
+
   override async saveAssetContent(
     project: NovelProjectSnapshot,
     request: SaveAssetContentRequest,
@@ -1204,20 +1287,38 @@ export class LocalNovelRepository extends NovelRepository {
     state: ProjectState,
     signal?: AbortSignal,
     sandboxPolicy?: SandboxExecutionPolicy,
+    allowSingletonConflicts = false,
   ): Promise<Map<AssetId, ObservedAsset>> {
+    const currentManifest = parseProjectManifest(
+      new TextDecoder().decode(await this.readBounded(
+        project.manifest,
+        this.config.manifestMaxBytes,
+        'NOVEL_PROJECT_MANIFEST_TOO_LARGE',
+        signal,
+      )),
+      project.manifest.displayPath,
+    )
+    if (currentManifest.id !== project.id) throw new NovelRepositoryError(
+      'novel repository: project identity changed during Asset scan',
+      'NOVEL_PROJECT_ID_CONFLICT',
+    )
     let files = await this.scanFiles(project, signal)
     if (state.history.applyJournals().length > 0) {
       const wrote = await this.recoverApplying(project, state, files, sandboxPolicy)
       if (wrote) files = await this.scanFiles(project, signal)
     }
     const catalog = new Map<AssetId, ObservedAsset>()
+    const deletedAssetIds = new Set(currentManifest.deletedAssetIds)
+    const seenAssetIds = new Set<AssetId>()
     for (const file of files) {
-      if (catalog.has(file.parsed.id)) {
+      if (seenAssetIds.has(file.parsed.id)) {
         throw new NovelRepositoryError(
           `novel repository: duplicate asset id ${JSON.stringify(file.parsed.id)}`,
           'NOVEL_ASSET_DUPLICATE_ID',
         )
       }
+      seenAssetIds.add(file.parsed.id)
+      if (deletedAssetIds.has(file.parsed.id)) continue
       const head = state.history.head(project.id, file.parsed.id)
       let revision: AssetRevision
       if (head === undefined) {
@@ -1252,7 +1353,7 @@ export class LocalNovelRepository extends NovelRepository {
         revision,
       ))
     }
-    validateCatalogRelationships(catalog, this.ctx.novelAssetTypes)
+    validateCatalogRelationships(catalog, this.ctx.novelAssetTypes, allowSingletonConflicts)
     state.catalog = catalog
     return catalog
   }
@@ -1795,11 +1896,12 @@ function invalidChangeSet(detail: string): NovelRepositoryError {
 function validateCatalogRelationships(
   catalog: ReadonlyMap<AssetId, ObservedAsset>,
   registry: Context['novelAssetTypes'],
+  allowSingletonConflicts = false,
 ): void {
   for (const observed of catalog.values()) {
     const definition = registry.get(observed.parsed.type)
-    validateProjectSingleton(observed.parsed, definition, catalog)
-    validateParentRelationship(observed.parsed, definition, catalog)
+    if (!allowSingletonConflicts) validateProjectSingleton(observed.parsed, definition, catalog)
+    validateParentRelationship(observed.parsed, definition, catalog, allowSingletonConflicts)
   }
 }
 
@@ -1808,9 +1910,11 @@ function validateProjectSingleton(
   definition: ReturnType<Context['novelAssetTypes']['get']>,
   catalog: ReadonlyMap<AssetId, ObservedAsset>,
 ): void {
-  if (definition.projectSingleton !== true) return
+  if (definition.projectSingleton !== true
+    && !(definition.rootSingleton === true && parsed.parentId === undefined)) return
   for (const candidate of catalog.values()) {
-    if (candidate.parsed.id !== parsed.id && sameAssetType(candidate.parsed.type, parsed.type)) {
+    if (candidate.parsed.id !== parsed.id && sameAssetType(candidate.parsed.type, parsed.type)
+      && (definition.projectSingleton === true || candidate.parsed.parentId === undefined)) {
       throw new NovelRepositoryError(
         `novel repository: project has multiple ${JSON.stringify(parsed.type)} Assets`,
         'NOVEL_ASSET_INVALID',
@@ -1823,6 +1927,7 @@ function validateParentRelationship(
   parsed: ParsedNovelAsset,
   definition: ReturnType<Context['novelAssetTypes']['get']>,
   catalog: ReadonlyMap<AssetId, ObservedAsset>,
+  allowSingletonConflicts = false,
 ): void {
   const relation = definition.parent
   if (parsed.parentId === undefined) {
@@ -1853,7 +1958,7 @@ function validateParentRelationship(
       'NOVEL_ASSET_INVALID',
     )
   }
-  if (relation.singleton === true) {
+  if (relation.singleton === true && !allowSingletonConflicts) {
     for (const sibling of catalog.values()) {
       if (sibling.parsed.id !== parsed.id && sibling.parsed.parentId === parsed.parentId
         && sameAssetType(sibling.parsed.type, parsed.type)) {

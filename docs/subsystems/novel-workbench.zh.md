@@ -51,9 +51,9 @@ novel:
 The protagonist reaches White Harbor.
 ```
 
-`book.brief` 与 `book.style-profile` 使用同样的自由 Markdown 正文和精确文本 operation，没有语义父级，并声明注册表通用的 `projectSingleton` 契约。因此 Repository 扫描与类型化创建都会拒绝同一精确类型的第二份 Asset，而无需硬编码类型名称。它们物理上位于已声明的 `planning` 根，Explorer 则把它们投影到逻辑“本书”分组。
+`book.brief` 与 `book.style-profile` 使用同样的自由 Markdown 正文和精确文本 operation，没有语义父级，并声明注册表通用的 `projectSingleton` 契约。`planning.outline` 则声明 `rootSingleton`：它允许卷纲子级，但拒绝第二份无父级书纲。Repository 扫描与类型化创建无需硬编码类型名称即可执行两种 cardinality。它们物理上位于已声明的 `planning` 根，Explorer 则把它们投影到逻辑“本书”和“大纲”分组。
 
-项目文件是当前作者内容的权威。`.novel/history.sqlite` 保存精确的不可变 Revision 字节、Asset head、ChangeSet 与 apply journal；它不会取代文件成为当前真相源。文件改名保留 Asset 身份，外部字节变化在 reconcile 时创建 `external-edit` Revision。每次人类保存都由精确类型定义物化并重新解析，而且要求画面上的 base Revision 与文件系统版本仍然为当前值。
+项目文件是当前作者内容的权威。`.novel/history.sqlite` 保存精确的不可变 Revision 字节、Asset head、ChangeSet 与 apply journal；它不会取代文件成为当前真相源。文件改名保留 Asset 身份，外部字节变化在 reconcile 时创建 `external-edit` Revision。每次人类保存都由精确类型定义物化并重新解析，而且要求画面上的 base Revision 与文件系统版本仍然为当前值。作者确认删除时，所选 Asset 及其语义后代会写入 Manifest 的 `deletedAssetIds`；当前目录、搜索和 Agent 读取会排除这些身份，同时作者文件与 Revision 历史继续保留，供未来的恢复界面使用。
 
 ## 选区与 Session 上下文
 

@@ -34,6 +34,25 @@ export interface InitializeNovelProjectRequest {
   readonly title: string
 }
 
+/** One author-visible Skill contributed by the current Novel Preset. */
+export interface NovelSkillDescriptor {
+  readonly name: string
+  readonly description: string
+  readonly whenToUse?: string
+  readonly enabled: boolean
+}
+
+/** Complete per-Session Novel Preset Skill catalog and activation state. */
+export interface NovelSkillSettingsDescriptor {
+  readonly version: 1
+  readonly skills: readonly NovelSkillDescriptor[]
+}
+
+/** Complete replacement of disabled Skills for the addressed Session. */
+export interface ReplaceNovelSkillSettingsRequest {
+  readonly disabled: readonly string[]
+}
+
 /** One current browser navigation row. */
 export interface NovelAssetDescriptor {
   readonly id: AssetId
@@ -99,6 +118,18 @@ export interface CreateNovelAssetRequest {
 export interface ReorderNovelAssetsRequest {
   readonly type: string
   readonly orderedAssetIds: readonly AssetId[]
+}
+
+/** Guarded browser request to remove one current Asset. */
+export interface DeleteNovelAssetRequest {
+  readonly assetId: AssetId
+  readonly baseRevisionId: RevisionId
+}
+
+/** Browser-safe current catalog after logical deletion. */
+export interface DeleteNovelAssetDescriptor {
+  readonly deletedAssetIds: readonly AssetId[]
+  readonly assets: readonly NovelAssetDescriptor[]
 }
 
 /** Browser-safe typed Asset content bound to one exact Revision. */

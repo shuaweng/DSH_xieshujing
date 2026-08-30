@@ -184,6 +184,10 @@ export function apply(ctx: Context): void {
         remote.reorderAssets(sessionId, request),
         'reorder Novel Assets',
       ),
+      delete: async (sessionId, request) => await unwrapRemote(
+        remote.deleteAsset(sessionId, request),
+        'delete Novel Asset',
+      ),
       onRefresh: (listener) => {
         refreshListeners.add(listener)
         return () => { refreshListeners.delete(listener) }
@@ -224,6 +228,14 @@ export function apply(ctx: Context): void {
       reviewChapter: async (sessionId, assetId, revisionId) => await unwrapRemote(
         remote.reviewChapter(sessionId, assetId as AssetId, revisionId as RevisionId),
         'review chapter',
+      ),
+      skills: async sessionId => await unwrapRemote(
+        remote.skills(sessionId),
+        'list Novel Preset Skills',
+      ),
+      replaceSkillSettings: async (sessionId, request) => await unwrapRemote(
+        remote.replaceSkillSettings(sessionId, request),
+        'update Novel Preset Skills',
       ),
       finalizations: async (sessionId, assetId) => await unwrapRemote(
         remote.revisionFinalizations(sessionId, assetId as AssetId),

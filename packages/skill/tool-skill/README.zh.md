@@ -14,6 +14,8 @@
 
 如果最初没有模型可调用 skill，则省略目录；如果该 agent（智能体）的工具视图排除了随附的 `skill` 工具，或解析出同名的作用域内遮蔽项，也会省略目录。身份比对针对本插件所注册的那个定义，而非按自身名字回查，因此本插件既可全局挂载，也可挂在单个 agent 的组装内——在后者中 `register()` 只注册到该 agent 的层中。可见性变更参与 digest 计算，使提示词指引、模型可见 schema 和可执行分派保持对齐。
 
+`skill/activation` 为单个 Session 记录一份后写覆盖的完整禁用 Skill 名称集合。被禁用的 Skill 会从后续目录替换中移除，模型工具加载会拒绝它，显式 `/skill` 调用也会忽略它；重新启用不会删除既有目录历史，而是在下一次合格 pre-step 发布当前目录。新出现的 Skill 默认启用，一个 Session 的设置不影响其他 Session。
+
 `catalogDescriptionMaxLength` 控制规范化后的目录描述，渲染时会对其执行 XML 转义。其默认值是 `500`，且必须是不小于 `3` 的整数，以便为截断省略号保留空间。[skill 目录热刷新 Agent Note](../../../.agents/notes/implemented/feature/2026-07-27-skill-catalog-hot-refresh.zh.md) 负责定义持久初始目录和替换目录的生命周期。
 
 ## 工具：`skill`
@@ -26,7 +28,7 @@
 
 资源指引只会根据 `resourceBase` 解析指令显式引用的路径或 URL；脚本、参考资料和资源文件按需加载，结果不会列举 skill 目录。本地提供方可以提供目录，而远程或嵌入式提供方可以提供 URL 或不透明加载指引。
 
-无法解析的名称会报告 skill 未知或已不可用。无效名称和 `invocation.modelInvocable` 为 `false` 的 skill 会产生不同的错误结果。`invocation.userInvocable` 不限制这个面向模型的接口。
+无法解析的名称会报告 skill 未知或已不可用。无效名称、Session 中已禁用的 Skill，以及 `invocation.modelInvocable` 为 `false` 的 Skill 会产生不同的错误结果。`invocation.userInvocable` 不限制这个面向模型的接口。
 
 工具执行不会添加合成上下文消息。新加载的结果已作为工具结果记录，并在下一个模型步骤可用，无需重复正文。只有目录投影会添加替换摘要。
 

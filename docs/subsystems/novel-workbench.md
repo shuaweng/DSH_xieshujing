@@ -51,9 +51,9 @@ novel:
 The protagonist reaches White Harbor.
 ```
 
-`book.brief` and `book.style-profile` use the same freeform Markdown body and exact text operations, have no semantic parent, and set the registry's generic `projectSingleton` contract. Repository scans and typed creation therefore reject a second Asset of either exact type without hard-coding their names. They live under the declared `planning` root while the explorer projects them into a logical Book group.
+`book.brief` and `book.style-profile` use the same freeform Markdown body and exact text operations, have no semantic parent, and set the registry's generic `projectSingleton` contract. `planning.outline` instead sets `rootSingleton`, which permits volume children but rejects a second parentless book outline. Repository scans and typed creation enforce both cardinalities without hard-coding type names. These Assets live under the declared `planning` root while the explorer projects them into logical Book and Outline groups.
 
-Project files are authoritative for current authored content. `.novel/history.sqlite` retains exact immutable Revision bytes, Asset heads, ChangeSets, and apply journals; it does not replace the files as current truth. A rename preserves Asset identity, while changed external bytes create an `external-edit` Revision during reconciliation. Every human save is materialized and reparsed by the exact type definition and requires both the displayed base Revision and filesystem version to remain current.
+Project files are authoritative for current authored content. `.novel/history.sqlite` retains exact immutable Revision bytes, Asset heads, ChangeSets, and apply journals; it does not replace the files as current truth. A rename preserves Asset identity, while changed external bytes create an `external-edit` Revision during reconciliation. Every human save is materialized and reparsed by the exact type definition and requires both the displayed base Revision and filesystem version to remain current. Author-confirmed deletion records the selected Asset and semantic descendants in manifest `deletedAssetIds`; current catalog, search, and Agent reads exclude those identities while authored files and Revision history remain available for a future recovery surface.
 
 ## Selection and Session context
 

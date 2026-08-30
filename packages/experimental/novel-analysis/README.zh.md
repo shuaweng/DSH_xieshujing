@@ -9,8 +9,8 @@
 ## 行为
 
 - `scanChapter()` 读取一个已保留的 `manuscript.chapter` Revision，无需模型即可运行有边界的确定性规则，并为该精确 Revision upsert 一份 `noai-scan` 报告。工作台规则从持续维护的小说 Preset guard 中适配，覆盖重复解释/强调、模板化转折与节奏、抽象情绪、泛化意象/景物、POV/镜头越权、Markdown 残留、宣传腔等可解释模式，同时保留可编辑的精确 offset。
-- `reviewChapter()` 只会在作者明确点击“开始审查”或重跑后执行，再请求 Novel Context Compiler 的闭集 `chapter-review` 策略。编译器先把目标章节、确定关联的章纲/全书指导和当前工作集冻结进一份精确 V3 Manifest，再由服务启动一个全新 one-shot Subagent，使用只读 persona、`maxDepth: 1`、仅 `skill` 工具和严格的结构化输出 Schema。
-- 审稿人加载包内 `chapter-review` Skill，并从情节、因果、人物、节奏、钩子和文风六个维度评分，问题必须绑定证据。作者材料被明确标为不可信内容，不能扩大 worker 权限。
+- `reviewChapter()` 只会在作者明确点击“开始审查”或重跑后执行；当前 Session 禁用 `chapter-review` 时会拒绝请求。它再请求 Novel Context Compiler 的闭集 `chapter-review` 策略，由编译器把目标章节、确定关联的章纲/全书指导和当前工作集冻结进一份精确 V3 Manifest，然后服务启动一个全新 one-shot Subagent，使用只读 persona、`maxDepth: 1`、仅 `skill` 工具和严格的结构化输出 Schema。
+- 审稿人加载包内 `chapter-review` Skill，并必须返回八个证据化维度：剧情、逻辑/连续性、人物、节奏、钩子、文风、沉浸/出戏和 AI 模板味。提示禁止礼貌性夸奖和默认高分；确定性 NOAI 扫描会作为有界候选证据提供给审稿人，但必须结合语境确认，不能机械照抄。作者材料被明确标为不可信内容，不能扩大 worker 权限。
 - 只有 worker 正常完成并且服务校验全部字段和边界后，报告才会写入。因此失败的重跑会保留旧的成功 `(project, asset, revision, kind)` 报告；成功重跑只替换这一行。
 - `candidateWarning()` 在内存中物化章节 ChangeSet 候选并运行同一确定性扫描。达到风险阈值时，它为调用方返回有边界的提示文字以加入当前模型 turn；它既不持久化报告，也不创建第二个 ChangeSet。
 - `finalizeChapter()` 先保留用户对一个精确章节 Revision 的显式定稿决策。项目存在 `book.story-state` 时，全新的 one-shot worker 只接收该精确状态 Revision 与定稿章节，通过 `story-state-learning` 返回带正文证据的完整替换候选。与之独立，只有作者确实在某个 Agent 草稿后继续修改时，服务才启动偏好 worker。

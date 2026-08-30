@@ -37,6 +37,7 @@ type Actions = {
   loaded: (draft: NovelWorkbenchState, project: NovelProjectDescriptor, assets: readonly NovelAssetDescriptor[]) => void
   uninitialized: (draft: NovelWorkbenchState) => void
   assetCreated: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
+  assetsDeleted: (draft: NovelWorkbenchState, assets: readonly NovelAssetDescriptor[], deletedAssetIds: readonly string[]) => void
   assetsReordered: (draft: NovelWorkbenchState, assets: readonly NovelAssetDescriptor[]) => void
   open: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
   saved: (draft: NovelWorkbenchState, document: NovelAssetDocument) => void
@@ -101,6 +102,17 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       assetCreated: (draft, document) => {
         const descriptor = descriptorOf(document)
         draft.assets = [...draft.assets.filter(asset => asset.id !== descriptor.id), descriptor]
+      },
+      assetsDeleted: (draft, assets, deletedAssetIds) => {
+        draft.assets = [...assets]
+        if (draft.document !== undefined && deletedAssetIds.includes(draft.document.id)) {
+          delete draft.document
+          delete draft.titleDraft
+          delete draft.draft
+          delete draft.selection
+          draft.dirty = false
+        }
+        delete draft.error
       },
       assetsReordered: (draft, assets) => {
         draft.assets = [...assets]

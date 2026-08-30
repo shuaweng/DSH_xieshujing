@@ -755,6 +755,20 @@ export class NovelHistory {
     return conflicted
   }
 
+  /** Make proposal-only ChangeSets terminal when their current Asset leaves the project catalog. */
+  conflictProposedChangeSets(projectId: ProjectId, assetIds: readonly AssetId[]): number {
+    if (assetIds.length === 0) return 0
+    let conflicted = 0
+    this.transaction(() => {
+      const statement = this.db.prepare(`
+        UPDATE change_sets SET status = 'conflicted'
+        WHERE project_id = ? AND asset_id = ? AND status = 'proposed'
+      `)
+      for (const assetId of assetIds) conflicted += Number(statement.run(projectId, assetId).changes)
+    })
+    return conflicted
+  }
+
   /**
    * Update only the mutable path projection after an authored file rename.
    * @param projectId - stable Novel Project identity.
@@ -1072,6 +1086,9 @@ export function validateGenerationLineage(value: unknown): NovelGenerationLineag
     || contextPolicies.some(item => typeof item !== 'string' || item.length === 0 || item.length > 100))) {
     throw corrupt('generation lineage contextPolicies is invalid')
   }
+  const validatedContextPolicies = contextPolicies === undefined
+    ? undefined
+    : contextPolicies.map(item => String(item))
   const actionPlanCount = optionalPositiveInteger('actionPlanCount')
   const selectedActionPlan = optionalPositiveInteger('selectedActionPlan')
   if (strategy === 'direct' && (actionPlanCount !== undefined || selectedActionPlan !== undefined)) {
@@ -1100,7 +1117,7 @@ export function validateGenerationLineage(value: unknown): NovelGenerationLineag
     ...(skillName === undefined ? {} : { skillName }),
     ...(skillVersion === undefined ? {} : { skillVersion }),
     ...(contextManifestId === undefined ? {} : { contextManifestId: contextManifestId as `sha256:${string}` }),
-    ...(contextPolicies === undefined ? {} : { contextPolicies: [...contextPolicies] as string[] }),
+    ...(validatedContextPolicies === undefined ? {} : { contextPolicies: validatedContextPolicies }),
     strategy: strategy as NovelGenerationLineage['strategy'],
     ...(actionPlanCount === undefined ? {} : { actionPlanCount }),
     ...(selectedActionPlan === undefined ? {} : { selectedActionPlan }),

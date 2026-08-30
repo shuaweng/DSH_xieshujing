@@ -17,6 +17,7 @@ export interface ParsedProjectManifest {
   readonly title: string
   readonly contentRoots: Readonly<Record<string, string>>
   readonly assetOrder: Readonly<Record<string, readonly AssetId[]>>
+  readonly deletedAssetIds: readonly AssetId[]
 }
 
 /**
@@ -32,6 +33,7 @@ export function serializeProjectManifest(value: ParsedProjectManifest): string {
     title: value.title,
     contentRoots: value.contentRoots,
     ...(Object.keys(value.assetOrder).length === 0 ? {} : { assetOrder: value.assetOrder }),
+    ...(value.deletedAssetIds.length === 0 ? {} : { deletedAssetIds: value.deletedAssetIds }),
   }
   return stringify(serialized, { lineWidth: 0 })
 }
@@ -154,5 +156,19 @@ export function parseProjectManifest(text: string, path: string): ParsedProjectM
     assetOrder[type] = orderedIds
   }
 
-  return { schema: 1, id: ProjectId(id), title, contentRoots: roots, assetOrder }
+  const deletedAssetIdsValue = value['deletedAssetIds']
+  if (deletedAssetIdsValue !== undefined && !Array.isArray(deletedAssetIdsValue)) {
+    invalid(path, 'deletedAssetIds must be an Asset id sequence when present')
+  }
+  const deletedSeen = new Set<string>()
+  const deletedAssetIds = (deletedAssetIdsValue ?? []).map((assetId): AssetId => {
+    if (typeof assetId !== 'string' || assetId.trim().length === 0 || assetId.trim() !== assetId) {
+      invalid(path, 'deletedAssetIds must contain non-empty Asset ids without surrounding whitespace')
+    }
+    if (deletedSeen.has(assetId)) invalid(path, 'deletedAssetIds must not contain duplicate Asset ids')
+    deletedSeen.add(assetId)
+    return AssetId(assetId)
+  })
+
+  return { schema: 1, id: ProjectId(id), title, contentRoots: roots, assetOrder, deletedAssetIds }
 }

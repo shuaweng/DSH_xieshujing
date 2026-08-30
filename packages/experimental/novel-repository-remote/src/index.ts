@@ -7,6 +7,11 @@ import { constants as bufferConstants } from 'node:buffer'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { isModelInvocable, isUserInvocable } from '@deepseek-ai/dsh-skill'
+import {
+  isSessionSkillEnabled,
+  replaceSkillActivationSettings,
+} from '@deepseek-ai/dsh-tool-skill'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-experimental-novel-analysis'
 import {
@@ -33,6 +38,8 @@ import type {} from 'zod'
 import type {
   CaptureNovelSelectionRequest,
   CreateNovelAssetRequest,
+  DeleteNovelAssetDescriptor,
+  DeleteNovelAssetRequest,
   NovelAssetDescriptor,
   NovelChangeSetDescriptor,
   NovelAssetDocument,
@@ -46,6 +53,8 @@ import type {
   DecideNovelPreferenceDescriptor,
   DecideNovelStoryStateDescriptor,
   NovelProjectDescriptor,
+  NovelSkillSettingsDescriptor,
+  ReplaceNovelSkillSettingsRequest,
   NovelAssetSearchResult,
   NovelContextWorksetDescriptor,
   SearchNovelAssetsRequest,
@@ -60,6 +69,8 @@ import type {
 export type {
   CaptureNovelSelectionRequest,
   CreateNovelAssetRequest,
+  DeleteNovelAssetDescriptor,
+  DeleteNovelAssetRequest,
   NovelAssetDescriptor,
   NovelChangeSetDescriptor,
   NovelAssetDocument,
@@ -73,6 +84,8 @@ export type {
   DecideNovelPreferenceDescriptor,
   DecideNovelStoryStateDescriptor,
   NovelProjectDescriptor,
+  NovelSkillSettingsDescriptor,
+  ReplaceNovelSkillSettingsRequest,
   NovelAssetSearchResult,
   NovelContextWorksetDescriptor,
   SearchNovelAssetsRequest,
@@ -121,6 +134,57 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     validateByteBound('responseMaxBytes', responseMaxBytes)
     this.descriptorMaxBytes = descriptorMaxBytes
     this.responseMaxBytes = responseMaxBytes
+  }
+
+  /**
+   * List author-visible Skills contributed by the active Novel Preset.
+   * @param agent - addressed Agent whose Session owns activation choices.
+   * @param signal - caller cancellation.
+   * @returns the current custom Skill catalog and per-Session enabled state.
+   * @throws when the Skill registry is unavailable, incomplete, or exceeds the response bound.
+   */
+  @Remote('skills')
+  async skills(agent: Agent, signal: AbortSignal): Promise<NovelSkillSettingsDescriptor> {
+    const registry = this.ctx.get('skills')
+    if (registry === undefined) throw new Error('novel repository remote: Skill registry is unavailable')
+    const snapshot = await registry.snapshot({ cwd: agent.session.header.cwd, scope: agent, signal })
+    signal.throwIfAborted()
+    if (!snapshot.complete) throw new Error('novel repository remote: Skill catalog is not ready')
+    const skills = snapshot.skills
+      .filter(skill => skill.source === 'custom' && (isModelInvocable(skill) || isUserInvocable(skill)))
+      .map(skill => ({
+        name: skill.name,
+        description: skill.description,
+        ...(skill.whenToUse === undefined ? {} : { whenToUse: skill.whenToUse }),
+        enabled: isSessionSkillEnabled(agent.session, skill.name),
+      }))
+    const descriptor: NovelSkillSettingsDescriptor = { version: 1, skills }
+    assertResponseBytes(descriptor, this.responseMaxBytes, 'Novel Skill settings')
+    return descriptor
+  }
+
+  /**
+   * Replace the disabled Novel Preset Skills for the addressed Session.
+   * @param agent - addressed Agent whose Session receives the durable setting.
+   * @param request - complete replacement of disabled Skill names.
+   * @param signal - caller cancellation.
+   * @returns the refreshed Skill catalog after persisting the setting.
+   * @throws when the request names an unknown Skill or the catalog cannot be read.
+   */
+  @Remote('replaceSkillSettings')
+  async replaceSkillSettings(
+    agent: Agent,
+    request: ReplaceNovelSkillSettingsRequest,
+    signal: AbortSignal,
+  ): Promise<NovelSkillSettingsDescriptor> {
+    const current = await this.skills(agent, signal)
+    const known = new Set(current.skills.map(skill => skill.name))
+    const unknown = request.disabled.find(skillName => !known.has(skillName))
+    if (unknown !== undefined) {
+      throw new TypeError(`novel repository remote: unknown Novel Preset Skill ${JSON.stringify(unknown)}`)
+    }
+    replaceSkillActivationSettings(agent.session, request.disabled)
+    return await this.skills(agent, signal)
   }
 
   /**
@@ -324,6 +388,37 @@ export class NovelRepositoryRemote extends TypertRemoteService {
     const result = assetDocument(snapshot)
     assertResponseBytes(result, this.responseMaxBytes, 'Asset document')
     return result
+  }
+
+  /** Remove one user-selected current Asset while retaining authored history for recovery. */
+  @Remote('deleteAsset')
+  async deleteAsset(
+    agent: Agent,
+    request: DeleteNovelAssetRequest,
+    signal: AbortSignal,
+  ): Promise<DeleteNovelAssetDescriptor> {
+    const project = await this.requireProject(agent, signal)
+    const result = await this.ctx.novelRepository.deleteAsset(
+      project,
+      request,
+      signal,
+      this.ctx.sandboxPolicy.resolve({ session: agent.session }),
+    )
+    const descriptor: DeleteNovelAssetDescriptor = {
+      deletedAssetIds: result.deletedAssetIds,
+      assets: result.assets.map(summary => ({
+        id: summary.asset.id,
+        projectId: summary.asset.projectId,
+        type: summary.asset.type,
+        ...(summary.asset.parentId === undefined ? {} : { parentId: summary.asset.parentId }),
+        projectRelativePath: summary.asset.projectRelativePath,
+        revisionId: summary.revisionId,
+        contentHash: summary.contentHash,
+        title: summary.title,
+      })),
+    }
+    assertResponseBytes(descriptor, this.responseMaxBytes, 'deleted Asset catalog')
+    return descriptor
   }
 
   /**

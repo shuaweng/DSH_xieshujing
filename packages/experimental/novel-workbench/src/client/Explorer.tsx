@@ -1,10 +1,13 @@
 /** Project explorer for manuscript chapters and the two-level freeform outline hierarchy. */
 
-import { useEffect, useRef, useState, type DragEvent } from 'react'
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { InjectFace, PropsLocale, PropsRuntime, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   CreateNovelAssetRequest,
+  DeleteNovelAssetDescriptor,
+  DeleteNovelAssetRequest,
   NovelAssetDescriptor,
   NovelAssetDocument,
   NovelProjectDescriptor,
@@ -20,6 +23,7 @@ export interface ExplorerInjected {
   open: (sessionId: SessionId, assetId: string) => Promise<NovelAssetDocument>
   create: (sessionId: SessionId, request: CreateNovelAssetRequest) => Promise<NovelAssetDocument>
   reorder: (sessionId: SessionId, request: ReorderNovelAssetsRequest) => Promise<readonly NovelAssetDescriptor[]>
+  delete: (sessionId: SessionId, request: DeleteNovelAssetRequest) => Promise<DeleteNovelAssetDescriptor>
   onRefresh: (listener: () => void) => () => void
 }
 
@@ -29,7 +33,9 @@ type ExplorerProps = PropsRuntime<'novel.explorer'>
   & InjectFace<ExplorerInjected>
 
 /** Session-aware navigator; paths organize files while semantic parent ids organize outlines. */
-export function Explorer({ useSessions, useStore, actions, renderers, load, open, create, reorder, onRefresh, t }: ExplorerProps) {
+export function Explorer({
+  useSessions, useStore, actions, renderers, load, open, create, reorder, delete: deleteRemote, onRefresh, t,
+}: ExplorerProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
   const state = useStore(value => ({
     assets: value.assets, project: value.project, document: value.document,
@@ -39,7 +45,11 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
   const activeAssetId = useRef(state.active)
   const [creating, setCreating] = useState(false)
   const [reordering, setReordering] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<NovelAssetDescriptor>()
+  const [dialogHost, setDialogHost] = useState<Element | null>(null)
 
+  useEffect(() => { setDialogHost(document.querySelector('[data-novel-workbench]')) }, [])
   useEffect(() => { if (state.active !== undefined) activeAssetId.current = state.active }, [state.active])
   useEffect(() => onRefresh(() => { actions.refresh() }), [actions, onRefresh])
   useEffect(() => {
@@ -61,24 +71,6 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
   const openAsset = (assetId: string) => {
     if (sessionId === undefined) return
     void open(sessionId, assetId).then(actions.open).catch((error: unknown) => { actions.fail(errorMessage(error)) })
-  }
-  const createOutline = async (level: 'book' | 'volume', parentId?: string) => {
-    if (sessionId === undefined || creating) return
-    setCreating(true)
-    try {
-      const document = await create(sessionId, {
-        type: 'planning.outline',
-        title: level === 'book' ? t('newBookOutlineTitle') : t('newVolumeOutlineTitle'),
-        ...(parentId === undefined ? {} : { parentId: parentId as never }),
-        content: { kind: 'outline', level, body: '' },
-      })
-      actions.assetCreated(document)
-      actions.open(document)
-    } catch (error: unknown) {
-      actions.fail(errorMessage(error))
-    } finally {
-      setCreating(false)
-    }
   }
   const createBookGuidance = async (type: 'book.brief' | 'book.style-profile' | 'book.story-state') => {
     if (sessionId === undefined || creating) return
@@ -117,6 +109,24 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
       setCreating(false)
     }
   }
+  const createVolumeOutline = async (bookOutline: NovelAssetDescriptor) => {
+    if (sessionId === undefined || creating) return
+    setCreating(true)
+    try {
+      const document = await create(sessionId, {
+        type: 'planning.outline',
+        title: t('newVolumeOutlineTitle'),
+        parentId: bookOutline.id,
+        content: { kind: 'outline', level: 'volume', body: '' },
+      })
+      actions.assetCreated(document)
+      actions.open(document)
+    } catch (error: unknown) {
+      actions.fail(errorMessage(error))
+    } finally {
+      setCreating(false)
+    }
+  }
   const reorderChapters = async (orderedAssetIds: readonly NovelAssetDescriptor['id'][]) => {
     if (sessionId === undefined || state.project === undefined || reordering) return
     const previous = state.assets
@@ -138,6 +148,25 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
       actions.fail(errorMessage(error))
     } finally {
       setReordering(false)
+    }
+  }
+  const deleteAsset = async () => {
+    if (sessionId === undefined || deleting || deleteTarget === undefined) return
+    const asset = deleteTarget
+    setDeleting(true)
+    try {
+      const result = await deleteRemote(sessionId, { assetId: asset.id, baseRevisionId: asset.revisionId })
+      const removedActive = state.active !== undefined && result.deletedAssetIds.includes(state.active)
+      actions.assetsDeleted(result.assets, result.deletedAssetIds)
+      if (removedActive) {
+        const target = result.assets.find(item => item.type === 'manuscript.chapter') ?? result.assets[0]
+        if (target !== undefined) actions.open(await open(sessionId, target.id))
+      }
+      setDeleteTarget(undefined)
+    } catch (error: unknown) {
+      actions.fail(errorMessage(error))
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -173,6 +202,9 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
           titleOf={titleOf}
           openAsset={openAsset}
           createAsset={createBookGuidance}
+          deleteAsset={setDeleteTarget}
+          deleting={deleting}
+          deleteLabel={t('deleteAsset')}
           labels={{
             title: t('bookGuidance'), items: t('assetUnit'), brief: t('bookBrief'), style: t('bookStyleProfile'),
             storyState: t('bookStoryState'), addBrief: t('addBookBrief'), addStyle: t('addBookStyleProfile'),
@@ -182,31 +214,48 @@ export function Explorer({ useSessions, useStore, actions, renderers, load, open
         <AssetGroup title={t('chapters')} assets={manuscripts} active={state.active} unit={t('chapterUnit')}
           titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')}
           creating={creating} addLabel={t('addChapter')} createAsset={createChapter}
+          deleteAsset={setDeleteTarget} deleting={deleting} deleteLabel={t('deleteAsset')}
           reorderAssets={reorderChapters} reorderDisabled={reordering} dragLabel={t('dragChapter')} />
         <OutlineGroup
           roots={roots}
           all={outlines}
           active={state.active}
-          creating={creating}
           titleOf={titleOf}
           openAsset={openAsset}
-          createOutline={createOutline}
-          labels={{ outline: t('outline'), items: t('assetUnit'), addBook: t('addBookOutline'), addVolume: t('addVolumeOutline') }}
+          createVolumeOutline={createVolumeOutline}
+          creating={creating}
+          deleteAsset={setDeleteTarget}
+          deleting={deleting}
+          deleteLabel={t('deleteAsset')}
+          labels={{ outline: t('outline'), items: t('assetUnit'), addVolume: t('addVolumeOutline') }}
         />
         {other.length > 0 && <AssetGroup title={t('otherAssets')} assets={other} active={state.active} unit={t('assetUnit')}
-          titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')} />}
+          titleOf={titleOf} openAsset={openAsset} characterCount={characterCount} characters={t('characters')}
+          deleteAsset={setDeleteTarget} deleting={deleting} deleteLabel={t('deleteAsset')} />}
       </nav>
     </>}
+    {deleteTarget === undefined ? null : portal(dialogHost, <DeleteAssetDialog
+      title={titleOf(deleteTarget)}
+      description={t('deleteAssetConfirm').replace('{title}', titleOf(deleteTarget))}
+      busy={deleting}
+      cancelLabel={t('cancel')}
+      confirmLabel={t('confirmDeleteAsset')}
+      close={() => { if (!deleting) setDeleteTarget(undefined) }}
+      confirm={() => { void deleteAsset() }}
+    />)}
   </div>
 }
 
-function BookGuidanceGroup({ assets, active, creating, titleOf, openAsset, createAsset, labels }: {
+function BookGuidanceGroup({ assets, active, creating, deleting, titleOf, openAsset, createAsset, deleteAsset, deleteLabel, labels }: {
   readonly assets: readonly NovelAssetDescriptor[]
   readonly active: string | undefined
   readonly creating: boolean
+  readonly deleting: boolean
   readonly titleOf: (asset: NovelAssetDescriptor) => string
   readonly openAsset: (assetId: string) => void
   readonly createAsset: (type: 'book.brief' | 'book.style-profile' | 'book.story-state') => Promise<void>
+  readonly deleteAsset: (asset: NovelAssetDescriptor) => void
+  readonly deleteLabel: string
   readonly labels: {
     readonly title: string
     readonly items: string
@@ -222,45 +271,52 @@ function BookGuidanceGroup({ assets, active, creating, titleOf, openAsset, creat
   const style = assets.find(asset => asset.type === 'book.style-profile')
   const storyState = assets.find(asset => asset.type === 'book.story-state')
   return <details className={css.assetGroup} open>
-    <summary><strong>{labels.title}</strong><small>{assets.length} {labels.items}</small></summary>
+    <summary><strong>{labels.title}（{assets.length}{labels.items}）</strong>
+      <span className={css.groupActions}>
+        {brief === undefined && <button type="button" disabled={creating} onClick={(event) => {
+          event.preventDefault(); event.stopPropagation(); void createAsset('book.brief')
+        }}>＋{labels.addBrief}</button>}
+        {style === undefined && <button type="button" disabled={creating} onClick={(event) => {
+          event.preventDefault(); event.stopPropagation(); void createAsset('book.style-profile')
+        }}>＋{labels.addStyle}</button>}
+        {storyState === undefined && <button type="button" disabled={creating} onClick={(event) => {
+          event.preventDefault(); event.stopPropagation(); void createAsset('book.story-state')
+        }}>＋{labels.addStoryState}</button>}
+      </span>
+    </summary>
     <div className={css.assetGroupItems}>
-      {brief === undefined
-        ? <button className={css.addGuidance} type="button" disabled={creating}
-          onClick={() => { void createAsset('book.brief') }}>＋ {labels.addBrief}</button>
-        : <AssetButton asset={brief} active={active} title={titleOf(brief)} details={labels.brief} openAsset={openAsset} />}
-      {style === undefined
-        ? <button className={css.addGuidance} type="button" disabled={creating}
-          onClick={() => { void createAsset('book.style-profile') }}>＋ {labels.addStyle}</button>
-        : <AssetButton asset={style} active={active} title={titleOf(style)} details={labels.style} openAsset={openAsset} />}
-      {storyState === undefined
-        ? <button className={css.addGuidance} type="button" disabled={creating}
-          onClick={() => { void createAsset('book.story-state') }}>＋ {labels.addStoryState}</button>
-        : <AssetButton asset={storyState} active={active} title={titleOf(storyState)}
-          details={labels.storyState} openAsset={openAsset} />}
+      {brief !== undefined && <AssetButton asset={brief} active={active} title={titleOf(brief)} details={labels.brief}
+        openAsset={openAsset} deleteAsset={deleteAsset} deleting={deleting} deleteLabel={deleteLabel} />}
+      {style !== undefined && <AssetButton asset={style} active={active} title={titleOf(style)} details={labels.style}
+        openAsset={openAsset} deleteAsset={deleteAsset} deleting={deleting} deleteLabel={deleteLabel} />}
+      {storyState !== undefined && <AssetButton asset={storyState} active={active} title={titleOf(storyState)}
+        details={labels.storyState} openAsset={openAsset} deleteAsset={deleteAsset} deleting={deleting} deleteLabel={deleteLabel} />}
     </div>
   </details>
 }
 
-function OutlineGroup({ roots, all, active, creating, titleOf, openAsset, createOutline, labels }: {
+function OutlineGroup({ roots, all, active, creating, deleting, titleOf, openAsset, createVolumeOutline,
+  deleteAsset, deleteLabel, labels }: {
   readonly roots: readonly NovelAssetDescriptor[]
   readonly all: readonly NovelAssetDescriptor[]
   readonly active: string | undefined
   readonly creating: boolean
+  readonly deleting: boolean
   readonly titleOf: (asset: NovelAssetDescriptor) => string
   readonly openAsset: (assetId: string) => void
-  readonly createOutline: (level: 'book' | 'volume', parentId?: string) => Promise<void>
-  readonly labels: { outline: string; items: string; addBook: string; addVolume: string }
+  readonly createVolumeOutline: (bookOutline: NovelAssetDescriptor) => Promise<void>
+  readonly deleteAsset: (asset: NovelAssetDescriptor) => void
+  readonly deleteLabel: string
+  readonly labels: { outline: string; items: string; addVolume: string }
 }) {
   return <details className={css.assetGroup} open>
-    <summary><strong>{labels.outline}</strong><small>{all.length} {labels.items}</small></summary>
-    <div className={css.outlineActions}>
-      <button type="button" disabled={creating} onClick={() => { void createOutline('book') }}>＋ {labels.addBook}</button>
-    </div>
+    <summary><strong>{labels.outline}（{all.length}{labels.items}）</strong></summary>
     <div className={css.assetGroupItems}>
       {roots.map((root) => {
         const volumes = all.filter(asset => asset.parentId === root.id)
         return <div className={css.outlineBranch} key={root.id}>
-          <AssetButton asset={root} active={active} title={titleOf(root)} openAsset={openAsset} />
+          <AssetButton asset={root} active={active} title={titleOf(root)} openAsset={openAsset}
+            deleteAsset={deleteAsset} deleting={deleting} deleteLabel={deleteLabel} />
           <div className={css.volumeList}>
             {volumes.map(volume => <AssetButton
               key={volume.id}
@@ -268,9 +324,12 @@ function OutlineGroup({ roots, all, active, creating, titleOf, openAsset, create
               active={active}
               title={titleOf(volume)}
               openAsset={openAsset}
+              deleteAsset={deleteAsset}
+              deleting={deleting}
+              deleteLabel={deleteLabel}
             />)}
-            <button className={css.addVolume} type="button" disabled={creating}
-              onClick={() => { void createOutline('volume', root.id) }}>＋ {labels.addVolume}</button>
+            <button type="button" className={css.addVolume} disabled={creating}
+              onClick={() => { void createVolumeOutline(root) }}>＋{labels.addVolume}</button>
           </div>
         </div>
       })}
@@ -278,11 +337,14 @@ function OutlineGroup({ roots, all, active, creating, titleOf, openAsset, create
   </details>
 }
 
-function AssetButton({ asset, active, title, openAsset, details, drag }: {
+function AssetButton({ asset, active, title, openAsset, deleteAsset, deleting, deleteLabel, details, drag }: {
   readonly asset: NovelAssetDescriptor
   readonly active: string | undefined
   readonly title: string
   readonly openAsset: (assetId: string) => void
+  readonly deleteAsset: (asset: NovelAssetDescriptor) => void
+  readonly deleting: boolean
+  readonly deleteLabel: string
   readonly details?: string
   readonly drag?: {
     readonly dragging: boolean
@@ -294,24 +356,30 @@ function AssetButton({ asset, active, title, openAsset, details, drag }: {
     readonly onDrop: (event: DragEvent<HTMLButtonElement>) => void
   }
 }) {
-  return <button type="button" className={css.assetButton} data-active={asset.id === active || undefined}
-    draggable={drag !== undefined}
-    data-dragging={drag?.dragging || undefined}
-    data-drop-position={drag?.dropPosition}
-    aria-label={drag === undefined ? undefined : `${title}，${drag.label}`}
-    onDragStart={drag?.onDragStart}
-    onDragOver={drag?.onDragOver}
-    onDragEnd={drag?.onDragEnd}
-    onDrop={drag?.onDrop}
-    onClick={() => { openAsset(asset.id) }}>
-    <span>{title}</span>{details === undefined ? null : <small>{details}</small>}
-    {drag === undefined ? null : <i className={css.dragGrip} aria-hidden="true">⋮⋮</i>}
-  </button>
+  return <div className={css.assetRow} data-active={asset.id === active || undefined}>
+    <button type="button" className={css.assetButton} data-active={asset.id === active || undefined}
+      draggable={drag !== undefined}
+      data-dragging={drag?.dragging || undefined}
+      data-drop-position={drag?.dropPosition}
+      aria-label={drag === undefined ? undefined : `${title}，${drag.label}`}
+      onDragStart={drag?.onDragStart}
+      onDragOver={drag?.onDragOver}
+      onDragEnd={drag?.onDragEnd}
+      onDrop={drag?.onDrop}
+      onClick={() => { openAsset(asset.id) }}>
+      <span>{title}</span>{details === undefined ? null : <small>{details}</small>}
+      {drag === undefined ? null : <i className={css.dragGrip} aria-hidden="true">⋮⋮</i>}
+    </button>
+    <button className={css.deleteAsset} type="button" disabled={deleting}
+      aria-label={`${deleteLabel} ${title}`} title={deleteLabel}
+      onClick={() => { deleteAsset(asset) }}>×</button>
+  </div>
 }
 
 function AssetGroup({
   title, assets, active, unit, titleOf, openAsset, characterCount, characters, creating, addLabel, createAsset,
   reorderAssets, reorderDisabled = false, dragLabel,
+  deleteAsset, deleting, deleteLabel,
 }: {
   readonly title: string
   readonly assets: readonly NovelAssetDescriptor[]
@@ -327,6 +395,9 @@ function AssetGroup({
   readonly reorderAssets?: (orderedAssetIds: readonly NovelAssetDescriptor['id'][]) => Promise<void>
   readonly reorderDisabled?: boolean
   readonly dragLabel?: string
+  readonly deleteAsset: (asset: NovelAssetDescriptor) => void
+  readonly deleting: boolean
+  readonly deleteLabel: string
 }) {
   const [draggingId, setDraggingId] = useState<NovelAssetDescriptor['id']>()
   const [dropTarget, setDropTarget] = useState<{ id: NovelAssetDescriptor['id']; position: 'before' | 'after' }>()
@@ -349,17 +420,19 @@ function AssetGroup({
     void reorderAssets(ids)
   }
   return <details className={css.assetGroup} open>
-    <summary><strong>{title}</strong><small>{assets.length} {unit}</small></summary>
-    {addLabel !== undefined && createAsset !== undefined
-      ? <div className={css.outlineActions}><button type="button" disabled={creating}
-        onClick={() => { void createAsset() }}>＋ {addLabel}</button></div>
-      : null}
+    <summary><strong>{title}（{assets.length}{unit}）</strong>
+      {addLabel !== undefined && createAsset !== undefined
+        ? <span className={css.groupActions}><button type="button" disabled={creating}
+          onClick={(event) => { event.preventDefault(); event.stopPropagation(); void createAsset() }}>＋{addLabel}</button></span>
+        : null}
+    </summary>
     <div className={css.assetGroupItems}>{assets.map((asset) => {
       const details = asset.id === active && characterCount !== undefined
         ? `${characterCount.toLocaleString()} ${characters}`
         : undefined
       return <AssetButton
         key={asset.id} asset={asset} active={active} title={titleOf(asset)} openAsset={openAsset}
+        deleteAsset={deleteAsset} deleting={deleting} deleteLabel={deleteLabel}
         {...(details === undefined ? {} : { details })}
         {...(reorderAssets === undefined || dragLabel === undefined ? {} : { drag: {
           dragging: draggingId === asset.id,
@@ -384,6 +457,38 @@ function AssetGroup({
       />
     })}</div>
   </details>
+}
+
+function DeleteAssetDialog({ title, description, busy, cancelLabel, confirmLabel, close, confirm }: {
+  readonly title: string
+  readonly description: string
+  readonly busy: boolean
+  readonly cancelLabel: string
+  readonly confirmLabel: string
+  readonly close: () => void
+  readonly confirm: () => void
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    document.addEventListener('keydown', onKeyDown)
+    return () => { document.removeEventListener('keydown', onKeyDown) }
+  }, [close])
+  return <div className={css.deleteBackdrop} onMouseDown={(event) => {
+    if (event.target === event.currentTarget) close()
+  }}>
+    <section className={css.deleteDialog} role="dialog" aria-modal="true" aria-labelledby="novel-delete-title">
+      <header><span className={css.deleteDialogMark} aria-hidden="true">×</span>
+        <div><p>{confirmLabel}</p><h2 id="novel-delete-title">{title}</h2></div></header>
+      <p className={css.deleteDialogDescription}>{description}</p>
+      <footer><button type="button" disabled={busy} autoFocus onClick={close}>{cancelLabel}</button>
+        <button type="button" className={css.deleteConfirm} disabled={busy}
+          onClick={confirm}>{confirmLabel}</button></footer>
+    </section>
+  </div>
+}
+
+function portal(host: Element | null, content: ReactNode): ReactNode {
+  return host === null ? content : createPortal(content, host)
 }
 
 function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error) }
