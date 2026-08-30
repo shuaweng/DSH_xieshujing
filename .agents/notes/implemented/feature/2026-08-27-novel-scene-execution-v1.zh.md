@@ -18,7 +18,7 @@ Generation Lineage 还需要区分直接写作与经过 Agent 或作者决策后
 
 选择留在 DSH Agent Loop 内。作者选择会调用现有 `ctx.userQuestions` 能力，因此普通 Composer 接管区会展示方案、暂停根 Agent 的工具调用、记录回答，再恢复工具。Agent 自选使用同一个 Novel 工具，但不等待人类。被委派的 Subagent 可以报告备选方案，却不能询问作者，也不能把自己的决策 call 借给父 Agent。“其他”自由反馈表示要求 Agent 重拟方案，不等于批准某一项。
 
-成功的选择工具调用与结果都是耐久 Session 事件。后续 `novel_create` 或 `novel_propose_changes` 只通过 `scene_decision_call_id` 引用选择 call id，不再提交策略、方案数或选中序号。Host 只接受属于当前 Session turn、当前 chapter-write Context Manifest、当前写作 Skill、Novel Project 和精确目标 Asset Revision 的成功结果。绑定已有 Revision 的选择不能授权创建新 Asset，面向新 Asset 的选择也不能授权修改已有 Asset。
+成功的选择工具调用与结果都是耐久 Session 事件。后续 `novel_create` 或 `novel_propose_changes` 只通过 `scene_decision_call_id` 引用选择 call id，不再提交策略、方案数或选中序号。只要它仍是 Session 最近加载的 Skill，写作方法就可以跨 turn 保持有效；加载另一 Skill 会取代它。因此选择工具会复用此前适用的 `chapter-execution` 或 `scene-drive` 方法，而不要求重复注入 Skill。对于已有章节，它会把传入的精确 Revision 编译成一份新的 chapter-write Context Manifest，并在生成正文前延迟注入这份模型可见 Frame。Host 只接受选择结果与最终修改处于当前同一个 Session turn、刷新后的 Manifest、有效写作 Skill、Novel Project 和精确目标 Asset Revision 的情况。绑定已有 Revision 的选择不能授权创建新 Asset，面向新 Asset 的选择也不能授权修改已有 Asset。
 
 Host 从耐久工具结果 metadata 推导 `action-options-user-selected` 或 `action-options-agent-selected`、有边界的方案总数与一基选中序号。`NovelGenerationLineage` 会把这些坐标和决策 call id 与已有 Session、模型路由、Preset、Skill、Context Manifest 及策略来源一同保留。方案正文只留在 Session 事件中，不复制进 Revision 或上下文 Manifest。直接写作不带决策 id，并保留 `direct` 策略。
 

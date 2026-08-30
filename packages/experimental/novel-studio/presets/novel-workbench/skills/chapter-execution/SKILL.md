@@ -5,7 +5,7 @@ whenToUse: "[当前章节/选区引用、章纲引用，或明确的起草与续
 user-invocable: true
 metadata:
   novelContextPolicy: chapter-write
-  novelSkillVersion: 2
+  novelSkillVersion: 3
 ---
 
 # Chapter Execution
@@ -42,7 +42,7 @@ metadata:
 - 用户把选择权交给 Agent 时，比较后调用同一工具的 `selection_mode: agent` 和 `selected_option_id`，把自选结果写入当前 Session 轨迹；
 - 默认只生成一个正文候选。只有用户明确要求多个完整候选时才生成多个。
 
-每个方案只写短标题、戏剧行动与主要取舍。修改现有章节时，选择工具必须绑定目标 `asset_id + base_revision_id`；创建新章时不传目标。选择工具成功后，最终 `novel_create` / `novel_propose_changes` 只传它返回的 `decisionCallId` 作为 `scene_decision_call_id`。决策与落稿必须在同一 Session、同一 Turn、同一 Context Manifest 和同一写作 Skill 下完成；上下文或目标 Revision 已变化就重新选择。用户使用“其他”补充意见等于要求重拟方案，不等于授权某一项，此时不得落稿。Subagent 只把备选行动报告给父 Agent，不能把自己的决策 call id 交给另一 Session 使用。
+每个方案只写短标题、戏剧行动与主要取舍。修改现有章节时，选择工具必须绑定目标 `asset_id + base_revision_id`；创建新章时不传目标。同一 Session 中，只要本方法仍是最近加载的 Skill，就可在后续 turn 继续使用，不要仅为选择工具重复加载；若后来加载了另一 Skill，则本方法已被替代。选择工具会把已有章节的精确目标 Revision 刷新成当前 `chapter-write` Context Manifest。工具成功后，最终 `novel_create` / `novel_propose_changes` 只传它返回的 `decisionCallId` 作为 `scene_decision_call_id`。选择与最终落稿仍必须在同一 Session、同一 Turn、刷新后的同一 Context Manifest 和同一有效写作 Skill 下完成；上下文或目标 Revision 已变化就重新选择。用户使用“其他”补充意见等于要求重拟方案，不等于授权某一项，此时不得落稿。Subagent 只把备选行动报告给父 Agent，不能把自己的决策 call id 交给另一 Session 使用。
 
 ## 落稿原则
 

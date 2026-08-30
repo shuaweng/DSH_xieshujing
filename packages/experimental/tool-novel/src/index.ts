@@ -246,14 +246,19 @@ export function apply(ctx: Context): void {
       if ((args.target_asset_id === undefined) !== (args.base_revision_id === undefined)) {
         throw new Error('scene action target_asset_id and base_revision_id must be supplied together')
       }
+      let resolvedTarget: Awaited<ReturnType<typeof ctx.novelContextResolver.resolveReferences>>['references'][number] | undefined
       if (args.target_asset_id !== undefined && args.base_revision_id !== undefined) {
-        await ctx.novelContextResolver.resolveReferences(agent, [{
+        const resolved = await ctx.novelContextResolver.resolveReferences(agent, [{
           projectId: project.id,
           assetId: AssetId(args.target_asset_id),
           revisionId: RevisionId(args.base_revision_id),
         }], exec.signal)
+        resolvedTarget = resolved.references[0]
+        if (resolvedTarget === undefined) throw new Error('scene action choice lost its exact target Revision')
       }
-      const decisionContext = requireSceneDecisionContext(agent.session.events)
+      const decisionContext = await prepareSceneDecisionContext(
+        ctx, agent, exec, project.id, resolvedTarget,
+      )
       let selectedOptionId: string
       if (args.selection_mode === 'agent') {
         if (args.selected_option_id === undefined) {
@@ -779,13 +784,13 @@ async function generationLineage(
   const requestHeader = agent.session.requestHeader()
   const presetId = currentPreset(agent.session.header.agentPreset, events)
   const context = currentNovelManifest(events, turn)
-  const skillName = currentWritingSkill(events, turn)
-  const skillVersion = skillName === undefined
-    ? undefined
-    : await currentSkillVersion(ctx, agent, skillName, signal)
   const sceneDecision = request.sceneDecisionCallId === undefined
     ? undefined
     : resolveSceneDecision(events, request.sceneDecisionCallId, request.target)
+  const skillName = sceneDecision?.writingSkill ?? currentWritingSkill(events, turn)
+  const skillVersion = skillName === undefined
+    ? undefined
+    : await currentSkillVersion(ctx, agent, skillName, signal)
   const strategy = sceneDecision === undefined
     ? 'direct' as const
     : sceneDecision.selectionMode === 'user'
@@ -844,6 +849,48 @@ function boundedSceneText(value: unknown, label: string, maxLength: number): str
   return text
 }
 
+async function prepareSceneDecisionContext(
+  ctx: Context,
+  agent: NonNullable<ToolRunContext['agent']>,
+  exec: ToolRunContext,
+  projectId: ProjectId,
+  target: Awaited<ReturnType<typeof ctx.novelContextResolver.resolveReferences>>['references'][number] | undefined,
+): Promise<{ readonly manifestId: `sha256:${string}`; readonly skillName: string }> {
+  const events = agent.session.events
+  const turn = events.findLast(event => event.type === 'turn/start')?.data.turn
+  const skillName = latestLoadedSkill(events, turn)
+  if (skillName === undefined || !SCENE_WRITING_SKILLS.has(skillName)) {
+    throw new Error('Load chapter-execution or scene-drive with the skill tool, then retry the scene action choice.')
+  }
+  const current = currentNovelManifest(events, turn)
+  if (current !== undefined && current.policies.includes('chapter-write')
+    && (target === undefined || current.references.some(reference =>
+      reference.assetId === target.snapshot.asset.id
+      && reference.revisionId === target.snapshot.revisionId))) {
+    return { manifestId: current.manifestId, skillName }
+  }
+  if (target === undefined) {
+    throw new Error('scene action choices for a new chapter require a current chapter-write Novel Context Manifest')
+  }
+  const compiled = await ctx.novelContextResolver.compile(agent, {
+    policies: ['chapter-write'],
+    targets: [{
+      projectId,
+      assetId: target.snapshot.asset.id,
+      revisionId: target.snapshot.revisionId,
+      label: target.input.label,
+      origin: 'message',
+      mode: 'explicit',
+      projection: 'full',
+      reason: 'target-asset',
+      required: true,
+    }],
+    includeWorkset: true,
+  }, exec.signal)
+  exec.deferContext(compiled.additionalContext)
+  return { manifestId: compiled.source.manifestId, skillName }
+}
+
 function requireSceneDecisionContext(
   events: readonly { readonly type: string; readonly data: unknown }[],
 ): { readonly manifestId: `sha256:${string}`; readonly skillName: string } {
@@ -855,9 +902,9 @@ function requireSceneDecisionContext(
   if (context === undefined || !context.policies.includes('chapter-write')) {
     throw new Error('scene action choices require the current chapter-write Novel Context Manifest')
   }
-  const skillName = currentWritingSkill(events, turn)
+  const skillName = latestLoadedSkill(events, turn)
   if (skillName === undefined || !SCENE_WRITING_SKILLS.has(skillName)) {
-    throw new Error('scene action choices require chapter-execution or scene-drive to be loaded in the current turn')
+    throw new Error('scene action choices require chapter-execution or scene-drive to remain the active Session Skill')
   }
   return { manifestId: context.manifestId, skillName }
 }
@@ -965,10 +1012,18 @@ function currentPreset(
 function currentNovelManifest(
   events: readonly { readonly type: string; readonly data: unknown }[],
   turn: number | undefined,
-): { readonly manifestId: `sha256:${string}`; readonly policies: readonly string[] } | undefined {
+): {
+  readonly manifestId: `sha256:${string}`
+  readonly policies: readonly string[]
+  readonly references: readonly { readonly assetId: string; readonly revisionId: string }[]
+} | undefined {
   if (turn === undefined) return undefined
   let inTurn = false
-  let latest: { readonly manifestId: `sha256:${string}`; readonly policies: readonly string[] } | undefined
+  let latest: {
+    readonly manifestId: `sha256:${string}`
+    readonly policies: readonly string[]
+    readonly references: readonly { readonly assetId: string; readonly revisionId: string }[]
+  } | undefined
   for (const event of events) {
     if (event.type === 'turn/start') {
       inTurn = (event.data as { turn?: unknown }).turn === turn
@@ -980,10 +1035,18 @@ function currentNovelManifest(
     const record = source as Record<string, unknown>
     if (record['kind'] !== 'novel-context' || record['version'] !== 3
       || typeof record['manifestId'] !== 'string' || !Array.isArray(record['policies'])
-      || record['policies'].some(value => typeof value !== 'string')) continue
+      || record['policies'].some(value => typeof value !== 'string') || !Array.isArray(record['references'])) continue
+    const references = record['references'].flatMap((reference): Array<{ assetId: string; revisionId: string }> => {
+      if (typeof reference !== 'object' || reference === null || Array.isArray(reference)) return []
+      const item = reference as Record<string, unknown>
+      return typeof item['assetId'] === 'string' && typeof item['revisionId'] === 'string'
+        ? [{ assetId: item['assetId'], revisionId: item['revisionId'] }]
+        : []
+    })
     latest = {
       manifestId: record['manifestId'] as `sha256:${string}`,
       policies: record['policies'] as string[],
+      references,
     }
   }
   return latest
@@ -993,8 +1056,24 @@ function currentWritingSkill(
   events: readonly { readonly type: string; readonly data: unknown }[],
   turn: number | undefined,
 ): string | undefined {
+  return loadedSkill(events, turn, true)
+}
+
+/** Most recently loaded Skill in the Session up through the active turn. */
+function latestLoadedSkill(
+  events: readonly { readonly type: string; readonly data: unknown }[],
+  turn: number | undefined,
+): string | undefined {
+  return loadedSkill(events, turn, false)
+}
+
+function loadedSkill(
+  events: readonly { readonly type: string; readonly data: unknown }[],
+  turn: number | undefined,
+  currentTurnOnly: boolean,
+): string | undefined {
   if (turn === undefined) return undefined
-  let inTurn = false
+  let activeTurn: number | undefined
   let latest: string | undefined
   const successfulCalls = new Set<string>()
   for (const event of events) {
@@ -1010,10 +1089,12 @@ function currentWritingSkill(
   }
   for (const event of events) {
     if (event.type === 'turn/start') {
-      inTurn = (event.data as { turn?: unknown }).turn === turn
+      const candidate = (event.data as { turn?: unknown }).turn
+      activeTurn = typeof candidate === 'number' ? candidate : undefined
+      if (activeTurn !== undefined && activeTurn > turn) break
       continue
     }
-    if (!inTurn) continue
+    if (activeTurn === undefined || activeTurn > turn || (currentTurnOnly && activeTurn !== turn)) continue
     if (event.type === 'user/message') {
       const source = (event.data as { source?: unknown }).source
       if (typeof source === 'object' && source !== null) {

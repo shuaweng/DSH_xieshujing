@@ -5,7 +5,7 @@ whenToUse: "[当前片段/章节/章纲引用，或场景发平、冲突不顶�
 user-invocable: true
 metadata:
   novelContextPolicy: chapter-write
-  novelSkillVersion: 2
+  novelSkillVersion: 3
 ---
 
 # Scene Drive
@@ -44,7 +44,7 @@ metadata:
 
 用户要自己选时调用 `novel_choose_scene_action(selection_mode: user)`，由 DSH 原生问题区等待选择；用户授权 Agent 选择时，按人物逻辑、连续性、信息边界、重复度、张力与后续空间比较后调用同一工具的 `selection_mode: agent`。选定后默认只生成一个正文候选。
 
-每项只保留短标题、戏剧行动和主要取舍。已有正文目标必须绑定精确 `asset_id + base_revision_id`，新 Asset 则不传目标。工具成功返回的 `decisionCallId` 必须在同一 Session、同一 Turn、同一 Context Manifest 与同一 Skill 下，以 `scene_decision_call_id` 传给随后的落稿工具；不能手写或跨 Session 复用。用户使用“其他”是在反馈并要求重拟，不是批准某项。Subagent 可提出备选行动，但需要父 Agent 在自己的 Session 中完成选择与最终提案。
+每项只保留短标题、戏剧行动和主要取舍。已有正文目标必须绑定精确 `asset_id + base_revision_id`，新 Asset 则不传目标。只要本方法仍是同一 Session 最近加载的 Skill，就可跨 turn 复用，不要仅为选择工具重复加载；加载其他 Skill 后它即被替代。选择工具会把已有章节的精确目标 Revision 刷新成当前 `chapter-write` Context Manifest。成功返回的 `decisionCallId` 仍必须在同一 Session、同一 Turn、刷新后的同一 Context Manifest 与同一有效 Skill 下，以 `scene_decision_call_id` 传给随后的落稿工具；不能手写或跨 Session 复用。用户使用“其他”是在反馈并要求重拟，不是批准某项。Subagent 可提出备选行动，但需要父 Agent 在自己的 Session 中完成选择与最终提案。
 
 ## 输出边界
 

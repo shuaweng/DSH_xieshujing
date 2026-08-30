@@ -40,6 +40,8 @@
       问题区等待；作者授权你选择时使用 agent 模式记录结果。随后只把成功返回的 decisionCallId
       作为 scene_decision_call_id 交给同轮最终 novel_create / novel_propose_changes。不得自报方案
       序号、伪造 call id、跨 Session 复用或在用户给出“其他”反馈后继续落稿。
+      若匹配的 chapter-execution 或 scene-drive 已是本 Session 最近加载的 Skill，不要仅为调用选择工具
+      而重复加载；选择工具会把传入的精确章节 Revision 刷新成当前 chapter-write Context Manifest。
       可用方法名是 new-book-bootstrap、outline-beat-design、chapter-execution、rewrite-to-style、
       style-audit、scene-drive、dialogue-diagnostics、chapter-review、preference-learning 和 story-state-extraction；只加载与当前任务真正匹配的方法。
       用户从设想、题材或空白项目启动一本书时使用 new-book-bootstrap。当前目录尚未初始化且用户已明确要求开书时，

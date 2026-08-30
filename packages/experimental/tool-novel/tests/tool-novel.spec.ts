@@ -160,7 +160,12 @@ function execute(
   })
 }
 
-function prepareChapterWritingTurn(agent: Agent, turn: number, manifestId: `sha256:${string}`): void {
+function prepareChapterWritingTurn(
+  agent: Agent,
+  turn: number,
+  manifestId: `sha256:${string}`,
+  revisionId: RevisionId,
+): void {
   const skillCallId = CallId(`skill-chapter-execution-${turn}`)
   agent.session.append('turn/start', { turn })
   agent.session.append('step/start', { turn, step: 1 })
@@ -171,7 +176,11 @@ function prepareChapterWritingTurn(agent: Agent, turn: number, manifestId: `sha2
     content: [{ type: 'text', text: '<novel-context>frozen material</novel-context>' }],
     source: {
       kind: 'novel-context', form: 'manifest', version: 3, manifestId,
-      projectId: ProjectId('project-tool'), policies: ['chapter-write'], references: [],
+      projectId: ProjectId('project-tool'), policies: ['chapter-write'], references: [{
+        assetId: AssetId('chapter-tool'), revisionId, label: 'Tool Chapter', type: 'manuscript.chapter',
+        origin: 'message', mode: 'explicit', projection: 'full', reason: 'target-asset',
+        contentHash: `sha256:${'0'.repeat(64)}`, modelTextBytes: 21,
+      }],
     },
   }), { surfaceOp: 'append' })
   agent.session.append('tool/call', {
@@ -183,6 +192,26 @@ function prepareChapterWritingTurn(agent: Agent, turn: number, manifestId: `sha2
       callId: skillCallId, content: [{ type: 'text', text: 'loaded' }], isError: false,
     }),
   }, { surfaceOp: 'append' })
+}
+
+function prepareDirectChapterTurn(agent: Agent, turn: number, revisionId: RevisionId): void {
+  agent.session.append('turn/start', { turn })
+  agent.session.append('step/start', { turn, step: 1 })
+  agent.session.append('request/header', {
+    header: { config: { provider: 'test-provider', model: 'test-writer' } }, reason: 'initial',
+  })
+  agent.session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: '<novel-context>coordinate only</novel-context>' }],
+    source: {
+      kind: 'novel-context', form: 'manifest', version: 3,
+      manifestId: `sha256:${'d'.repeat(64)}`,
+      projectId: ProjectId('project-tool'), policies: ['direct-turn'], references: [{
+        assetId: AssetId('chapter-tool'), revisionId, label: 'Tool Chapter', type: 'manuscript.chapter',
+        origin: 'active-asset', mode: 'follow', projection: 'coordinate', reason: 'active-asset',
+        contentHash: `sha256:${'1'.repeat(64)}`, modelTextBytes: 0,
+      }],
+    },
+  }), { surfaceOp: 'append' })
 }
 
 function appendSuccessfulToolResult(
@@ -455,7 +484,7 @@ describe('Novel model tools', () => {
   it('uses the native DSH question seam for author-owned scene selection', async () => {
     const { ctx, agent, revisionId } = await harness()
     const manifestId = `sha256:${'b'.repeat(64)}` as const
-    prepareChapterWritingTurn(agent, 2, manifestId)
+    prepareChapterWritingTurn(agent, 2, manifestId, revisionId)
     const requests: AskUserQuestionRequest[] = []
     ctx.userQuestions.registerProvider({
       async ask(request) {
@@ -504,9 +533,79 @@ describe('Novel model tools', () => {
     })
   })
 
+  it('reuses the active Session writing Skill and refreshes an exact chapter-write Manifest', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    prepareChapterWritingTurn(agent, 1, `sha256:${'e'.repeat(64)}`, revisionId)
+    prepareDirectChapterTurn(agent, 2, revisionId)
+    ctx.userQuestions.registerProvider({
+      async ask() {
+        return { answers: [{ id: 'scene-action', selected: ['1. 暗中试探'] }] }
+      },
+    })
+
+    const decisionCallId = CallId('scene-choice-reused-skill')
+    const decisionArgs = {
+      selection_mode: 'user',
+      goal: '选择章末冲突行动',
+      target_asset_id: 'chapter-tool',
+      base_revision_id: revisionId,
+      options: [
+        { id: 'test', title: '暗中试探', action: '主角说错日期试探。', tradeoff: '悬疑强但较慢。' },
+        { id: 'ask', title: '正面质问', action: '主角当面逼问。', tradeoff: '冲突快但太直白。' },
+      ],
+    }
+    const result = await execute(ctx, agent, 'novel_choose_scene_action', decisionArgs, decisionCallId)
+
+    if (result.isError) throw new Error(`expected cross-turn Skill reuse success: ${JSON.stringify(result)}`)
+    expect(result.value).toMatchObject({ writingSkill: 'chapter-execution' })
+    expect(result.additionalContexts).toHaveLength(1)
+    const source = result.additionalContexts?.[0]?.source
+    expect(source).toMatchObject({ kind: 'novel-context', version: 3, policies: ['chapter-write'] })
+    expect((source as { references?: unknown[] } | undefined)?.references).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        assetId: 'chapter-tool', revisionId, reason: 'target-asset', projection: 'full',
+      }),
+    ]))
+    expect((result.value as { contextManifestId: string }).contextManifestId)
+      .toBe((source as { manifestId?: string } | undefined)?.manifestId)
+
+    appendSuccessfulToolResult(agent, {
+      turn: 2, step: 1, callId: decisionCallId, name: 'novel_choose_scene_action', args: decisionArgs,
+      content: result.content as Array<{ type: 'text'; text: string }>, meta: result.meta,
+    })
+    for (const context of result.additionalContexts ?? []) {
+      agent.session.append('user/message', context, { surfaceOp: 'append' })
+    }
+    const proposal = await execute(ctx, agent, 'novel_propose_changes', {
+      project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
+      operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }],
+      summary: '按作者选定行动推进', scene_decision_call_id: decisionCallId,
+    })
+    expect(proposal).toMatchObject({ isError: false })
+  })
+
+  it('explains how to activate scene execution when no writing Skill has been loaded', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    prepareDirectChapterTurn(agent, 1, revisionId)
+    const result = await execute(ctx, agent, 'novel_choose_scene_action', {
+      selection_mode: 'agent',
+      goal: '选择场景行动',
+      target_asset_id: 'chapter-tool',
+      base_revision_id: revisionId,
+      options: [
+        { id: 'left', title: '向左', action: '主角向左走。', tradeoff: '安全但慢。' },
+        { id: 'right', title: '向右', action: '主角向右走。', tradeoff: '危险但快。' },
+      ],
+      selected_option_id: 'left',
+    })
+    expect(result).toMatchObject({ isError: true })
+    expect(result.content.some(block => block.type === 'text'
+      && block.text.includes('Load chapter-execution or scene-drive'))).toBe(true)
+  })
+
   it('treats author free-text feedback as a request to replan, not an authorized scene choice', async () => {
     const { ctx, agent, revisionId } = await harness()
-    prepareChapterWritingTurn(agent, 2, `sha256:${'c'.repeat(64)}`)
+    prepareChapterWritingTurn(agent, 2, `sha256:${'c'.repeat(64)}`, revisionId)
     ctx.userQuestions.registerProvider({
       async ask() {
         return { answers: [{ id: 'scene-action', selected: [], custom: '两个都太直白，重新给更隐蔽的方案' }] }
@@ -527,7 +626,7 @@ describe('Novel model tools', () => {
   it('derives bounded generation lineage from one durable same-turn scene decision', async () => {
     const { ctx, agent, revisionId } = await harness()
     const manifestId = `sha256:${'a'.repeat(64)}` as const
-    prepareChapterWritingTurn(agent, 2, manifestId)
+    prepareChapterWritingTurn(agent, 2, manifestId, revisionId)
     const decisionCallId = CallId('scene-choice-agent')
     const decisionArgs = {
       selection_mode: 'agent',
