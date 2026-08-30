@@ -92,7 +92,16 @@
 }
 
 .detail {
-  margin: 0 2px 8px;
+  inline-size: calc(100% - 48px);
+  max-inline-size: 42rem;
+  margin: 0 24px 8px;
+  color: var(--dsw-alias-label-secondary);
+  --dsw-font-markdown-base: var(--dsw-font-markdown-small);
+  --dsw-font-markdown-base-strong: var(--dsw-font-markdown-small-strong);
+}
+
+.detail > div {
+  color: inherit;
 }
 
 .footerActions {
@@ -424,6 +433,11 @@
 
   .header {
     padding: 10px 12px 0 18px;
+  }
+
+  .detail {
+    inline-size: calc(100% - 36px);
+    margin-inline: 18px;
   }
 
   .options {
