@@ -1,5 +1,5 @@
 import { Context } from '@deepseek-ai/cordis'
-import type { Agent } from '@deepseek-ai/dsh-agent'
+import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
 import { CallId, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -21,6 +21,7 @@ import UserApproval, {
   type ApprovalOutcome,
   type ApprovalRequest,
 } from '@deepseek-ai/dsh-user-approval'
+import UserQuestionService, { type AskUserQuestionRequest } from '@deepseek-ai/dsh-user-questions'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -85,12 +86,14 @@ async function harness(): Promise<{
     '',
   ].join('\n'))
   const ctx = new Context()
+  await ctx.plugin(AgentRegistry)
   await ctx.plugin(LocalFileSystem, { cwd: dir })
   await ctx.plugin(SandboxPolicy, { mode: 'workspace-write', workspaceRoot: dir })
   await ctx.plugin(NovelAssetTypeRegistry)
   await ctx.plugin(NovelAssetOutline)
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SystemPrompt)
+  await ctx.plugin(UserQuestionService)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NovelContextResolver)
   ctx.provide('novelAnalysis', { candidateWarning: vi.fn(() => undefined) } as never)
@@ -106,9 +109,11 @@ async function harness(): Promise<{
   const session = Session.create(id, [], {
     version: 0, id, createdAt: 0, cwd: dir, agentPreset: 'novel-workbench',
   })
+  const agent = { id, session, ctx } as Agent
+  ctx.agents.register(agent)
   return {
     ctx,
-    agent: { id, session, ctx } as Agent,
+    agent,
     path,
     revisionId: asset.revisionId,
     outlinePath,
@@ -139,9 +144,15 @@ async function blankHarness(): Promise<{ ctx: Context; agent: Agent; dir: string
   return { ctx, agent: { id, session, ctx } as Agent, dir }
 }
 
-function execute(ctx: Context, agent: Agent | undefined, name: string, args: unknown) {
+function execute(
+  ctx: Context,
+  agent: Agent | undefined,
+  name: string,
+  args: unknown,
+  callId = CallId(`novel-call-${++callNumber}`),
+) {
   return ctx.tools.execute({
-    callId: CallId(`novel-call-${++callNumber}`),
+    callId,
     name,
     arguments: args,
     signal: new AbortController().signal,
@@ -149,11 +160,67 @@ function execute(ctx: Context, agent: Agent | undefined, name: string, args: unk
   })
 }
 
+function prepareChapterWritingTurn(agent: Agent, turn: number, manifestId: `sha256:${string}`): void {
+  const skillCallId = CallId(`skill-chapter-execution-${turn}`)
+  agent.session.append('turn/start', { turn })
+  agent.session.append('step/start', { turn, step: 1 })
+  agent.session.append('request/header', {
+    header: { config: { provider: 'test-provider', model: 'test-writer' } }, reason: 'initial',
+  })
+  agent.session.append('user/message', createUserMessage({
+    content: [{ type: 'text', text: '<novel-context>frozen material</novel-context>' }],
+    source: {
+      kind: 'novel-context', form: 'manifest', version: 3, manifestId,
+      projectId: ProjectId('project-tool'), policies: ['chapter-write'], references: [],
+    },
+  }), { surfaceOp: 'append' })
+  agent.session.append('tool/call', {
+    turn, step: 1, callId: skillCallId, name: 'skill', arguments: '{"name":"chapter-execution"}',
+  })
+  agent.session.append('tool/result', {
+    turn, step: 1,
+    message: createToolResultMessage({
+      callId: skillCallId, content: [{ type: 'text', text: 'loaded' }], isError: false,
+    }),
+  }, { surfaceOp: 'append' })
+}
+
+function appendSuccessfulToolResult(
+  agent: Agent,
+  input: {
+    readonly turn: number
+    readonly step: number
+    readonly callId: ReturnType<typeof CallId>
+    readonly name: string
+    readonly args: unknown
+    readonly content: readonly { readonly type: 'text'; readonly text: string }[]
+    readonly meta?: unknown
+  },
+): void {
+  agent.session.append('tool/call', {
+    turn: input.turn,
+    step: input.step,
+    callId: input.callId,
+    name: input.name,
+    arguments: JSON.stringify(input.args),
+  })
+  agent.session.append('tool/result', {
+    turn: input.turn,
+    step: input.step,
+    message: createToolResultMessage({
+      callId: input.callId,
+      content: [...input.content],
+      isError: false,
+    }),
+    ...(input.meta === undefined ? {} : { meta: input.meta as never }),
+  }, { surfaceOp: 'append' })
+}
+
 describe('Novel model tools', () => {
   it('registers discovery, exact-read, and proposal tools with explicit proposal guidance', async () => {
     const { ctx, agent } = await harness()
     expect(ctx.tools.schemas().map(schema => schema.name).filter(name => name.startsWith('novel_')).sort())
-      .toEqual(['novel_create', 'novel_get', 'novel_get_analysis', 'novel_initialize_project', 'novel_list', 'novel_present', 'novel_propose_changes', 'novel_search'])
+      .toEqual(['novel_choose_scene_action', 'novel_create', 'novel_get', 'novel_get_analysis', 'novel_initialize_project', 'novel_list', 'novel_present', 'novel_propose_changes', 'novel_search'])
     const assembly = await ctx.systemPrompt.assemble({ scope: agent.ctx })
     expect(renderPrompt(assembly)).toContain('never means the file changed')
 
@@ -169,6 +236,11 @@ describe('Novel model tools', () => {
     })
     await expect(execute(ctx, agent, 'novel_present', { intent: 'open-workbench' }))
       .resolves.toMatchObject({ isError: false, value: { intent: 'open-workbench' } })
+
+    const choose = ctx.tools.get('novel_choose_scene_action')!
+    expect(choose.presentCall?.({ selection_mode: 'user', goal: '怎样试探徐闻？', options: [] })).toEqual({
+      card: 'generic', title: '请作者选择场景行动', kind: 'read', rawInput: '怎样试探徐闻？',
+    })
 
     const read = ctx.tools.get('novel_get')!
     expect(read.output.render({}, { assets: [] })).toEqual([{ type: 'text', text: '[]' }])
@@ -380,32 +452,106 @@ describe('Novel model tools', () => {
     })).resolves.toMatchObject({ isError: true })
   })
 
-  it('derives bounded generation lineage from the active Session and selected action path', async () => {
+  it('uses the native DSH question seam for author-owned scene selection', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    const manifestId = `sha256:${'b'.repeat(64)}` as const
+    prepareChapterWritingTurn(agent, 2, manifestId)
+    const requests: AskUserQuestionRequest[] = []
+    ctx.userQuestions.registerProvider({
+      async ask(request) {
+        requests.push(request)
+        return { answers: [{ id: 'scene-action', selected: ['2. 说错日期试探'] }] }
+      },
+    })
+    const callId = CallId('scene-choice-user')
+    const result = await execute(ctx, agent, 'novel_choose_scene_action', {
+      selection_mode: 'user',
+      goal: '林澈应该怎样确认徐闻知道旧案？',
+      target_asset_id: 'chapter-tool',
+      base_revision_id: revisionId,
+      options: [
+        {
+          id: 'direct-question', title: '直接质问',
+          action: '林澈正面追问，徐闻立即封闭信息。', tradeoff: '冲突快，但不符合谨慎性格。',
+        },
+        {
+          id: 'wrong-date-test', title: '说错日期试探',
+          action: '林澈故意报错日期，徐闻下意识纠正，怀疑由动作产生。', tradeoff: '潜台词更强，但需要控制解释。',
+        },
+      ],
+    }, callId)
+    if (result.isError) throw new Error(`expected user scene choice success: ${JSON.stringify(result)}`)
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.agent).toBe(agent)
+    expect(requests[0]?.questions).toMatchObject([{
+      id: 'scene-action', header: '场景行动选择', question: '林澈应该怎样确认徐闻知道旧案？',
+      options: [
+        { label: '1. 直接质问' },
+        { label: '2. 说错日期试探' },
+      ],
+    }])
+    expect(result.value).toMatchObject({
+      decisionCallId: callId,
+      selectionMode: 'user',
+      optionCount: 2,
+      selectedOptionId: 'wrong-date-test',
+      selectedOptionIndex: 2,
+      contextManifestId: manifestId,
+      writingSkill: 'chapter-execution',
+    })
+    expect(result.meta).toMatchObject({
+      kind: 'novel-scene-action-decision', decisionCallId: callId, selectionMode: 'user',
+    })
+  })
+
+  it('treats author free-text feedback as a request to replan, not an authorized scene choice', async () => {
+    const { ctx, agent, revisionId } = await harness()
+    prepareChapterWritingTurn(agent, 2, `sha256:${'c'.repeat(64)}`)
+    ctx.userQuestions.registerProvider({
+      async ask() {
+        return { answers: [{ id: 'scene-action', selected: [], custom: '两个都太直白，重新给更隐蔽的方案' }] }
+      },
+    })
+    await expect(execute(ctx, agent, 'novel_choose_scene_action', {
+      selection_mode: 'user',
+      goal: '选择人物试探方式',
+      target_asset_id: 'chapter-tool',
+      base_revision_id: revisionId,
+      options: [
+        { id: 'question', title: '直接质问', action: '当面追问。', tradeoff: '快但直白。' },
+        { id: 'observe', title: '观察反应', action: '假装离开再观察。', tradeoff: '隐蔽但偏慢。' },
+      ],
+    })).resolves.toMatchObject({ isError: true })
+  })
+
+  it('derives bounded generation lineage from one durable same-turn scene decision', async () => {
     const { ctx, agent, revisionId } = await harness()
     const manifestId = `sha256:${'a'.repeat(64)}` as const
-    const skillCallId = CallId('skill-chapter-execution')
-    agent.session.append('turn/start', { turn: 2 })
-    agent.session.append('step/start', { turn: 2, step: 1 })
-    agent.session.append('request/header', {
-      header: { config: { provider: 'test-provider', model: 'test-writer' } }, reason: 'initial',
+    prepareChapterWritingTurn(agent, 2, manifestId)
+    const decisionCallId = CallId('scene-choice-agent')
+    const decisionArgs = {
+      selection_mode: 'agent',
+      goal: '选择本场确认徐闻知情的行动',
+      target_asset_id: 'chapter-tool',
+      base_revision_id: revisionId,
+      options: [
+        { id: 'question', title: '直接质问', action: '林澈直接追问。', tradeoff: '快但直白。' },
+        { id: 'observe', title: '观察反应', action: '林澈假装离开再观察。', tradeoff: '悬疑强但较慢。' },
+        { id: 'wrong-date', title: '说错日期', action: '林澈说错日期诱使徐闻纠正。', tradeoff: '符合人物但需潜台词。' },
+      ],
+      selected_option_id: 'observe',
+    }
+    const decision = await execute(ctx, agent, 'novel_choose_scene_action', decisionArgs, decisionCallId)
+    if (decision.isError) throw new Error(`expected Agent scene choice success: ${JSON.stringify(decision)}`)
+    appendSuccessfulToolResult(agent, {
+      turn: 2,
+      step: 1,
+      callId: decisionCallId,
+      name: 'novel_choose_scene_action',
+      args: decisionArgs,
+      content: decision.content as Array<{ type: 'text'; text: string }>,
+      meta: decision.meta,
     })
-    agent.session.append('user/message', createUserMessage({
-      content: [{ type: 'text', text: '<novel-context>frozen material</novel-context>' }],
-      source: {
-        kind: 'novel-context', form: 'manifest', version: 3, manifestId,
-        projectId: ProjectId('project-tool'), policies: ['chapter-write'], references: [],
-      },
-    }), { surfaceOp: 'append' })
-    agent.session.append('tool/call', {
-      turn: 2, step: 1, callId: skillCallId, name: 'skill', arguments: '{"name":"chapter-execution"}',
-    })
-    agent.session.append('tool/result', {
-      turn: 2, step: 1,
-      message: createToolResultMessage({
-        callId: skillCallId, content: [{ type: 'text', text: 'loaded' }], isError: false,
-      }),
-    }, { surfaceOp: 'append' })
-    agent.session.append('step/end', { turn: 2, step: 1 })
 
     const result = await execute(ctx, agent, 'novel_propose_changes', {
       project_id: 'project-tool',
@@ -413,9 +559,7 @@ describe('Novel model tools', () => {
       base_revision_id: revisionId,
       operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }],
       summary: '采用第二个行动方案推进天气变化',
-      generation_strategy: 'action-options-agent-selected',
-      action_plan_count: 3,
-      selected_action_plan: 2,
+      scene_decision_call_id: decisionCallId,
     })
     if (result.isError) throw new Error(`expected lineage proposal success: ${JSON.stringify(result)}`)
     const project = await ctx.novelRepository.discoverProject(await ctx.fs.resolve('.'))
@@ -433,6 +577,7 @@ describe('Novel model tools', () => {
       contextManifestId: manifestId,
       contextPolicies: ['chapter-write'],
       strategy: 'action-options-agent-selected',
+      sceneDecisionCallId: decisionCallId,
       actionPlanCount: 3,
       selectedActionPlan: 2,
     })
@@ -447,7 +592,13 @@ describe('Novel model tools', () => {
     await expect(execute(ctx, agent, 'novel_propose_changes', {
       project_id: 'project-tool', asset_id: 'chapter-tool', base_revision_id: revisionId,
       operations: [{ kind: 'replace-text', startUtf16: 2, endUtf16: 4, replacement: '放晴' }],
-      summary: '坐标不完整', generation_strategy: 'action-options-agent-selected', action_plan_count: 2,
+      summary: '伪造决策', scene_decision_call_id: 'missing-scene-decision',
+    })).resolves.toMatchObject({ isError: true })
+
+    await expect(execute(ctx, agent, 'novel_create', {
+      type: 'manuscript.chapter', title: '错误复用决策',
+      content: { kind: 'manuscript', body: '这条新章不得复用绑定旧章节的选择。' },
+      scene_decision_call_id: decisionCallId,
     })).resolves.toMatchObject({ isError: true })
   })
 

@@ -1091,7 +1091,9 @@ export function validateGenerationLineage(value: unknown): NovelGenerationLineag
     : contextPolicies.map(item => String(item))
   const actionPlanCount = optionalPositiveInteger('actionPlanCount')
   const selectedActionPlan = optionalPositiveInteger('selectedActionPlan')
-  if (strategy === 'direct' && (actionPlanCount !== undefined || selectedActionPlan !== undefined)) {
+  const sceneDecisionCallId = optionalString('sceneDecisionCallId')
+  if (strategy === 'direct' && (sceneDecisionCallId !== undefined
+    || actionPlanCount !== undefined || selectedActionPlan !== undefined)) {
     throw corrupt('direct generation lineage cannot contain action-plan coordinates')
   }
   if (strategy !== 'direct' && (actionPlanCount === undefined || selectedActionPlan === undefined
@@ -1119,6 +1121,7 @@ export function validateGenerationLineage(value: unknown): NovelGenerationLineag
     ...(contextManifestId === undefined ? {} : { contextManifestId: contextManifestId as `sha256:${string}` }),
     ...(validatedContextPolicies === undefined ? {} : { contextPolicies: validatedContextPolicies }),
     strategy: strategy as NovelGenerationLineage['strategy'],
+    ...(sceneDecisionCallId === undefined ? {} : { sceneDecisionCallId }),
     ...(actionPlanCount === undefined ? {} : { actionPlanCount }),
     ...(selectedActionPlan === undefined ? {} : { selectedActionPlan }),
   }

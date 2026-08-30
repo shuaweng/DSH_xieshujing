@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-27-novel-scene-execution-v1.md
-2026-08-27-novel-scene-execution-v1.md: 04348d8249d35755da639c64f50d0f095c304efe
-2026-08-27-novel-scene-execution-v1.zh.md: cc18e7c8417afe38988c9d682278efba985f7ba2
+2026-08-27-novel-scene-execution-v1.md: 2b9929f354ed61d5f067299e18725367f672440d
+2026-08-27-novel-scene-execution-v1.zh.md: e2867e520cf9644f84b9de52ab9a281b4acdf9e4

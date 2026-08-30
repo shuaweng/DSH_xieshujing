@@ -8,6 +8,7 @@
     { "path": "../../core/tools" },
     { "path": "../../core/system-prompt" },
     { "path": "../../sandbox/sandbox-policy" },
+    { "path": "../../interaction/user-questions" },
     { "path": "../novel-repository" },
     { "path": "../novel-context" },
     { "path": "../novel-analysis" },

@@ -571,7 +571,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
     pkg: '@deepseek-ai/dsh-experimental-tool-novel',
     dir: 'tool-novel',
     source: 'packages/experimental/tool-novel/src/index.ts',
-    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.novelContextResolver', 'ctx.novelAnalysis', 'ctx.novelRepository', 'ctx.novelAssetTypes', 'ctx.fs', 'ctx.sandboxPolicy', 'ctx.subagents', 'an owning Agent Session at execution time'],
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.novelContextResolver', 'ctx.novelAnalysis', 'ctx.novelRepository', 'ctx.novelAssetTypes', 'ctx.fs', 'ctx.sandboxPolicy', 'ctx.subagents', 'optional ctx.userQuestions for author-owned scene action selection', 'an owning Agent Session at execution time'],
     writes: ['tool/call', 'durable proposal-only ChangeSet from novel_propose_changes', 'deferred NOAI candidate feedback in the Session log', 'tool/result'],
     async mount(ctx) {
       await ctx.plugin(LocalFileSystem)
@@ -585,7 +585,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolNovel)
     },
     note:
-      'The Novel Studio Preset ships eight stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_search` finds bounded lexical matches, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_get_analysis` explicitly reads Revision-bound derived reports, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files.',
+      'The Novel Studio Preset ships nine stable tools without generic filesystem mutation. `novel_list` discovers typed Assets and creation formats, `novel_search` finds bounded lexical matches, `novel_create` safely creates registered Asset types, `novel_get` resolves exact retained Revisions, `novel_get_analysis` explicitly reads Revision-bound derived reports, `novel_choose_scene_action` records one native 2–3-option key-scene decision, `novel_propose_changes` only creates a reviewable ChangeSet, and `novel_present` changes workbench presentation without touching authored files.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

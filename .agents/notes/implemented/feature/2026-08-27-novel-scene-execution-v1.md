@@ -1,4 +1,4 @@
-# Agent Note: Novel Scene Execution V1 and bounded generation lineage
+# Agent Note: Novel scene execution and native decisions
 
 Status: implemented
 
@@ -6,50 +6,51 @@ English | [中文](2026-08-27-novel-scene-execution-v1.zh.md)
 
 ## Problem
 
-Novel Studio could already compile exact chapter context, load writing Skills, create chapters, and propose Revision-bound ChangeSets. The writing path was still mostly `chapter outline -> prose`, however, so a structurally valid result could miss the actual dramatic action: who tries what, how resistance answers, what information is released, and what changes by the end of the scene.
+Novel Studio can compile exact chapter context, load writing Skills, create chapters, and propose Revision-bound ChangeSets. A direct `chapter outline -> prose` path is appropriate for ordinary scenes, but key confrontations, reveals, emotional turns, and ending hooks can have several materially different dramatic actions. Committing to prose before comparing those actions spends tokens on the wrong level of uncertainty and can produce natural sentences without a meaningful change in the scene.
 
-The retained Revision also did not say which model route, Preset, writing Skill, frozen Context Manifest, or generation strategy produced an Agent proposal. Later preference and quality work therefore could not distinguish a direct draft from prose produced after comparing several scene actions without reconstructing an entire Session trajectory.
+Generation lineage also needs to distinguish direct writing from prose produced after an Agent or author decision. Model-supplied strategy names, option counts, and selected indexes are not reliable evidence: the model can mistype, invent, or reuse them without a real choice having occurred.
 
 ## Decision
 
-`chapter-execution` and `scene-drive` now derive a short request-local execution draft from the freeform chapter outline, confirmed Story State, book style, and only the necessary prior prose. The draft captures scene purpose and POV, start state, required change, information boundaries, intended reader effect, ending momentum, and nearby repetition to avoid. It is not a new Asset, a mandatory author form, or another permanent context item.
+`chapter-execution` and `scene-drive` derive a short request-local execution draft from the freeform chapter outline, confirmed Story State, book style, and only the necessary prior prose. The draft captures scene purpose and POV, start state, required change, information boundaries, intended reader effect, ending momentum, and nearby repetition to avoid. It is not a new Asset, a mandatory author form, or another permanent context item.
 
-Ordinary, well-specified scenes proceed directly. Chapter openings, core confrontations, reveals, major emotional turns, payoffs, ending hooks, explicitly requested alternatives, and genuinely uncertain scenes may first produce two or three short action options. Options must differ in character action and dramatic response rather than wording. The author can select one, or authorize the Agent to compare character logic, continuity, information boundaries, repetition, tension, and future room before selecting. After selection the default remains one prose candidate, published only through the existing typed create or ChangeSet review flow.
+Ordinary, well-specified scenes proceed directly. Chapter openings, core confrontations, reveals, major emotional turns, payoffs, ending hooks, explicitly requested alternatives, and genuinely uncertain scenes can submit exactly two or three short dramatic actions to `novel_choose_scene_action`. Options differ in character action, resistance, and resulting change rather than wording. The default remains one prose result after the decision.
 
-The two writing Skills tell `novel_create` and `novel_propose_changes` which bounded strategy was used: direct, Agent-selected action options, or user-selected action options, plus a two-or-three option count and one-based selected index when applicable. The Host derives the rest from durable Session state rather than trusting model-supplied provenance:
+The choice stays inside the DSH Agent loop. Author-owned selection calls the existing `ctx.userQuestions` capability, so the normal Composer takeover displays the options, pauses the root Agent tool call, records the answer, and resumes it. Agent-owned selection uses the same Novel tool without a human pause. A delegated Subagent can report options but cannot ask the author or lend a decision call to its parent. Free-text “Other” feedback asks the Agent to replan and does not authorize an option.
 
-- Agent Session and latest turn;
-- effective provider/model request header;
-- selected Agent Preset;
-- latest successfully loaded Skill and its package-owned version;
-- current frozen Novel Context Manifest id and policy names.
+The successful choice tool call and result are durable Session events. A later `novel_create` or `novel_propose_changes` cites the choice call id through `scene_decision_call_id`; it does not submit a strategy, option count, or selected index. The Host accepts the id only when the successful result belongs to the current Session turn, current chapter-write Context Manifest, current writing Skill, Novel Project, and exact target Asset Revision. A choice for an existing Revision cannot authorize creation of a new Asset, and a choice for a new Asset cannot authorize an existing-Asset proposal.
 
-This `NovelGenerationLineage` is stored with the proposed ChangeSet and inherited by the resulting `agent-apply` Revision. History schema version eight adds nullable `generation_json` columns and migrates versions one through seven in place. The record deliberately excludes prompts, action-option text, generated prose, reviews, and quality scores.
+The Host derives `action-options-user-selected` or `action-options-agent-selected`, the bounded option count, and the one-based selected index from durable tool-result metadata. `NovelGenerationLineage` retains those coordinates and the decision call id with the existing Session, model route, Preset, Skill, Context Manifest, and policy provenance. The option prose remains in the Session event and is not copied into the Revision or context manifest. Direct writing omits the decision id and retains the `direct` strategy.
 
-All package-owned Novel Skills now place `novelContextPolicy` under standard Skill `metadata`. This fixes policy discovery by the filesystem Skill registry; only `chapter-execution` and `scene-drive` introduce a PR15 Skill version.
+History schema version eight stores lineage in nullable `generation_json` columns. The proposed ChangeSet retains the lineage, and an applied `agent-apply` Revision inherits it. Existing history remains compatible: Repository validation still reads legacy PR15 non-direct records without a decision id, while the PR17 Novel tool creates no new non-direct record without one.
 
 ## Scope boundaries
 
-- No structured Review Issue type, lifecycle, repair API, or issue-centric UI was added.
-- No literary score, quality metric, evaluation corpus, A/B candidate UI, or browser workflow was added.
-- No permanent Scene Contract Asset was added. The execution draft is temporary and can later move behind a typed compiler seam without changing current Assets or V3 Context Manifest replay.
-- Multiple full prose candidates remain opt-in; Scene Execution V1 spends alternatives on short action decisions and defaults to one authored result.
+- No Scene database, permanent Scene Contract Asset, second context store, or novel-specific interaction state machine exists.
+- No multiple-full-draft default, candidate manager, quality score, structured Review Issue lifecycle, or A/B preference engine exists.
+- No option prose enters ordinary Novel context. Only the selected decision coordinates enter lineage.
+- The model still publishes authored changes only through the existing typed creation or ChangeSet review flow.
 
 ## Verification
 
-- Repository tests retain one validated lineage record across proposal, apply, Revision listing, and schema migration to version eight.
-- Novel tool tests prove provider/model, Preset, Skill version, Context Manifest, and action-option coordinates are derived and validated, including rejection of incomplete option coordinates.
-- Bundle tests parse every packaged Skill frontmatter and verify that each context policy is exposed through standard metadata; the two scene-writing Skills expose version one.
-- Targeted TypeScript builds and the focused repository, tool, and bundle suites pass. Browser automation was intentionally omitted; manual product verification is the handoff for this PR.
+- Tool tests cover native author selection, Agent selection, free-text replan feedback, fabricated call ids, and target-bound decision reuse.
+- Repository tests retain validated decision lineage through proposal, apply, Revision listing, and history migration.
+- A real Loader composition boots `userQuestions`, the generic tool runtime, and `tool-novel` from `cordis.yml`, proving the packaged scene-decision schema resolves through product composition rather than a unit-only context.
+- Bundle tests parse both packaged writing Skills at version two and pin their use of the native choice tool and decision call id.
+- Focused TypeScript and Vitest checks cover this path. Browser automation remains outside this change; manual product verification exercises the existing generic question UI.
 
 ## Alternatives considered
 
-**Generate prose directly from the chapter outline.** This preserves the shortest path but leaves dramatic action, resistance, information release, and state change implicit at the point where they most affect scene quality.
+**Generate prose directly for every scene.** This remains the ordinary fast path, but making it universal leaves dramatic action, resistance, information release, and state change implicit exactly where alternatives matter most.
 
-**Persist every execution draft as a new Asset.** Permanent Scene Contracts would add author-visible structure and context growth before the temporary execution shape has proved stable.
+**Let the model send strategy and selection coordinates with the final write.** This is simpler but cannot prove that the author saw an option or that any real comparison occurred. Durable DSH tool events provide evidence the Host can validate.
 
-**Generate several full prose candidates by default.** Full alternatives spend substantially more tokens and create review burden; short action options concentrate exploration on the decision that changes the scene.
+**Persist every execution draft or option set as a Novel Asset.** Permanent Scene Contracts add author-visible structure and context growth before the temporary execution shape has proved stable.
+
+**Build a Novel-specific choice drawer and state store.** A second interaction system would duplicate DSH cancellation, resume, Session ownership, and replay semantics. `ctx.userQuestions` already owns that capability.
+
+**Generate several complete prose candidates by default.** Full alternatives spend substantially more tokens and create review burden; short action choices concentrate exploration on the decision that changes the scene.
 
 ## Consequences
 
-Scene execution is more deliberate without forcing authors into a rigid outline schema or adding persistent context bulk. Lineage is sufficient to compare future Skill and context strategies while remaining small and independent of manuscript length. It does not itself decide which strategy writes better prose; preference learning and any later evaluation system can use these coordinates only when the product has real author decisions to compare.
+Key scenes gain a deliberate action decision without slowing ordinary writing or forcing authors into a rigid outline schema. Author choices are visible through familiar DSH interaction, replayable in the Session, and safely bound to the exact write they authorize. Lineage remains small and independent of manuscript length, while future preference analysis can distinguish author-selected, Agent-selected, and direct results from verified coordinates. The system gains no guarantee that the chosen action produces better prose; that judgment still belongs to the author and later quality work.

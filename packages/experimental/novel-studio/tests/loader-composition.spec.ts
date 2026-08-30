@@ -3,6 +3,9 @@
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
+import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
+import UserQuestionService from '@deepseek-ai/dsh-user-questions'
 import { AssetId, type TextRangeSelector } from '@deepseek-ai/dsh-experimental-novel-repository'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
@@ -18,6 +21,7 @@ import NovelRepositoryRemote from '../../novel-repository-remote/src/index.ts'
 import NovelContextResolver from '../../novel-context/src/index.ts'
 import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 import * as NovelAssetOutline from '../../novel-asset-outline/src/index.ts'
+import * as ToolNovel from '../../tool-novel/src/index.ts'
 
 const remotePackageName = '@deepseek-ai/dsh-experimental-novel-repository-remote'
 
@@ -93,6 +97,14 @@ describe('Novel Studio real composition', () => {
       "  name: '@deepseek-ai/dsh-experimental-novel-repository-local'",
       '- id: novel-context',
       "  name: '@deepseek-ai/dsh-experimental-novel-context'",
+      '- id: system-prompt',
+      "  name: '@deepseek-ai/dsh-system-prompt'",
+      '- id: tools',
+      "  name: '@deepseek-ai/dsh-tools'",
+      '- id: user-questions',
+      "  name: '@deepseek-ai/dsh-user-questions'",
+      '- id: tool-novel',
+      "  name: '@deepseek-ai/dsh-experimental-tool-novel'",
       '- id: repository-remote',
       `  name: '${remotePackageName}'`,
       '',
@@ -111,6 +123,10 @@ describe('Novel Studio real composition', () => {
       ['@deepseek-ai/dsh-experimental-novel-asset-outline', NovelAssetOutline],
       ['@deepseek-ai/dsh-experimental-novel-repository-local', LocalNovelRepository],
       ['@deepseek-ai/dsh-experimental-novel-context', NovelContextResolver],
+      ['@deepseek-ai/dsh-system-prompt', SystemPrompt],
+      ['@deepseek-ai/dsh-tools', ToolRuntime],
+      ['@deepseek-ai/dsh-user-questions', UserQuestionService],
+      ['@deepseek-ai/dsh-experimental-tool-novel', ToolNovel],
       [remotePackageName, NovelRepositoryRemote],
     ])
     ctx.loader.internal = {
@@ -127,6 +143,9 @@ describe('Novel Studio real composition', () => {
       config: { path: pathToFileURL(configPath).href },
     })
     await ctx.loader.await()
+
+    expect(ctx.tools.schemas().map(schema => schema.name)).toContain('novel_choose_scene_action')
+    expect(ctx.get('userQuestions')).toBeDefined()
 
     const agentId = 'agent-loader' as Agent['id']
     const agent = {

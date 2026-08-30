@@ -5,7 +5,7 @@ whenToUse: "[当前章节/选区引用、章纲引用，或明确的起草与续
 user-invocable: true
 metadata:
   novelContextPolicy: chapter-write
-  novelSkillVersion: 1
+  novelSkillVersion: 2
 ---
 
 # Chapter Execution
@@ -38,9 +38,11 @@ metadata:
 
 行动方案描述人物采取什么行动、阻力如何回应、信息怎样释放、局面如何改变；它们必须是不同的戏剧行动，不是同一段正文换文风。每个方案保持短小，先比较人物逻辑、Story State、信息边界、与前文的重复度、张力和后续空间：
 
-- 用户要求自己选择时，展示方案并停下，等待选择后再落稿；
-- 用户把选择权交给 Agent 时，说明一句选择理由后直接采用最合适的一项；
+- 用户要求自己选择时，调用 `novel_choose_scene_action` 的 `selection_mode: user`，让 DSH 原生问题区展示方案并等待；不要在聊天正文里列完方案后假装等待；
+- 用户把选择权交给 Agent 时，比较后调用同一工具的 `selection_mode: agent` 和 `selected_option_id`，把自选结果写入当前 Session 轨迹；
 - 默认只生成一个正文候选。只有用户明确要求多个完整候选时才生成多个。
+
+每个方案只写短标题、戏剧行动与主要取舍。修改现有章节时，选择工具必须绑定目标 `asset_id + base_revision_id`；创建新章时不传目标。选择工具成功后，最终 `novel_create` / `novel_propose_changes` 只传它返回的 `decisionCallId` 作为 `scene_decision_call_id`。决策与落稿必须在同一 Session、同一 Turn、同一 Context Manifest 和同一写作 Skill 下完成；上下文或目标 Revision 已变化就重新选择。用户使用“其他”补充意见等于要求重拟方案，不等于授权某一项，此时不得落稿。Subagent 只把备选行动报告给父 Agent，不能把自己的决策 call id 交给另一 Session 使用。
 
 ## 落稿原则
 
@@ -52,4 +54,4 @@ metadata:
 
 ## 修改边界
 
-局部任务只提案局部范围，不重写整章。若用户只要求文风调整，转用 `rewrite-to-style`；若只要求诊断，不创建 ChangeSet。正式落稿继续使用现有 `novel_create` / `novel_propose_changes`：直接执行传 `generation_strategy: direct`；Agent 从短方案中选择时传 `action-options-agent-selected` 及方案总数和一基序号；用户选择时传 `action-options-user-selected` 及同样坐标。工具只记录小型 Lineage，不记录方案正文。输出后简短说明依据了哪些 Revision、采用了什么推进策略、改变了什么，以及现在是聊天草稿、新 Asset 还是待审 ChangeSet。
+局部任务只提案局部范围，不重写整章。若用户只要求文风调整，转用 `rewrite-to-style`；若只要求诊断，不创建 ChangeSet。普通直接执行不调用选择工具，也不传 `scene_decision_call_id`；关键场景只有拿到成功的决策 call id 后才能把它传给最终落稿工具。Host 从 Session Log 派生策略、方案总数和选中序号，不接受模型自报坐标；Revision Lineage 只保存小型来源坐标和决策 call id，不复制方案正文。输出后简短说明依据了哪些 Revision、采用了什么推进策略、改变了什么，以及现在是聊天草稿、新 Asset 还是待审 ChangeSet。

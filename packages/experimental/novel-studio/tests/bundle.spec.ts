@@ -113,7 +113,9 @@ describe('experimental Novel Studio bundle', () => {
       expect(body).toContain(`novelContextPolicy: ${contextPolicies[name]}`)
       expect(frontmatter.metadata?.novelContextPolicy).toBe(contextPolicies[name])
       if (name === 'chapter-execution' || name === 'scene-drive') {
-        expect(frontmatter.metadata?.novelSkillVersion).toBe(1)
+        expect(frontmatter.metadata?.novelSkillVersion).toBe(2)
+        expect(body).toContain('novel_choose_scene_action')
+        expect(body).toContain('scene_decision_call_id')
       }
       if (name !== 'story-state-extraction') expect(body).toContain('novel_get')
       expect(body).not.toMatch(/PROJECT\.md|STYLE\.md|\.lingtai|references\//)

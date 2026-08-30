@@ -5,6 +5,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { defineTool, type ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type {} from '@deepseek-ai/dsh-user-approval'
+import type {} from '@deepseek-ai/dsh-user-questions'
 import {
   AssetId,
   ProjectId,
@@ -43,33 +44,20 @@ Use \`novel_propose_changes\` for existing Asset changes; it only creates a Chan
 for user review and never means the file changed. Use \`novel_present\` only to open or
 close the Novel workbench when that presentation helps the current task. Do not claim
 a proposal was applied. Agent-created Assets and ChangeSets automatically retain bounded
-generation lineage from the Session. Writing Skills should identify whether they used a
-direct path or selected one of 2–3 short action options; omit action-option coordinates
-for ordinary direct writing.`
+generation lineage from the Session. Ordinary scenes go straight to the final Novel
+tool. For a key or genuinely uncertain scene, first call
+\`novel_choose_scene_action\` with 2–3 short, materially different actions. Let that
+tool obtain the author's choice when requested, or durably record the Agent's own
+selection; then pass its successful call id as \`scene_decision_call_id\` to the final
+\`novel_create\` or \`novel_propose_changes\` call. Never invent selection coordinates.`
 
-const GENERATION_STRATEGIES = [
-  'direct',
-  'action-options-agent-selected',
-  'action-options-user-selected',
-] as const
+const SCENE_WRITING_SKILLS = new Set(['chapter-execution', 'scene-drive'])
+const SCENE_QUESTION_ID = 'scene-action'
 
-type GenerationStrategy = typeof GENERATION_STRATEGIES[number]
-
-const GENERATION_PARAMETERS = {
-  generation_strategy: {
+const SCENE_DECISION_PARAMETER = {
+  scene_decision_call_id: {
     type: 'string' as const,
-    enum: [...GENERATION_STRATEGIES],
-    description: 'How the writing path was chosen. Defaults to direct.',
-  },
-  action_plan_count: {
-    type: 'integer' as const,
-    enum: [2, 3],
-    description: 'Number of short action options considered; required only for an action-options strategy.',
-  },
-  selected_action_plan: {
-    type: 'integer' as const,
-    enum: [1, 2, 3],
-    description: 'One-based selected action option; required only for an action-options strategy.',
+    description: 'Successful same-turn novel_choose_scene_action call id. Omit for ordinary direct writing.',
   },
 }
 
@@ -174,6 +162,164 @@ export function apply(ctx: Context): void {
       card: 'generic',
       title: args.intent === 'open-workbench' ? '打开小说工作台' : '收起小说工作台',
       kind: 'read',
+    }),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'novel_choose_scene_action',
+    description: 'Record one bounded 2–3-option decision for a key or genuinely uncertain scene. User mode asks through the native DSH question surface; Agent mode records the Agent-selected option. Ordinary scenes should skip this tool.',
+    parameters: {
+      selection_mode: {
+        type: 'string', required: true, enum: ['user', 'agent'],
+        description: 'Ask the author through DSH, or record an Agent-owned comparison.',
+      },
+      goal: {
+        type: 'string', required: true,
+        description: 'Short statement of the scene decision being made; not a prose prompt.',
+      },
+      target_asset_id: {
+        type: 'string',
+        description: 'Existing target Asset id. Supply together with base_revision_id; omit for a new Asset.',
+      },
+      base_revision_id: {
+        type: 'string',
+        description: 'Exact retained target Revision. Supply together with target_asset_id.',
+      },
+      options: {
+        type: 'array', required: true,
+        description: 'Exactly 2–3 materially different dramatic actions, kept short.',
+        items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            id: { type: 'string', required: true, description: 'Short stable id unique inside this decision.' },
+            title: { type: 'string', required: true, description: 'Concise author-visible option name.' },
+            action: { type: 'string', required: true, description: 'What the character does, how resistance answers, and what changes.' },
+            tradeoff: { type: 'string', required: true, description: 'Main gain and cost of this dramatic path.' },
+          },
+        },
+      },
+      selected_option_id: {
+        type: 'string',
+        description: 'Required only in Agent mode; must name one supplied option. User mode must omit it.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object', additionalProperties: false,
+        properties: {
+          decisionCallId: { type: 'string', required: true },
+          projectId: { type: 'string', required: true },
+          selectionMode: { type: 'string', required: true, enum: ['user', 'agent'] },
+          optionCount: { type: 'integer', required: true },
+          selectedOptionId: { type: 'string', required: true },
+          selectedOptionIndex: { type: 'integer', required: true },
+          selectedTitle: { type: 'string', required: true },
+          targetAssetId: { type: 'string' },
+          baseRevisionId: { type: 'string' },
+          contextManifestId: { type: 'string', required: true },
+          writingSkill: { type: 'string', required: true },
+        },
+      },
+      render: (_args, value) => [{
+        type: 'text',
+        text: `已选择场景行动 ${value.selectedOptionIndex}/${value.optionCount}：${value.selectedTitle}。后续落稿须引用决策 ${value.decisionCallId}。`,
+      }],
+      presentationMeta: (_args, value) => ({
+        kind: 'novel-scene-action-decision',
+        decisionCallId: value.decisionCallId,
+        projectId: value.projectId,
+        selectionMode: value.selectionMode,
+        optionCount: value.optionCount,
+        selectedOptionId: value.selectedOptionId,
+        selectedOptionIndex: value.selectedOptionIndex,
+        selectedTitle: value.selectedTitle,
+        ...(value.targetAssetId === undefined ? {} : { targetAssetId: value.targetAssetId }),
+        ...(value.baseRevisionId === undefined ? {} : { baseRevisionId: value.baseRevisionId }),
+        contextManifestId: value.contextManifestId,
+        writingSkill: value.writingSkill,
+      }),
+    },
+    async execute(args, exec) {
+      const { agent, project } = await requireProject(ctx, exec)
+      const options = normalizeSceneOptions(args.options)
+      const goal = boundedSceneText(args.goal, 'goal', 300)
+      if ((args.target_asset_id === undefined) !== (args.base_revision_id === undefined)) {
+        throw new Error('scene action target_asset_id and base_revision_id must be supplied together')
+      }
+      if (args.target_asset_id !== undefined && args.base_revision_id !== undefined) {
+        await ctx.novelContextResolver.resolveReferences(agent, [{
+          projectId: project.id,
+          assetId: AssetId(args.target_asset_id),
+          revisionId: RevisionId(args.base_revision_id),
+        }], exec.signal)
+      }
+      const decisionContext = requireSceneDecisionContext(agent.session.events)
+      let selectedOptionId: string
+      if (args.selection_mode === 'agent') {
+        if (args.selected_option_id === undefined) {
+          throw new Error('Agent scene-action selection requires selected_option_id')
+        }
+        selectedOptionId = args.selected_option_id
+      } else {
+        if (args.selected_option_id !== undefined) {
+          throw new Error('User scene-action selection must not preselect selected_option_id')
+        }
+        const interaction = ctx.get('userQuestions')
+        if (interaction === undefined) {
+          throw new Error('No DSH user-question surface is available for the scene-action choice')
+        }
+        const labels = new Map(options.map((option, index) => [`${index + 1}. ${option.title}`, option.id]))
+        const answer = await interaction.ask({
+          questions: [{
+            id: SCENE_QUESTION_ID,
+            header: '场景行动选择',
+            question: goal,
+            detail: '请选择本次正文实际采用的一条戏剧行动。若要补充或推翻方案，请使用“其他”；Agent 会据此重拟，而不会把它冒充成已授权选择。',
+            options: options.map((option, index) => ({
+              label: `${index + 1}. ${option.title}`,
+              description: `${option.action}\n取舍：${option.tradeoff}`,
+            })),
+          }],
+          agent,
+          signal: exec.signal,
+        })
+        const entries = answer.answers.filter(item => item.id === SCENE_QUESTION_ID)
+        const entry = entries.length === 1 ? entries[0] : undefined
+        if (entry?.custom !== undefined || entry?.selected.length !== 1) {
+          const feedback = entry?.custom?.trim()
+          throw new Error(feedback === undefined || feedback === ''
+            ? 'The author did not select exactly one scene action; stop and wait for direction.'
+            : `The author supplied scene feedback instead of authorizing an option: ${feedback}. Revise the actions before asking again.`)
+        }
+        const selectedLabel = entry.selected.at(0)
+        if (selectedLabel === undefined) throw new Error('The author did not select a scene action')
+        const resolved = labels.get(selectedLabel)
+        if (resolved === undefined) throw new Error('The author response does not match any offered scene action')
+        selectedOptionId = resolved
+      }
+      const selectedIndex = options.findIndex(option => option.id === selectedOptionId)
+      if (selectedIndex < 0) throw new Error('selected_option_id must name one supplied scene action')
+      const selected = options.at(selectedIndex)
+      if (selected === undefined) throw new Error('selected scene action is unavailable')
+      return {
+        decisionCallId: exec.callId,
+        projectId: project.id,
+        selectionMode: args.selection_mode,
+        optionCount: options.length,
+        selectedOptionId: selected.id,
+        selectedOptionIndex: selectedIndex + 1,
+        selectedTitle: selected.title,
+        ...(args.target_asset_id === undefined ? {} : { targetAssetId: args.target_asset_id }),
+        ...(args.base_revision_id === undefined ? {} : { baseRevisionId: args.base_revision_id }),
+        contextManifestId: decisionContext.manifestId,
+        writingSkill: decisionContext.skillName,
+      }
+    },
+    presentCall: args => ({
+      card: 'generic',
+      title: args.selection_mode === 'user' ? '请作者选择场景行动' : '记录场景行动选择',
+      kind: 'read',
+      rawInput: args.goal,
     }),
   }))
 
@@ -435,7 +581,7 @@ export function apply(ctx: Context): void {
         type: 'object', required: true, additionalProperties: true,
         properties: { kind: { type: 'string', required: true } },
       },
-      ...GENERATION_PARAMETERS,
+      ...SCENE_DECISION_PARAMETER,
     },
     output: {
       schema: {
@@ -462,9 +608,10 @@ export function apply(ctx: Context): void {
       const type = args.type as NovelAssetType
       ctx.novelAssetTypes.get(type)
       const generation = await generationLineage(ctx, agent, exec.signal, {
-        ...(args.generation_strategy === undefined ? {} : { strategy: args.generation_strategy }),
-        ...(args.action_plan_count === undefined ? {} : { actionPlanCount: args.action_plan_count }),
-        ...(args.selected_action_plan === undefined ? {} : { selectedActionPlan: args.selected_action_plan }),
+        ...(args.scene_decision_call_id === undefined ? {} : {
+          sceneDecisionCallId: args.scene_decision_call_id,
+          target: { kind: 'new-asset' as const, projectId: project.id },
+        }),
       })
       const snapshot = await ctx.novelRepository.createAsset(project, {
         type,
@@ -502,7 +649,7 @@ export function apply(ctx: Context): void {
         items: { type: 'object', additionalProperties: true, properties: { kind: { type: 'string', required: true } } },
       },
       summary: { type: 'string', required: true },
-      ...GENERATION_PARAMETERS,
+      ...SCENE_DECISION_PARAMETER,
     },
     output: {
       schema: {
@@ -536,9 +683,15 @@ export function apply(ctx: Context): void {
       const assetType = resolvedReference.snapshot.asset.type
       const operations = ctx.novelAssetTypes.get(assetType).prepareOperations(resolvedReference.snapshot, args.operations)
       const generation = await generationLineage(ctx, exec.agent, exec.signal, {
-        ...(args.generation_strategy === undefined ? {} : { strategy: args.generation_strategy }),
-        ...(args.action_plan_count === undefined ? {} : { actionPlanCount: args.action_plan_count }),
-        ...(args.selected_action_plan === undefined ? {} : { selectedActionPlan: args.selected_action_plan }),
+        ...(args.scene_decision_call_id === undefined ? {} : {
+          sceneDecisionCallId: args.scene_decision_call_id,
+          target: {
+            kind: 'existing-asset' as const,
+            projectId: reference.projectId,
+            assetId: reference.assetId,
+            revisionId: reference.revisionId,
+          },
+        }),
       })
       const changeSet = await ctx.novelRepository.proposeChangeSet(resolved.project, {
         assetId: reference.assetId,
@@ -574,10 +727,37 @@ export function apply(ctx: Context): void {
   }))
 }
 
-interface GenerationCoordinates {
-  readonly strategy?: GenerationStrategy
-  readonly actionPlanCount?: number
-  readonly selectedActionPlan?: number
+interface GenerationRequest {
+  readonly sceneDecisionCallId?: string
+  readonly target?: SceneDecisionTarget
+}
+
+type SceneDecisionTarget =
+  | { readonly kind: 'new-asset'; readonly projectId: ProjectId }
+  | {
+    readonly kind: 'existing-asset'
+    readonly projectId: ProjectId
+    readonly assetId: AssetId
+    readonly revisionId: RevisionId
+  }
+
+interface SceneActionOption {
+  readonly id: string
+  readonly title: string
+  readonly action: string
+  readonly tradeoff: string
+}
+
+interface SceneDecisionMeta {
+  readonly callId: string
+  readonly projectId: ProjectId
+  readonly selectionMode: 'user' | 'agent'
+  readonly optionCount: number
+  readonly selectedOptionIndex: number
+  readonly targetAssetId?: AssetId
+  readonly baseRevisionId?: RevisionId
+  readonly contextManifestId: `sha256:${string}`
+  readonly writingSkill: string
 }
 
 interface OptionalSkillRegistry {
@@ -592,10 +772,8 @@ async function generationLineage(
   ctx: Context,
   agent: NonNullable<ToolRunContext['agent']>,
   signal: AbortSignal,
-  coordinates: GenerationCoordinates,
+  request: GenerationRequest,
 ): Promise<NovelGenerationLineage> {
-  const strategy = coordinates.strategy ?? 'direct'
-  validateGenerationCoordinates(strategy, coordinates.actionPlanCount, coordinates.selectedActionPlan)
   const events = agent.session.events
   const turn = events.findLast(event => event.type === 'turn/start')?.data.turn
   const requestHeader = agent.session.requestHeader()
@@ -605,6 +783,14 @@ async function generationLineage(
   const skillVersion = skillName === undefined
     ? undefined
     : await currentSkillVersion(ctx, agent, skillName, signal)
+  const sceneDecision = request.sceneDecisionCallId === undefined
+    ? undefined
+    : resolveSceneDecision(events, request.sceneDecisionCallId, request.target)
+  const strategy = sceneDecision === undefined
+    ? 'direct' as const
+    : sceneDecision.selectionMode === 'user'
+      ? 'action-options-user-selected' as const
+      : 'action-options-agent-selected' as const
   return {
     sessionId: agent.id,
     ...(turn === undefined ? {} : { turn }),
@@ -618,26 +804,148 @@ async function generationLineage(
       contextPolicies: [...context.policies],
     }),
     strategy,
-    ...(coordinates.actionPlanCount === undefined ? {} : { actionPlanCount: coordinates.actionPlanCount }),
-    ...(coordinates.selectedActionPlan === undefined ? {} : { selectedActionPlan: coordinates.selectedActionPlan }),
+    ...(sceneDecision === undefined ? {} : {
+      sceneDecisionCallId: sceneDecision.callId,
+      actionPlanCount: sceneDecision.optionCount,
+      selectedActionPlan: sceneDecision.selectedOptionIndex,
+    }),
   }
 }
 
-function validateGenerationCoordinates(
-  strategy: GenerationStrategy,
-  actionPlanCount: number | undefined,
-  selectedActionPlan: number | undefined,
-): void {
-  if (strategy === 'direct') {
-    if (actionPlanCount !== undefined || selectedActionPlan !== undefined) {
-      throw new Error('direct generation must not include action-plan coordinates')
+function normalizeSceneOptions(value: readonly unknown[]): readonly SceneActionOption[] {
+  if (value.length < 2 || value.length > 3) throw new Error('scene action choice requires exactly 2–3 options')
+  const ids = new Set<string>()
+  return value.map((candidate, index) => {
+    if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
+      throw new Error(`scene action option ${index + 1} must be an object`)
     }
-    return
+    const record = candidate as Record<string, unknown>
+    const id = boundedSceneText(record['id'], `option ${index + 1} id`, 80)
+    if (!/^[a-z0-9][a-z0-9_-]*$/u.test(id)) {
+      throw new Error(`scene action option ${index + 1} id must use lowercase letters, digits, hyphen, or underscore`)
+    }
+    if (ids.has(id)) throw new Error(`scene action option id ${JSON.stringify(id)} is duplicated`)
+    ids.add(id)
+    return {
+      id,
+      title: boundedSceneText(record['title'], `option ${index + 1} title`, 80),
+      action: boundedSceneText(record['action'], `option ${index + 1} action`, 600),
+      tradeoff: boundedSceneText(record['tradeoff'], `option ${index + 1} tradeoff`, 300),
+    }
+  })
+}
+
+function boundedSceneText(value: unknown, label: string, maxLength: number): string {
+  if (typeof value !== 'string') throw new Error(`scene action ${label} must be a string`)
+  const text = value.trim()
+  if (text.length === 0 || text.length > maxLength) {
+    throw new Error(`scene action ${label} must contain 1–${maxLength} characters`)
   }
-  if (actionPlanCount === undefined || selectedActionPlan === undefined
-    || !Number.isSafeInteger(actionPlanCount) || actionPlanCount < 2 || actionPlanCount > 3
-    || !Number.isSafeInteger(selectedActionPlan) || selectedActionPlan < 1 || selectedActionPlan > actionPlanCount) {
-    throw new Error('action-option generation requires 2–3 plans and one valid one-based selection')
+  return text
+}
+
+function requireSceneDecisionContext(
+  events: readonly { readonly type: string; readonly data: unknown }[],
+): { readonly manifestId: `sha256:${string}`; readonly skillName: string } {
+  const turnEvent = events.findLast(event => event.type === 'turn/start')
+  const turn = turnEvent === undefined
+    ? undefined
+    : (turnEvent.data as { turn?: number }).turn
+  const context = currentNovelManifest(events, turn)
+  if (context === undefined || !context.policies.includes('chapter-write')) {
+    throw new Error('scene action choices require the current chapter-write Novel Context Manifest')
+  }
+  const skillName = currentWritingSkill(events, turn)
+  if (skillName === undefined || !SCENE_WRITING_SKILLS.has(skillName)) {
+    throw new Error('scene action choices require chapter-execution or scene-drive to be loaded in the current turn')
+  }
+  return { manifestId: context.manifestId, skillName }
+}
+
+function resolveSceneDecision(
+  events: readonly { readonly type: string; readonly data: unknown }[],
+  callId: string,
+  target: SceneDecisionTarget | undefined,
+): SceneDecisionMeta {
+  if (callId.length === 0 || callId.length > 300 || callId !== callId.trim()) {
+    throw new Error('scene_decision_call_id is invalid')
+  }
+  if (target === undefined) throw new Error('scene decision target binding is missing')
+  const turnEvent = events.findLast(event => event.type === 'turn/start')
+  const turn = turnEvent === undefined
+    ? undefined
+    : (turnEvent.data as { turn?: number }).turn
+  if (turn === undefined) throw new Error('scene decision requires an active Session turn')
+  const call = events.find((event) => {
+    if (event.type !== 'tool/call') return false
+    const data = event.data as { callId?: unknown; name?: unknown; turn?: unknown }
+    return data.callId === callId && data.name === 'novel_choose_scene_action' && data.turn === turn
+  })
+  if (call === undefined) {
+    throw new Error('scene_decision_call_id must reference a novel_choose_scene_action call in the current turn')
+  }
+  const result = events.find((event) => {
+    if (event.type !== 'tool/result') return false
+    const data = event.data as {
+      turn?: unknown
+      error?: unknown
+      message?: { content?: Array<{ toolCallId?: unknown; isError?: unknown }> }
+    }
+    const block = data.message?.content?.[0]
+    return data.turn === turn && data.error === undefined && block?.toolCallId === callId && block.isError === false
+  })
+  if (result === undefined || result.type !== 'tool/result') {
+    throw new Error('scene_decision_call_id must reference a successful completed decision')
+  }
+  const meta = (result.data as { meta?: unknown }).meta
+  if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) {
+    throw new Error('scene decision result is missing durable metadata')
+  }
+  const record = meta as Record<string, unknown>
+  if (record['kind'] !== 'novel-scene-action-decision' || record['decisionCallId'] !== callId) {
+    throw new Error('scene decision metadata does not match the referenced call')
+  }
+  const selectionMode = record['selectionMode']
+  const optionCount = record['optionCount']
+  const selectedOptionIndex = record['selectedOptionIndex']
+  const contextManifestId = record['contextManifestId']
+  const writingSkill = record['writingSkill']
+  const targetAssetId = record['targetAssetId']
+  const baseRevisionId = record['baseRevisionId']
+  if ((selectionMode !== 'user' && selectionMode !== 'agent')
+    || !Number.isSafeInteger(optionCount) || Number(optionCount) < 2 || Number(optionCount) > 3
+    || !Number.isSafeInteger(selectedOptionIndex) || Number(selectedOptionIndex) < 1
+    || Number(selectedOptionIndex) > Number(optionCount)
+    || typeof contextManifestId !== 'string' || !/^sha256:[0-9a-f]{64}$/u.test(contextManifestId)
+    || typeof writingSkill !== 'string' || !SCENE_WRITING_SKILLS.has(writingSkill)
+    || (targetAssetId !== undefined && typeof targetAssetId !== 'string')
+    || (baseRevisionId !== undefined && typeof baseRevisionId !== 'string')) {
+    throw new Error('scene decision metadata is invalid')
+  }
+  if (record['projectId'] !== target.projectId) throw new Error('scene decision belongs to a different Novel Project')
+  if (target.kind === 'new-asset') {
+    if (targetAssetId !== undefined || baseRevisionId !== undefined) {
+      throw new Error('scene decision for new Asset creation must not target an existing Revision')
+    }
+  } else if (targetAssetId !== target.assetId || baseRevisionId !== target.revisionId) {
+    throw new Error('scene decision target does not match the exact Asset Revision being changed')
+  }
+  const current = requireSceneDecisionContext(events)
+  if (current.manifestId !== contextManifestId || current.skillName !== writingSkill) {
+    throw new Error('scene decision is stale because the Novel context or writing Skill changed')
+  }
+  return {
+    callId,
+    projectId: target.projectId,
+    selectionMode,
+    optionCount: Number(optionCount),
+    selectedOptionIndex: Number(selectedOptionIndex),
+    ...(target.kind === 'new-asset' ? {} : {
+      targetAssetId: target.assetId,
+      baseRevisionId: target.revisionId,
+    }),
+    contextManifestId: current.manifestId,
+    writingSkill,
   }
 }
 

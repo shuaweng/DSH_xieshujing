@@ -5,7 +5,7 @@ whenToUse: "[当前片段/章节/章纲引用，或场景发平、冲突不顶�
 user-invocable: true
 metadata:
   novelContextPolicy: chapter-write
-  novelSkillVersion: 1
+  novelSkillVersion: 2
 ---
 
 # Scene Drive
@@ -42,8 +42,10 @@ metadata:
 
 目标明确的普通场景直接给一个推进蓝图。章节开头、核心对抗、揭秘、重大情绪转折、回收和章末钩子等关键场景，或用户明确要求、存在多条高价值路径时，先给 2–3 个短行动方案。每项写清：角色行动、阻力回应、信息释放、局面变化与主要取舍。方案必须在行动逻辑上不同，不能只是“更快版 / 更慢版”的措辞差异。
 
-用户要自己选就展示后等待；用户授权 Agent 选择，就按人物逻辑、连续性、信息边界、重复度、张力与后续空间比较并选一项。选定后默认只生成一个正文候选。
+用户要自己选时调用 `novel_choose_scene_action(selection_mode: user)`，由 DSH 原生问题区等待选择；用户授权 Agent 选择时，按人物逻辑、连续性、信息边界、重复度、张力与后续空间比较后调用同一工具的 `selection_mode: agent`。选定后默认只生成一个正文候选。
+
+每项只保留短标题、戏剧行动和主要取舍。已有正文目标必须绑定精确 `asset_id + base_revision_id`，新 Asset 则不传目标。工具成功返回的 `decisionCallId` 必须在同一 Session、同一 Turn、同一 Context Manifest 与同一 Skill 下，以 `scene_decision_call_id` 传给随后的落稿工具；不能手写或跨 Session 复用。用户使用“其他”是在反馈并要求重拟，不是批准某项。Subagent 可提出备选行动，但需要父 Agent 在自己的 Session 中完成选择与最终提案。
 
 ## 输出边界
 
-设计模式给推进蓝图、欲望对冲、压力、beat 链、落点和信息边界。诊断模式指出断链位置和最小修复。只有用户明确要求落稿时才创建 ChangeSet，且只改当前目标资产与范围。落稿时直接路径传 `generation_strategy: direct`；方案由 Agent 选择传 `action-options-agent-selected`，由用户选择传 `action-options-user-selected`，并同时传 2–3 的方案总数与一基选中序号。工具继续走现有 ChangeSet 审阅，不把临时草案和方案全文写入 Lineage。
+设计模式给推进蓝图、欲望对冲、压力、beat 链、落点和信息边界。诊断模式指出断链位置和最小修复。只有用户明确要求落稿时才创建 ChangeSet，且只改当前目标资产与范围。普通直接路径不调用选择工具；关键场景把成功的 `decisionCallId` 作为 `scene_decision_call_id` 交给现有落稿工具。Host 从耐久 Session 事件派生 Agent/用户选择类型和 2–3 项坐标，继续走现有 ChangeSet 审阅，不把临时草案和方案全文写入 Revision Lineage。

@@ -28,7 +28,7 @@ import {
   parseChapter,
   splitsSurrogatePair,
 } from '../src/content.ts'
-import { NOVEL_HISTORY_APPLICATION_ID, openHistory } from '../src/history.ts'
+import { NOVEL_HISTORY_APPLICATION_ID, openHistory, validateGenerationLineage } from '../src/history.ts'
 import { parseProjectManifest } from '../src/manifest.ts'
 
 const cleanups: Array<() => Promise<void>> = []
@@ -166,6 +166,20 @@ function manifest(overrides: string[] = []): string {
 }
 
 describe('LocalNovelRepository', () => {
+  it('keeps legacy action-option lineage readable without a native decision call id', () => {
+    expect(validateGenerationLineage({
+      sessionId: 'legacy-session',
+      strategy: 'action-options-agent-selected',
+      actionPlanCount: 2,
+      selectedActionPlan: 1,
+    })).toEqual({
+      sessionId: 'legacy-session',
+      strategy: 'action-options-agent-selected',
+      actionPlanCount: 2,
+      selectedActionPlan: 1,
+    })
+  })
+
   it('initializes an existing folder as a minimal Novel Project without disturbing authored files', async () => {
     const dir = await tempDir()
     await writeFile(join(dir, 'notes.txt'), '作者原有资料。')
@@ -1277,6 +1291,7 @@ describe('LocalNovelRepository', () => {
       contextManifestId: `sha256:${'a'.repeat(64)}` as const,
       contextPolicies: ['chapter-write'],
       strategy: 'action-options-agent-selected' as const,
+      sceneDecisionCallId: 'scene-choice-4',
       actionPlanCount: 3,
       selectedActionPlan: 2,
     }

@@ -246,6 +246,8 @@ export interface NovelGenerationLineage {
   readonly contextPolicies?: readonly string[]
   /** Whether prose followed a direct path or a selected set of short action options. */
   readonly strategy: 'direct' | 'action-options-agent-selected' | 'action-options-user-selected'
+  /** Successful same-turn DSH tool call that durably recorded the selected action. */
+  readonly sceneDecisionCallId?: string
   readonly actionPlanCount?: number
   readonly selectedActionPlan?: number
 }
