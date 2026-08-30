@@ -5,12 +5,25 @@ import { useSyncExternalStore } from 'react'
 /** Transient geometry and visibility for one browser's Novel workbench presentation. */
 export interface NovelWorkbenchViewState {
   readonly explorerCollapsed: boolean
+  /** Browser-local surface selection; authored project data never stores it. */
+  readonly page: 'home' | 'book'
+  /** One-shot cross-Workspace navigation request consumed by the explorer. */
+  readonly requestedAssetId: string | undefined
 }
 
 /** Small observable controller: presentation state never enters authored Assets or Session projections. */
 export class NovelWorkbenchViewController {
-  #snapshot: NovelWorkbenchViewState = { explorerCollapsed: false }
+  #snapshot: NovelWorkbenchViewState
   readonly #listeners = new Set<() => void>()
+
+  /**
+   * @param initialPage - first surface shown when the workbench is elected.
+   * Production starts at the library home; isolated component tests and
+   * embedders may retain the historical book-first behavior.
+   */
+  constructor(initialPage: NovelWorkbenchViewState['page'] = 'book') {
+    this.#snapshot = { explorerCollapsed: false, page: initialPage, requestedAssetId: undefined }
+  }
 
   /**
    * Read the current immutable presentation snapshot.
@@ -30,9 +43,25 @@ export class NovelWorkbenchViewController {
   /** Toggle the Asset explorer while the Novel frame is open. */
   toggleExplorer(): void { this.#update({ explorerCollapsed: !this.#snapshot.explorerCollapsed }) }
 
+  /** Return to the cross-Workspace Novel library home. */
+  openHome(): void { this.#update({ page: 'home', requestedAssetId: undefined }) }
+
+  /** Enter one book, optionally requesting an exact Asset after Session navigation. */
+  openBook(assetId?: string): void {
+    this.#update({ page: 'book', requestedAssetId: assetId })
+  }
+
+  /** Clear a navigation request after the target book has resolved it. */
+  clearRequestedAsset(assetId: string): void {
+    if (this.#snapshot.requestedAssetId !== assetId) return
+    this.#update({ requestedAssetId: undefined })
+  }
+
   #update(patch: Partial<NovelWorkbenchViewState>): void {
     const next = { ...this.#snapshot, ...patch }
-    if (next.explorerCollapsed === this.#snapshot.explorerCollapsed) return
+    if (next.explorerCollapsed === this.#snapshot.explorerCollapsed
+      && next.page === this.#snapshot.page
+      && next.requestedAssetId === this.#snapshot.requestedAssetId) return
     this.#snapshot = next
     for (const listener of this.#listeners) listener()
   }

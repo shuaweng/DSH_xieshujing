@@ -12,6 +12,7 @@
 - 整个工作台按 Preset 限定。只有精确选择 `novel-workbench` 时，才会在 `conversation.input.left`、原生 access/plan 控件旁得到纯图标“小说工作台”开关；其无障碍名称与悬浮提示仍保留完整动作说明。已经开始的 Session 读取已提交摘要，空白 Composer 则读取 Agent preset 选择器所用的同一份只读暂存值。Session 仍从普通 DSH Frame 开始；作者无需切换 preset 或修改作者数据即可展开/收起工作台。切到任何其他 preset 会立即恢复普通 Frame 并移除按钮。
 - 桌面组合把 Agent 对话放在左侧，把正文浏览器与创作画布放在右侧，同时在最外侧保留可折叠的原生 DSH Session 侧栏。无障碍拖拽分隔条（也支持方向键）会按动画帧频率预览 CSS track，并在松开时只提交一次经过边界限制的宽度，因此作者工作台不会随每个 pointer 事件重渲染。
 - 原生 DSH 侧栏仍然可用，可收起或展开以搜索和导航会话。切换 Session 不会替换已选中的小说 surface；切到不符合条件的 preset 会关闭它。
+- 被选中的小说 surface 会先打开极简书库首页。它复用 DSH 原生 Workspace 注册表，在互不相关的文件夹间发现 Novel Project、自动略过普通 Workspace，并显示书本数、当前正文字数、本地自然日净增字数、一个继续创作目标和书本列表。点击书本时会先连接并打开该 Workspace 的原生 Session，再由既有 Explorer 按稳定章节 id 定位；系统不另建小说书库数据库，也不扫描整盘。
 - 资产浏览器发现当前 Session 的 Novel Project，呈现逻辑“本书”引导分组、稳定的“正文”与“大纲 → 卷纲”分支（包括空分支），可以创建可编辑章节与缺失的项目级唯一书本指导 Asset，打开绑定精确 Revision 的类型化 Asset 文档，并可独立于 DSH Session 侧栏收起。唯一的全书大纲仍只交给 Agent/领域工具创建；每个已显示的全书大纲在其下方提供作用域明确的“新建卷纲”操作。外部遗留的单例冲突仍会显示并允许删除修复，不再拖垮整个 Explorer。删除使用工作台自有且跟随主题的确认弹窗，并保留作者文件与历史。正文章节支持原生拖动排序，先乐观预览，再由 Remote 确认权威顺序，失败时回滚。层级来自语义类型与父级 id，而不是文件路径。
 - 当精确 Session 根目录没有 `novel.yaml` 时，资产浏览器与 Context Tray 会进入中性未初始化状态，不发起 Asset 或上下文工作集请求。画布只要求输入书名，通过与 Agent 工具相同的 Remote/Repository 操作完成初始化，然后刷新为普通资产界面；已有但损坏的清单仍会明确报错。
 - `ctx.novelAssetRenderers` 拥有 effect 作用域内、按精确类型匹配的编辑器、选区描述、可选阅读展示和 Diff contribution。键盘输入只更新浏览器本地脏草稿，不调用 Repository，也不创建永久 Revision。共享画布只会在显式保存，或引用、分析、定稿、Revision 导航等语义 Context Commit Barrier 上发布这份草稿；缺少 renderer 时会明确拒绝，而不是展示误导性的通用编辑器。
@@ -50,4 +51,5 @@ Client 包本身不加入隐藏模型内容。显式 mention 与可见 Context T
 - **没有实时文件事件** — 工作台内应用修改后会刷新资产浏览器，Repository 调用会协调外部编辑；目前没有文件监听或浏览器失效事件流。
 - **一个活动文本选区** — 现在已经可以固定精确 Asset、只读浏览历史 Revision，并显式“恢复为新 head”；但固定选区、多选区、Block id、批注、命名快照与 Revision 删除尚未实现。
 - **桌面优先布局** — 移动端布局、路由级多工作台切换、持久面板几何，以及瞬时打开状态的跨浏览器同步尚未实现。
+- **组合式书库汇总** — 首页目前组合已有的逐 Session Repository 读取。将来可以增加专用 Repository 汇总投影来减少读取，但不改变 Workspace 所有权，也不新增注册表。只有已登记为 DSH Workspace 且至少保留一个 Session 的目录可以被发现。
 - **基础文本编辑器** — 富 Markdown 编辑、语法装饰、自动保存节奏、导入导出和发布视图尚未实现。

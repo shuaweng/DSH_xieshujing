@@ -15,9 +15,13 @@ import type {
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type { NovelAssetRendererRegistry } from './renderers.tsx'
 import type { createNovelWorkbenchStore } from './store.ts'
+import { NovelWorkbenchViewController, useNovelWorkbenchView } from './view-controller.ts'
 import css from './workbench.module.css'
 
+const fallbackWorkbench = new NovelWorkbenchViewController('book')
+
 export interface ExplorerInjected {
+  workbench?: NovelWorkbenchViewController
   renderers: NovelAssetRendererRegistry
   load: (sessionId: SessionId) => Promise<{ project?: NovelProjectDescriptor; assets: readonly NovelAssetDescriptor[] }>
   open: (sessionId: SessionId, assetId: string) => Promise<NovelAssetDocument>
@@ -34,9 +38,11 @@ type ExplorerProps = PropsRuntime<'novel.explorer'>
 
 /** Session-aware navigator; paths organize files while semantic parent ids organize outlines. */
 export function Explorer({
-  useSessions, useStore, actions, renderers, load, open, create, reorder, delete: deleteRemote, onRefresh, t,
+  useSessions, useStore, actions, workbench = fallbackWorkbench,
+  renderers, load, open, create, reorder, delete: deleteRemote, onRefresh, t,
 }: ExplorerProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
+  const requestedAssetId = useNovelWorkbenchView(workbench, value => value.requestedAssetId)
   const state = useStore(value => ({
     assets: value.assets, project: value.project, document: value.document,
     titleDraft: value.titleDraft, draft: value.draft, active: value.document?.id,
@@ -60,13 +66,17 @@ export function Explorer({
       if (!live) return
       if (project === undefined) { actions.uninitialized(); return }
       actions.loaded(project, assets)
-      const target = assets.find(asset => asset.id === activeAssetId.current)
+      const target = assets.find(asset => asset.id === requestedAssetId)
+        ?? assets.find(asset => asset.id === activeAssetId.current)
         ?? assets.find(asset => asset.type === 'manuscript.chapter')
         ?? assets[0]
-      if (target !== undefined) actions.open(await open(sessionId, target.id))
+      if (target !== undefined) {
+        actions.open(await open(sessionId, target.id))
+        workbench.clearRequestedAsset(target.id)
+      }
     }).catch((error: unknown) => { if (live) actions.fail(errorMessage(error)) })
     return () => { live = false }
-  }, [actions, load, open, sessionId, state.reload, t])
+  }, [actions, load, open, requestedAssetId, sessionId, state.reload, t, workbench])
 
   const openAsset = (assetId: string) => {
     if (sessionId === undefined) return
@@ -186,7 +196,8 @@ export function Explorer({
   const titleOf = (asset: NovelAssetDescriptor) => asset.id === state.active ? state.titleDraft ?? asset.title : asset.title
 
   return <div className={css.explorerInner}>
-    <header className={css.brand}><strong>{t('studio')}</strong></header>
+    <header className={css.brand}><button type="button" className={css.homeLink}
+      onClick={() => { workbench.openHome() }}>{t('studio')}</button></header>
     <div className={css.projectTitle}><strong>{state.project?.title ?? t('newProject')}</strong></div>
     {state.loading && <p className={css.muted}>{t('loading')}</p>}
     {state.error !== undefined && <p className={css.error}>{state.error}</p>}

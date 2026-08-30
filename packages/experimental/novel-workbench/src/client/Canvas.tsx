@@ -27,9 +27,16 @@ import type {
 import type { NovelAssetRendererDefinition, NovelAssetRendererRegistry } from './renderers.tsx'
 import type { NovelReaderFont, NovelReaderSkin, createNovelWorkbenchStore } from './store.ts'
 import type { NovelContextFocus, NovelProjectStatusFocus } from './context-controller.ts'
+import { NovelHome, type NovelHomeInjected } from './Home.tsx'
+import { NovelWorkbenchViewController, useNovelWorkbenchView } from './view-controller.ts'
 import css from './workbench.module.css'
 
+const fallbackWorkbench = new NovelWorkbenchViewController('book')
+
 export interface CanvasInjected {
+  workbench?: NovelWorkbenchViewController
+  inspectLibrary?: NovelHomeInjected['inspectLibrary']
+  openLibraryBook?: NovelHomeInjected['openBook']
   renderers: NovelAssetRendererRegistry
   initialize: (sessionId: SessionId, title: string) => Promise<NovelProjectDescriptor>
   open: (sessionId: SessionId, assetId: string, revisionId?: string) => Promise<NovelAssetDocument>
@@ -111,13 +118,16 @@ const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 
 /** One exact-revision typed Asset editor with an optional chapter-local planning surface. */
 export function Canvas({
-  useSessions, useStore, actions, renderers, initialize, open, revisions, restore, analysisReports, scanNoAi, reviewChapter,
+  useSessions, useWorkspaces, useStore, actions, workbench = fallbackWorkbench,
+  inspectLibrary, openLibraryBook,
+  renderers, initialize, open, revisions, restore, analysisReports, scanNoAi, reviewChapter,
   finalizations, preferenceCandidates, storyStateCandidates, finalizeChapter, acceptPreference, rejectPreference,
   acceptStoryState, rejectStoryState,
   create, save, capture, appendReference, skills, replaceSkillSettings,
   reportContextFocus = ignoreContextFocus, reportProjectStatus = ignoreProjectStatus, t,
 }: CanvasProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
+  const page = useNovelWorkbenchView(workbench, value => value.page)
   const state = useStore(value => value)
   const [busy, setBusy] = useState(false)
   const [chapterOutlineOpen, setChapterOutlineOpen] = useState(false)
@@ -434,6 +444,10 @@ export function Canvas({
       fail={actions.fail}
       t={t}
     />
+  }
+  if (page === 'home' && inspectLibrary !== undefined && openLibraryBook !== undefined) {
+    return <NovelHome useSessions={useSessions} useWorkspaces={useWorkspaces}
+      inspectLibrary={inspectLibrary} openBook={openLibraryBook} t={t} />
   }
   if (state.document === undefined || state.draft === undefined) {
     return <div className={css.empty}>{state.error ?? t('noChapter')}</div>

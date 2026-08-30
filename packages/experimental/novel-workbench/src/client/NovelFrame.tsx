@@ -19,13 +19,16 @@ export type NovelFrameProps = PropsRuntime<'shell.workbench'>
 
 /** Elected domain surface preserving the canvas while the current Session changes. */
 export function NovelFrame({ renderSlot, t, workbench, agentWidth, setAgentWidth }: NovelFrameProps) {
+  const page = useNovelWorkbenchView(workbench, state => state.page)
   const explorerCollapsed = useNovelWorkbenchView(workbench, state => state.explorerCollapsed)
-  const explorerWidth = explorerCollapsed ? 0 : 230
+  const explorerHidden = page === 'home' || explorerCollapsed
+  const explorerWidth = explorerHidden ? 0 : 230
   const explorerBoundary = explorerWidth
   return (
     <main
       className={css.frame}
       data-novel-workbench
+      data-novel-page={page}
       style={{ gridTemplateColumns: `${explorerWidth}px minmax(320px, 1fr)` }}
     >
       <PanelResizer
@@ -37,12 +40,13 @@ export function NovelFrame({ renderSlot, t, workbench, agentWidth, setAgentWidth
       <aside
         className={css.explorer}
         aria-label={t('assetSidebar')}
-        data-collapsed={explorerCollapsed || undefined}
+        aria-hidden={page === 'home' || undefined}
+        data-collapsed={explorerHidden || undefined}
         data-novel-chrome="explorer"
       >
         {renderSlot('novel.explorer', {})}
       </aside>
-      <button
+      {page === 'book' && <button
         type="button"
         className={css.explorerToggle}
         style={{ left: explorerBoundary }}
@@ -50,7 +54,7 @@ export function NovelFrame({ renderSlot, t, workbench, agentWidth, setAgentWidth
         aria-label={explorerCollapsed ? t('expandExplorer') : t('collapseExplorer')}
         title={explorerCollapsed ? t('expandExplorer') : t('collapseExplorer')}
         onClick={() => { workbench.toggleExplorer() }}
-      >{explorerCollapsed ? '›' : '‹'}</button>
+      >{explorerCollapsed ? '›' : '‹'}</button>}
       <section className={css.canvas}>{renderSlot('novel.canvas', {})}</section>
       <div className={css.statusHost} data-novel-status-host />
     </main>

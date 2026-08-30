@@ -31,6 +31,7 @@ import { NovelPresentationCard } from '../src/client/NovelPresentationCard.tsx'
 import { Explorer } from '../src/client/Explorer.tsx'
 import { Canvas, shortReferenceLabel } from '../src/client/Canvas.tsx'
 import { ContextTray, humanContextLabel } from '../src/client/ContextTray.tsx'
+import { NovelHome, type NovelLibraryBook } from '../src/client/Home.tsx'
 import { NovelContextFocusController, NovelProjectStatusController } from '../src/client/context-controller.ts'
 import { ChangeSetCard, type NovelChangeReview } from '../src/client/ChangeSetCard.tsx'
 import { createNovelWorkbenchStore } from '../src/client/store.ts'
@@ -439,6 +440,31 @@ describe('preset-scoped workbench activation', () => {
       t={t} openFile={vi.fn()} cwd="/story"
     />)
     expect(layout.workbench.getSnapshot().id).toBe('novel')
+  })
+})
+
+describe('NovelHome', () => {
+  it('projects registered Workspaces into concise library totals and a continue action', async () => {
+    const inspectLibrary = vi.fn(async () => [{
+      workspaceId: 'workspace-1', sessionId: SID, title: '白港', path: '/stories/white-harbor',
+      chapterCount: 2, manuscriptCharacters: 4321, todayCharacterDelta: 286,
+      updatedAt: '2026-08-30T08:00:00.000Z', continueAsset: chapter(),
+    }] satisfies readonly NovelLibraryBook[])
+    const openBook = vi.fn(async () => {})
+    const useWorkspaces = (<T, >(select: (state: unknown) => T): T => select({
+      items: [{ workspaceId: 'workspace-1', title: '白港', path: '/stories/white-harbor',
+        sessionIds: [SID], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-30T08:00:00.000Z' }],
+      archivedSessionIds: [], state: 'idle', phase: 'ready', error: null,
+      baselinesReady: true, recentWorkspaceId: 'workspace-1',
+    })) as never
+    const view = render(<NovelHome useSessions={useSessions as never} useWorkspaces={useWorkspaces}
+      inspectLibrary={inspectLibrary} openBook={openBook} t={t} />)
+
+    expect(await view.findByText('4,321')).toBeTruthy()
+    expect(view.getByText('+286')).toBeTruthy()
+    expect(view.getAllByText('白港').length).toBeGreaterThan(0)
+    fireEvent.click(view.getByRole('button', { name: /白港.*第一章.*继续写/su }))
+    expect(openBook).toHaveBeenCalledWith(expect.objectContaining({ title: '白港' }), 'asset-chapter-1')
   })
 })
 
@@ -1575,7 +1601,11 @@ describe('Novel workbench stores and browser assembly', () => {
     act(() => {
       frame.toggleExplorer()
     })
-    expect(frame.getSnapshot()).toEqual({ explorerCollapsed: true })
+    expect(frame.getSnapshot()).toEqual({ explorerCollapsed: true, page: 'book', requestedAssetId: undefined })
+    act(() => { frame.openHome(); frame.openBook('chapter-2') })
+    expect(frame.getSnapshot()).toMatchObject({ page: 'book', requestedAssetId: 'chapter-2' })
+    act(() => { frame.clearRequestedAsset('chapter-2') })
+    expect(frame.getSnapshot().requestedAssetId).toBeUndefined()
   })
 
   it('wires slots, remotes, Composer mentions, reviews, layout, locale, and theme teardown', async () => {

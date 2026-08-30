@@ -6,10 +6,12 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { InputTriggerSource } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type {} from '@deepseek-ai/dsh-experimental-novel-repository-client/client'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId, WorkspaceId } from '@deepseek-ai/dsh-client-runtime/client'
 import type { AssetId, ChangeSetId, RevisionId } from '@deepseek-ai/dsh-experimental-novel-repository/types'
 import type {
   CreateNovelAssetRequest,
+  NovelAssetRevisionDescriptor,
+  NovelWireValue,
   ReorderNovelAssetsRequest,
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -23,6 +25,7 @@ import { NovelPresentationCard, type NovelPresentationInjected } from './NovelPr
 import { WorkbenchToggle, type WorkbenchToggleInjected } from './WorkbenchToggle.tsx'
 import { NovelFrame, type NovelFrameInjected } from './NovelFrame.tsx'
 import { ContextTray, type ContextTrayInjected } from './ContextTray.tsx'
+import type { NovelLibraryBook, NovelLibraryCandidate } from './Home.tsx'
 import { NovelContextFocusController, NovelProjectStatusController } from './context-controller.ts'
 import {
   manuscriptChapterRenderer,
@@ -93,13 +96,63 @@ function selectNovelWorkbench({ id }: { id: string }): { id: 'novel' } | null {
 export function apply(ctx: Context): void {
   const remote = ctx.remote.novelRepository
   const store = createNovelWorkbenchStore()
-  const workbench = new NovelWorkbenchViewController()
+  const workbench = new NovelWorkbenchViewController('home')
   const contextFocus = new NovelContextFocusController()
   const projectStatus = new NovelProjectStatusController()
   const refreshListeners = new Set<() => void>()
   const refreshWorkbench = (): void => { for (const listener of refreshListeners) listener() }
   const renderers = new NovelAssetRendererRegistry(ctx)
   renderers.register(manuscriptChapterRenderer)
+  const inspectLibrary = async (
+    candidates: readonly NovelLibraryCandidate[],
+    dayStart: string,
+  ): Promise<readonly NovelLibraryBook[]> => {
+    const books = await Promise.all(candidates.map(async (candidate): Promise<NovelLibraryBook | undefined> => {
+      try {
+        const project = await unwrapRemote(remote.discover(candidate.sessionId), 'discover library Novel Project')
+        if (project === undefined) return undefined
+        const assets = await unwrapRemote(remote.assets(candidate.sessionId), 'list library Novel Assets')
+        const chapters = assets.filter(asset => asset.type === 'manuscript.chapter')
+        const measures = await Promise.all(chapters.map(async (asset) => {
+          const [document, revisions] = await Promise.all([
+            unwrapRemote(remote.asset(candidate.sessionId, asset.id, null), 'read library chapter'),
+            unwrapRemote(remote.revisions(candidate.sessionId, asset.id), 'read library chapter history'),
+          ])
+          const baselineRevision = revisionBefore(revisions, dayStart)
+          const baseline = baselineRevision === undefined ? undefined : await unwrapRemote(
+            remote.asset(candidate.sessionId, asset.id, baselineRevision.id),
+            'read library day-start chapter',
+          )
+          const updatedAt = revisions.find(revision => revision.id === asset.revisionId)?.createdAt
+            ?? candidate.workspaceUpdatedAt
+          return {
+            asset,
+            currentCharacters: manuscriptCharacters(document.content),
+            baselineCharacters: baseline === undefined ? 0 : manuscriptCharacters(baseline.content),
+            updatedAt,
+          }
+        }))
+        const recent = [...measures].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
+        return {
+          workspaceId: candidate.workspaceId,
+          sessionId: candidate.sessionId,
+          title: project.title,
+          path: candidate.workspacePath,
+          chapterCount: chapters.length,
+          manuscriptCharacters: measures.reduce((sum, item) => sum + item.currentCharacters, 0),
+          todayCharacterDelta: measures.reduce(
+            (sum, item) => sum + item.currentCharacters - item.baselineCharacters, 0,
+          ),
+          updatedAt: recent?.updatedAt ?? candidate.workspaceUpdatedAt,
+          ...(recent === undefined ? {} : { continueAsset: recent.asset }),
+        }
+      } catch (cause: unknown) {
+        console.warn(`novel library skipped Workspace ${JSON.stringify(candidate.workspacePath)}:`, cause)
+        return undefined
+      }
+    }))
+    return books.filter((book): book is NovelLibraryBook => book !== undefined)
+  }
   ctx.effect(
     () => ctx.inputTriggers.registerSource(novelSelectionReferenceSource),
     'novel-workbench: exact SelectionRef serializer',
@@ -163,6 +216,7 @@ export function apply(ctx: Context): void {
     locale: NS,
     store,
     inject: (): ExplorerInjected => ({
+      workbench,
       renderers,
       load: async (sessionId) => {
         const project = await unwrapRemote(remote.discover(sessionId), 'discover Novel Project')
@@ -200,6 +254,13 @@ export function apply(ctx: Context): void {
     locale: NS,
     store,
     inject: (): CanvasInjected => ({
+      workbench,
+      inspectLibrary,
+      openLibraryBook: async (book, assetId) => {
+        const targetSessionId = await ctx.workspaces.connectWorkspace(book.workspaceId as WorkspaceId)
+        ctx.sessions.open(targetSessionId)
+        workbench.openBook(assetId)
+      },
       renderers,
       initialize: async (sessionId, title) => await unwrapRemote(
         remote.initialize(sessionId, { title }),
@@ -384,6 +445,21 @@ async function unwrapRemote<T>(pending: Promise<RemoteResult<T>>, operation: str
   const result = await pending
   if (!result.ok) throw new Error(`${operation} failed: ${result.error.code}: ${result.error.message}`)
   return result.value
+}
+
+function revisionBefore(
+  revisions: readonly NovelAssetRevisionDescriptor[],
+  dayStart: string,
+): NovelAssetRevisionDescriptor | undefined {
+  return revisions
+    .filter(revision => revision.createdAt < dayStart)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0]
+}
+
+function manuscriptCharacters(content: NovelWireValue): number {
+  if (typeof content !== 'object' || content === null || Array.isArray(content)
+    || content.kind !== 'manuscript' || typeof content.body !== 'string') return 0
+  return Array.from(content.body.replace(/\s/gu, '')).length
 }
 
 function encodeComposerReference(reference: NovelComposerReference): string {
