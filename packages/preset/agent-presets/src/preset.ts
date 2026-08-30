@@ -48,6 +48,14 @@ export interface PresetRoot {
   trust: PresetTrust
 }
 
+/** One package-owned preset root contributed to a live roster. */
+export interface PresetRootContribution {
+  /** Stable owner id used to reject duplicate registrations and order peers. */
+  readonly id: string
+  /** Read-only system directory supplied for the registering plugin's lifetime. */
+  readonly root: PresetRoot & { readonly trust: 'system' }
+}
+
 /** Plugin config: which preset is the default, and where presets live. */
 export interface Config {
   /** Preset id mounted when a caller names none. Missing at mount time fails loud. */

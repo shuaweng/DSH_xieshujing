@@ -18,7 +18,8 @@
 - `ctx.agentPresets.composedPreset(agentCtx): string | undefined` 某个**活着的** agent 正在运行的 preset，从其 scope 链读取而不是从其会话读取——对于持久化 header 尚在构建中的 agent，这是唯一能拿到的答案。
 - `ctx.agentPresets.recompose(agentCtx, id): Promise<AgentPreset>` 把一个 agent 重链到另一个 preset 的常驻组装。仅在该 agent 尚无任何产出时合法——**由调用方负责该检查**；新挂载在链移动之前确保完成，失败时 agent 原封不动。与 `mount()` 一样拒绝损坏的 preset。
 - `ctx.agentPresets.standingKeyFor(id?): Promise<ScopeKey>` 没有 agent 的宿主读取方（冷读记录）解析 preset 注册所用的常驻 scope key；确保挂载而不启动任何 agent、会话或轮次。与 `mount()` 一样拒绝损坏的 preset。
-- `ctx.agentPresets.roots: readonly PresetRoot[]` 本 roster 实际扫描的根目录——全部已配置根目录按序在前，随后是推导出的 harness home 根目录。它不是 `config.roots`：判断「是否已组装 roster」应读它，从而由同一处推导决定。
+- `ctx.agentPresets.registerRoot(contribution): () => void` 在调用插件存活期间贡献一个包自带、只读的 `system` 根目录。已配置根目录仍优先，存活的包根目录按稳定 owner id 排序；重复的存活 owner id 会明确失败，调用插件卸载时贡献自动移除。
+- `ctx.agentPresets.roots: readonly PresetRoot[]` 本 roster 当前实际扫描的根目录——全部已配置根目录按序在前，随后是按稳定 owner id 排列的存活包贡献，最后是推导出的 harness home 根目录。它不是 `config.roots`：回答实时 roster 应读取它。
 - `ctx.agentPresets.authorable: boolean` 上述根目录中是否有任一具备 `user` 信任级别，因而 preset 是否可创建。
 - `ctx.agentPresets.read(id): Promise<string>` 某个 preset 的组装文本，与存储内容逐字一致。
 - `ctx.agentPresets.copy(from, id, name?): Promise<void>` 通过整目录复制一个既有 preset 来创建本地创作的 preset——唯一的创作写入。组装文本不经过这道接缝，因此副本与其来源同等可加载；复制出的元数据保留来源的描述、但绝不保留其名称与 roster 排序，`name`（或回退到 id）才是区分两行的依据。
@@ -93,13 +94,13 @@ description: 仅提供持久 bash 与 str_replace_editor 的双工具编码 Agen
 
 ### 可写根目录属于本包，随附根目录属于 app
 
-`<dshHome>/.agent-presets` 是个人自有 preset 的所在，正如 `<dshHome>/skills` 是其自有 skill 的所在（[`dsh-skill-filesystem`](../../skill/skill-filesystem/README.zh.md)），因此 roster 自行推导它，而不等某个部署记得配置——一个什么都没配的启动器同样能发现并创作 preset。它追加在全部已配置根目录**之后**，从而保持靠前的根目录赢得重复 id：随附的 `standard` 仍然遮蔽一个占用该名字的家目录目录，而 `copy()` 会拒绝该 id，不会落下一个无人解析得到的 preset。
+`<dshHome>/.agent-presets` 是个人自有 preset 的所在，正如 `<dshHome>/skills` 是其自有 skill 的所在（[`dsh-skill-filesystem`](../../skill/skill-filesystem/README.zh.md)），因此 roster 自行推导它，而不等某个部署记得配置——一个什么都没配的启动器同样能发现并创作 preset。它追加在已配置根目录与包贡献根目录**之后**，从而保持随附 preset 遮蔽家目录中占用相同 id 的目录，而 `copy()` 会拒绝该 id，不会落下一个无人解析得到的 preset。
 
-根目录在服务构造时解析一次。若根目录集合在一次 `list()` 与依据其答案执行的 `copy()` 之间发生变化，写入的将是调用方从未见过的目录。
+部署配置的根目录会在服务构造时冻结。插件可以通过 `registerRoot()` 加入自身只读的 `system` 根目录，而不再覆盖其他插件的 `roots` 配置；该 effect 归调用方所有，并随插件卸载而消失。贡献 id 是稳定包身份，不是优先级旋钮：同级贡献按 id 排序，因此激活时序无法决定重复 preset 谁胜出。每个多步创作操作会先快照当前组合根目录，再解析和写入，因此一次调用进行到一半时，插件卸载不会改变写入目的地。
 
 `includeUserRoot: false` 使 roster 只覆盖 `roots`。把 preset 限制在自有目录内的部署需要它，任何钉住确切 roster 的测试同样需要——否则将由这台机器真实的 `<dshHome>` 决定 roster 的内容。
 
-随附根目录仍然是装配事实：它位于已安装 app 自身配置的旁边，那个路径只有该 app 能解析。
+app 自身随附根目录仍然是装配事实：它位于已安装 app 配置旁边，那个路径只有该 app 能解析。第三方包根目录则是运行时贡献，因为只有已安装包能解析其位置并拥有其生命周期。
 
 ### 默认 preset 是一项用户设置
 

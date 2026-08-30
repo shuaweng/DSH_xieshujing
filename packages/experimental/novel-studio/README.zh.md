@@ -4,7 +4,7 @@
 
 ## 用途
 
-这个实验包是显式 Novel Studio Profile bundle。它组合文件优先 Novel Repository、持久上下文、安全模型工具、浏览器 Remote 和 Agent 原生工作台，而不修改已发布的 `web` 或 `headless` Profile template。
+这个实验包是可安装、保持中立的 Novel Studio bundle。它组合文件优先 Novel Repository、持久上下文、安全模型工具、浏览器 Remote 和 Agent 原生工作台，但不改变宿主 Profile 的默认 Agent Preset。专门用于写作的 Profile 可以在其上另行叠加导出的 `dedicated-profile.patch.yml`。
 
 ## 行为
 
@@ -14,8 +14,8 @@
 - 同一 Preset 通过标准按需 `skill` 工具挂载十个包内自包含写作/审稿 Skill：新书启动、大纲/beat 设计、章节执行、文风改写、文风审查、场景推进、对白诊断、精确 Revision 章节审稿、草稿/定稿偏好提取与定稿正文 Story State 提取。每个 Skill 声明一个闭集 `novelContextPolicy`；Skill 可以教授方法并选择有边界的上下文策略，但不能扩大 Novel 工具权限。章节执行与场景推进现在会从自由章纲、已确认 Story State、本书风格与必要前文提炼临时执行草案。普通场景直接推进；关键或高不确定场景可以比较 2–3 个短行动方案，等待用户选择或由 Agent 明确选择一项，随后仍默认只通过现有 ChangeSet 流程生成一个正文候选。
 - 绑定 Revision 的分析服务为工作台提供确定性 NOAI 扫描、固定 one-shot 审稿人、偏好 worker 与 Story State worker。它们都只收到冻结的有界材料、`skill` 工具与严格 Schema，且不拥有 Asset 修改权限；只有面向用户的 Host 流程可以保留定稿，并通过 ChangeSet 应用已采纳候选。
 - 历史作者 Revision 是只读证据。作者可以显式对照并把其中一版恢复为新的、受版本保护的当前 Revision；恢复绝不倒退历史，会把该 Asset 的陈旧提案标为冲突、保留绑定 Revision 的分析证据，并在章节 Canon 可能变化时要求复查 Story State。
-- `NovelStudioPaths` 发布包内 Preset 根，因此 `agent-presets` 不需要仓库相对路径即可选择它。
-- 默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。本包仍不添加已发布的全局 Profile template；调用方把它安装到显式 Profile 中。
+- `NovelStudioPaths` 通过 `ctx.agentPresets.registerRoot()` 注册包内 Preset 根。该贡献的 effect 生命周期属于本 bundle，不会替换其他包的根目录配置，并在 bundle 卸载时消失。
+- 安装本 bundle 不会改变宿主 Profile 的默认 Preset。默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。产品若明确把某一 Profile 专用于写作，可以应用 `dedicated-profile.patch.yml`，只把该 Profile 的无显式选择会话默认值改为 `novel-workbench`。
 
 ## 从源码 checkout 启动
 
@@ -36,8 +36,12 @@ pnpm dsh plugin --profile novel-studio add \
   link:./packages/experimental/tool-novel \
   link:./packages/skill/skill-filesystem \
   link:./packages/skill/tool-skill
-pnpm dsh --profile novel-studio --port 3080
+pnpm dsh --profile novel-studio \
+  --patch "$PWD/packages/experimental/novel-studio/dedicated-profile.patch.yml" \
+  --port 3080
 ```
+
+最后的 `--patch` 是可选项。若把 Novel Studio 安装到通用 Profile 中就应省略它：`novel-workbench` Preset 仍可选择，但 `standard` 保持默认。专用 Profile 也可以把这份小 patch 一次性复制进自己的 `cordis.patch.yml`，之后继续不带该参数地运行 `pnpm dsh --profile novel-studio`。
 
 ## 模型体验
 
@@ -57,7 +61,7 @@ Preset 组合与 Skill 目录在页面和选区变化时保持稳定。Skill 正
 
 ## 已知限制与暂缓事项
 
-- **没有已发布 Profile 入口**：调用方必须在 base 与 Web App 之后显式安装本 bundle；没有内建 `novel-studio` CLI template 或路由切换器。
+- **没有已发布 Profile 入口**：调用方必须在 base 与 Web App 之后显式安装本 bundle；没有内建 `novel-studio` CLI template 或路由切换器。导出的 dedicated patch 可以改变 Profile 默认值，但刻意不负责安装软件包。
 - **当前资产范围**：Host 与 Client 注册表已安装 `manuscript.chapter`、自由 `planning.outline`、绑定章节的 `planning.chapter-outline`，以及项目级唯一 `book.brief` / `book.style-profile` / `book.story-state`，并支持一个活动类型化选区和单操作 ChangeSet；人物、灵感、关系与大纲结构编辑仍暂缓。
 - **只有人工审阅的定稿学习**：用户可以把精确章节 Revision 标记为定稿，并审阅草稿/定稿偏好候选；没有自动提升、偏好 RAG、跨书作者画像、排序或模型训练。
 - **没有语义搜索或实时文件事件**：已有有边界的词法 Asset 检索；关系、语义排序、文件监听和浏览器失效事件流尚未实现。

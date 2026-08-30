@@ -130,6 +130,37 @@ describe('composing an agent from a preset', () => {
     expect(toolNames(ctx, agent)).toEqual(['alpha'])
   })
 
+  it('starts a new generation when a live package root replaces the same preset id', async () => {
+    const firstRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-package-first-'))
+    const secondRoot = await mkdtemp(join(tmpdir(), 'dsh-preset-package-second-'))
+    const plugin = join(FIXTURES, 'plugins', 'contribute.js')
+    for (const [root, tool] of [[firstRoot, 'package-first'], [secondRoot, 'package-second']] as const) {
+      const presetDir = join(root, 'swappable')
+      await mkdir(presetDir)
+      await writeFile(
+        join(presetDir, COMPOSITION_FILE),
+        `- id: only\n  name: ${plugin}\n  config:\n    tool: ${tool}\n`,
+      )
+    }
+    const disposeFirst = ctx.agentPresets.registerRoot({
+      id: '@example/swappable',
+      root: { path: firstRoot, trust: 'system' },
+    })
+    const first = await agentOn(ctx, 'sess-package-first', 'swappable')
+    expect(toolNames(ctx, first)).toEqual(['package-first'])
+
+    disposeFirst()
+    const disposeSecond = ctx.agentPresets.registerRoot({
+      id: '@example/swappable',
+      root: { path: secondRoot, trust: 'system' },
+    })
+    const second = await agentOn(ctx, 'sess-package-second', 'swappable')
+
+    expect(toolNames(ctx, first)).toEqual(['package-first'])
+    expect(toolNames(ctx, second)).toEqual(['package-second'])
+    disposeSecond()
+  })
+
   it('lets two sessions share one preset without colliding', async () => {
     const first = await agentOn(ctx, 'sess-first', 'standard')
     const second = await agentOn(ctx, 'sess-second', 'standard')

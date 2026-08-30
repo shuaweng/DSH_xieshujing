@@ -148,9 +148,20 @@ describe('experimental Novel Studio bundle', () => {
   it('provides the package-owned preset root as a scoped runtime service', async () => {
     const ctx = new Context()
     ctx.provide('novelWorkbenchReady', {} as never)
+    const contributions: unknown[] = []
+    ctx.provide('agentPresets', {
+      registerRoot(contribution: unknown) {
+        contributions.push(contribution)
+        return () => undefined
+      },
+    } as never)
     const fiber = ctx.plugin(NovelStudioPaths)
     await fiber.await()
     expect(ctx.novelStudioPaths.presetRoot).toBe(resolve(packageRoot, 'presets'))
+    expect(contributions).toEqual([{
+      id: '@deepseek-ai/dsh-experimental-novel-studio',
+      root: { path: resolve(packageRoot, 'presets'), trust: 'system' },
+    }])
     await fiber.dispose()
     expect(ctx.get('novelStudioPaths')).toBeUndefined()
   })
@@ -178,10 +189,7 @@ describe('experimental Novel Studio bundle', () => {
     expect(parsed.find(row => row.id === 'modules')).toMatchObject({
       inject: ['novelStudioPaths'],
     })
-    expect(parsed.find(row => row.id === 'agent-presets')).toMatchObject({
-      inject: ['novelStudioPaths'],
-      config: { default: 'novel-workbench', roots: [{ trust: 'system' }] },
-    })
+    expect(parsed.find(row => row.id === 'agent-presets')).toBeUndefined()
     expect(parsed.flatMap(row => row.insert ?? [])).toEqual([
       { id: 'novel-asset-types', name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types' },
       { id: 'novel-asset-outline', name: '@deepseek-ai/dsh-experimental-novel-asset-outline' },
@@ -204,6 +212,18 @@ describe('experimental Novel Studio bundle', () => {
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-experimental-tool-novel')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-skill-filesystem')
     expect(manifest.dependencies).toHaveProperty('@deepseek-ai/dsh-tool-skill')
+  })
+
+  it('keeps the installable bundle neutral and makes the dedicated default an explicit Profile layer', () => {
+    const parsed = yaml.load(
+      readFileSync(resolve(packageRoot, 'dedicated-profile.patch.yml'), 'utf8'),
+      { schema: entryListSchema },
+    ) as Array<{ id?: string; config?: { default?: string; includeUserRoot?: boolean } }>
+
+    expect(parsed).toEqual([{
+      id: 'agent-presets',
+      config: { default: 'novel-workbench', includeUserRoot: true },
+    }])
   })
 
   it('adds Novel services only to the explicit base + web-app + Novel composition', () => {
@@ -239,8 +259,9 @@ describe('experimental Novel Studio bundle', () => {
     expect(novel.find(row => row.id === 'modules')?.inject).toEqual(['novelStudioPaths'])
     expect(novel.find(row => row.id === 'ui-layout')?.config).toEqual(web.find(row => row.id === 'ui-layout')?.config)
     const presets = novel.find(row => row.id === 'agent-presets')
-    expect(presets?.inject).toContain('novelStudioPaths')
-    expect(presets?.config).toMatchObject({ default: 'novel-workbench' })
+    expect(presets?.inject).toEqual(web.find(row => row.id === 'agent-presets')?.inject)
+    expect(presets?.config).toEqual(web.find(row => row.id === 'agent-presets')?.config)
+    expect(presets?.config).toMatchObject({ default: 'standard' })
     expect(PROFILE_TEMPLATES).not.toHaveProperty('novel-studio')
   })
 })

@@ -33,7 +33,14 @@ import { discoverPresets, USER_PRESET_DIR } from './discovery.ts'
 import { copyComposition, deleteComposition, readComposition } from './authoring.ts'
 import { mountPreset, serviceForAgent, standingMountFor } from './mount.ts'
 import { PresetExistsError } from './authoring.ts'
-import { PresetMountError, UnknownPresetError, type AgentPreset, type Config, type PresetRoot } from './preset.ts'
+import {
+  PresetMountError,
+  UnknownPresetError,
+  type AgentPreset,
+  type Config,
+  type PresetRoot,
+  type PresetRootContribution,
+} from './preset.ts'
 import type {} from './types.ts'
 
 /** Settings namespace carrying the user's chosen default preset. */
@@ -64,7 +71,13 @@ export {
 } from './authoring.ts'
 export { resolveSessionPreset, type PresetBearingSession } from './session.ts'
 export { PresetMountError, UnknownPresetError } from './preset.ts'
-export type { AgentPreset, Config, PresetRoot, PresetTrust } from './preset.ts'
+export type {
+  AgentPreset,
+  Config,
+  PresetRoot,
+  PresetRootContribution,
+  PresetTrust,
+} from './preset.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -93,16 +106,14 @@ export class AgentPresets extends Service {
   }) as z<Config>
 
   /**
-   * The roots discovery and authoring actually scan: every configured root in
-   * order, then the harness-home user root unless `includeUserRoot` is false.
-   *
-   * Derived once, because a root set that changed between `list()` and the
-   * `copy()` acting on its answer would author into a directory the caller
-   * never saw. Appending rather than prepending keeps an earlier configured
-   * root winning a duplicate id, so a shipped preset still shadows a
-   * locally authored directory that claimed its name.
+   * Deployment-configured roots, frozen at service construction. Runtime
+   * package contributions are kept separately and each multi-step authoring
+   * operation snapshots the combined list before resolving and writing.
    */
-  private readonly resolvedRoots: readonly PresetRoot[]
+  private readonly configuredRoots: readonly PresetRoot[]
+
+  /** Package roots registered for the lifetime of their calling plugin. */
+  private readonly contributedRoots = new Map<string, PresetRoot>()
 
   /**
    * The user layer over `config.default`, present only while a settings
@@ -130,9 +141,7 @@ export class AgentPresets extends Service {
   constructor(ctx: Context, public config: Config) {
     super(ctx, 'agentPresets')
     this.selfCtx = ctx
-    this.resolvedRoots = config.includeUserRoot
-      ? [...config.roots, { path: dshHomePath(USER_PRESET_DIR), trust: 'user' }]
-      : [...config.roots]
+    this.configuredRoots = [...config.roots]
     // Deliberately not `installSettingsSection`: that helper exists to re-judge
     // what a consumer DERIVED from the source — memoized resolutions,
     // registration-level facts — across attach, detach, and change. Nothing
@@ -164,7 +173,7 @@ export class AgentPresets extends Service {
     // does that today — the Web surface mounts in `setup` and children join
     // through `composeFrom` before publication.
     ctx.on('agent/created', ({ agent }) => {
-      if (this.resolvedRoots.length === 0) return
+      if (this.roots.length === 0) return
       if (this.composedPreset(agent.ctx) !== undefined) return
       ctx.logger.warn(
         `agent "${agent.id}" was published without joining an agent preset; `
@@ -193,11 +202,47 @@ export class AgentPresets extends Service {
   }
 
   /**
+   * Contribute one package-owned root for the calling plugin's lifetime.
+   *
+   * Configured deployment roots keep precedence, contributed roots follow in
+   * stable owner-id order, and the writable Harness-home root remains last.
+   * A duplicate owner id fails synchronously so two live copies cannot race
+   * for one contribution slot.
+   * @param contribution - stable owner id and the preset root it supplies.
+   * @returns an idempotent disposer that removes this exact contribution.
+   */
+  registerRoot(contribution: PresetRootContribution): () => void {
+    // Widen the public literal type while validating JavaScript callers at the
+    // runtime authority boundary.
+    const root: PresetRoot = contribution.root
+    if (contribution.id.length === 0 || contribution.id.trim() !== contribution.id) {
+      throw new Error('agent-presets: preset root contribution id must be non-blank and have no surrounding whitespace')
+    }
+    if (root.trust !== 'system') {
+      throw new Error('agent-presets: package preset root contributions must have system trust')
+    }
+    if (root.path.trim().length === 0) {
+      throw new Error('agent-presets: package preset root contribution path must be non-blank')
+    }
+    if (this.contributedRoots.has(contribution.id)) {
+      throw new Error(`agent-presets: preset root contributor ${JSON.stringify(contribution.id)} is already registered`)
+    }
+    const contributedRoots = this.contributedRoots
+    contributedRoots.set(contribution.id, root)
+    const dispose = this.ctx.effect(() => () => {
+      if (contributedRoots.get(contribution.id) === root) {
+        contributedRoots.delete(contribution.id)
+      }
+    }, `agentPresets.registerRoot(${JSON.stringify(contribution.id)})`)
+    return () => { void dispose() }
+  }
+
+  /**
    * Every preset the configured roots currently supply.
    * @returns the presets, first-root-wins per id.
    */
   async list(): Promise<AgentPreset[]> {
-    return await discoverPresets(this.resolvedRoots)
+    return await discoverPresets(this.roots)
   }
 
   /**
@@ -338,18 +383,22 @@ export class AgentPresets extends Service {
   }
 
   /**
-   * The roots this roster scans, which is not `config.roots`: it is every
-   * configured root in order, then the harness-home user root unless
-   * `includeUserRoot` is false. Read this — not the config field — to answer
-   * whether a roster is composed at all, so one derivation decides it.
+   * The roots this roster scans. Configured deployment roots come first,
+   * package contributions follow in stable owner-id order, and the
+   * Harness-home user root is last unless `includeUserRoot` is false.
    */
   get roots(): readonly PresetRoot[] {
-    return this.resolvedRoots
+    const contributed = [...this.contributedRoots]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([, root]) => root)
+    return this.config.includeUserRoot
+      ? [...this.configuredRoots, ...contributed, { path: dshHomePath(USER_PRESET_DIR), trust: 'user' }]
+      : [...this.configuredRoots, ...contributed]
   }
 
   /** Whether this deployment has a root locally authored presets go to. */
   get authorable(): boolean {
-    return this.resolvedRoots.some(root => root.trust === 'user')
+    return this.roots.some(root => root.trust === 'user')
   }
 
   /**
@@ -378,14 +427,19 @@ export class AgentPresets extends Service {
    * or the deployment configures no writable root.
    */
   async copy(from: string, id: string, name?: string): Promise<void> {
-    const source = await this.resolve(from)
+    const roots = this.roots
+    const presets = await discoverPresets(roots)
+    const source = presets.find(preset => preset.id === from)
+    if (source === undefined) {
+      throw new UnknownPresetError(from, presets.map(preset => preset.id))
+    }
     // The roster check refuses ids any root supplies — shipped ones included,
     // since a user directory named like a shipped preset is shadowed by it.
     // The disk check inside copyComposition only sees the writable root.
-    if ((await this.list()).some(preset => preset.id === id)) {
+    if (presets.some(preset => preset.id === id)) {
       throw new PresetExistsError(id)
     }
-    await copyComposition(this.resolvedRoots, source, id, name)
+    await copyComposition(roots, source, id, name)
     // A settled mount under this id can only be stale (its preset was deleted
     // from disk outside `remove`); the new preset must not inherit it. Every
     // session already joined keeps the generation it runs on regardless.
@@ -398,7 +452,13 @@ export class AgentPresets extends Service {
    * @throws when the preset is unknown or ships with the deployment.
    */
   async remove(id: string): Promise<void> {
-    await deleteComposition(this.resolvedRoots, await this.resolve(id))
+    const roots = this.roots
+    const presets = await discoverPresets(roots)
+    const preset = presets.find(candidate => candidate.id === id)
+    if (preset === undefined) {
+      throw new UnknownPresetError(id, presets.map(candidate => candidate.id))
+    }
+    await deleteComposition(roots, preset)
     // Sessions on the deleted preset keep their standing mount; only new
     // sessions see the roster without it.
     this.standing.delete(id)
@@ -498,7 +558,10 @@ export class AgentPresets extends Service {
       // serves the current generation — a mount must survive its file
       // disappearing, and failing the session over a stat would not.
       const current = await compositionStamp(preset.path)
-      if (current === undefined || sameStamp(mounted.stamp, current)) return mounted
+      if (
+        mounted.path === preset.path
+        && (current === undefined || sameStamp(mounted.stamp, current))
+      ) return mounted
       // TODO: reclaim the superseded generation once the last agent joined to
       // it is gone. The subtree is not inert — `dsh-skill-filesystem` watches its
       // roots — and the settings-page authoring flow turns "a composition
@@ -522,7 +585,7 @@ export class AgentPresets extends Service {
           throw new PresetMountError(preset.id, `composition file is unreadable: ${preset.path}`)
         }
         await mountPreset(scope.ctx, preset)
-        return { key, scope, stamp }
+        return { key, path: preset.path, scope, stamp }
       } catch (error) {
         this.standing.delete(preset.id)
         await scope.dispose()
@@ -563,6 +626,8 @@ function sameStamp(a: CompositionStamp, b: CompositionStamp): boolean {
 interface StandingMount {
   /** Scope key agents are parented to; also the mount's registration scope. */
   readonly key: ScopeKey
+  /** Absolute source path, so a same-id root replacement starts a generation. */
+  readonly path: string
   /** Disposal boundary; held for whole-tree teardown, never per-session. */
   readonly scope: Scope
   /** Stamp of the composition file this generation was mounted from. */

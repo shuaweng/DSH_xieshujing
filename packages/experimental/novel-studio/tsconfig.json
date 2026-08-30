@@ -8,6 +8,7 @@
   "references": [
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
+    { "path": "../../preset/agent-presets" },
     { "path": "../../runtime-diagnostics/invariants" }
   ]
 }

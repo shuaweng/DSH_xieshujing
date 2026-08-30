@@ -1,0 +1,7 @@
+# Optional profile-owned behavior for a dedicated writing application.
+# The installable Novel Studio bundle stays neutral; this separate layer makes
+# only unnamed sessions in an explicitly dedicated Profile start in its Preset.
+- id: agent-presets
+  config:
+    default: novel-workbench
+    includeUserRoot: true

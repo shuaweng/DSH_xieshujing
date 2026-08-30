@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 ## Purpose
 
-This experimental package is the explicit Novel Studio Profile bundle. It composes the file-backed Novel Repository, durable context, safe model tools, browser Remote, and Agent-native workbench without changing the shipped `web` or `headless` Profile templates.
+This experimental package is the installable, neutral Novel Studio bundle. It composes the file-backed Novel Repository, durable context, safe model tools, browser Remote, and Agent-native workbench without changing the host Profile's default Agent Preset. A dedicated writing Profile may layer the separately exported `dedicated-profile.patch.yml` on top.
 
 ## Behavior
 
@@ -14,8 +14,8 @@ This experimental package is the explicit Novel Studio Profile bundle. It compos
 - The same Preset mounts ten package-owned, self-contained writing/review Skills through the standard on-demand `skill` tool: new-book bootstrap, outline/beat design, chapter execution, style rewrite, style audit, scene drive, dialogue diagnostics, exact-Revision chapter review, draft/final preference extraction, and finalized-prose Story State extraction. Each Skill declares a closed `novelContextPolicy`; Skills teach method and select bounded context policy but cannot widen Novel tool authority. Chapter execution and scene drive now derive a temporary execution draft from freeform chapter guidance, confirmed Story State, style, and necessary prior prose. Ordinary scenes proceed directly; key or uncertain scenes may compare 2–3 short action options, wait for the user's choice or select one explicitly, and still produce one prose candidate by default through the existing ChangeSet flow.
 - The Revision-bound analysis service gives the workbench deterministic NOAI scanning, a fixed one-shot reviewer, a preference worker, and a Story State worker. They receive only frozen bounded material, the `skill` tool, and a strict schema; none has Asset mutation authority. The user-facing Host flow alone can retain finalization and apply an accepted candidate through a ChangeSet.
 - Historical authored Revisions are read-only evidence. The author can explicitly compare and restore one as a new guarded current Revision; restore never rewinds history, conflicts stale proposals for that Asset, retains Revision-bound analysis evidence, and asks for Story State review when chapter Canon may have changed.
-- `NovelStudioPaths` publishes the package-owned Preset root so `agent-presets` can select it without a repository-relative path.
-- The default `web` and `headless` compositions remain free of the Novel Repository, context resolver, Novel Remote, workbench, and Novel tools. This package still does not add a shipped global Profile template; callers install it into an explicit Profile.
+- `NovelStudioPaths` registers the package-owned Preset root through `ctx.agentPresets.registerRoot()`. The contribution is effect-scoped to this bundle, never replaces another package's root configuration, and disappears if the bundle unloads.
+- Installing the bundle leaves the host Profile's default Preset unchanged. The default `web` and `headless` compositions also remain free of the Novel Repository, context resolver, Novel Remote, workbench, and Novel tools. A product that intentionally dedicates one Profile to writing can apply `dedicated-profile.patch.yml`, which changes only that Profile's unnamed-session default to `novel-workbench`.
 
 ## Source checkout launch
 
@@ -36,8 +36,12 @@ pnpm dsh plugin --profile novel-studio add \
   link:./packages/experimental/tool-novel \
   link:./packages/skill/skill-filesystem \
   link:./packages/skill/tool-skill
-pnpm dsh --profile novel-studio --port 3080
+pnpm dsh --profile novel-studio \
+  --patch "$PWD/packages/experimental/novel-studio/dedicated-profile.patch.yml" \
+  --port 3080
 ```
+
+The final `--patch` is optional. Omit it when Novel Studio is installed into a general-purpose Profile: the `novel-workbench` Preset remains selectable, but `standard` stays the default. A dedicated Profile may instead copy the small patch into its own `cordis.patch.yml` once and then keep using `pnpm dsh --profile novel-studio` without the flag.
 
 ## Model Experience
 
@@ -57,7 +61,7 @@ The Preset composition and Skill catalog are stable across page and selection ch
 
 ## Known Limitations and Deferred Work
 
-- **No shipped Profile entry** — callers must explicitly install this bundle after base and Web App; there is no built-in `novel-studio` CLI template or route switcher.
+- **No shipped Profile entry** — callers must explicitly install this bundle after base and Web App; there is no built-in `novel-studio` CLI template or route switcher. The exported dedicated patch changes a Profile default but intentionally does not install packages.
 - **Current asset scope** — the Host and Client registries install `manuscript.chapter`, freeform `planning.outline`, chapter-bound `planning.chapter-outline`, and project-singleton `book.brief` / `book.style-profile` / `book.story-state`, with one active type-defined selection and one-operation ChangeSets. Characters, ideas, relations, and structural outline edits remain deferred.
 - **Review-gated finalization learning only** — the user may mark an exact chapter Revision final and review a draft/final preference candidate. There is no automatic promotion, preference RAG, cross-book author profile, ranking, or model training.
 - **No semantic search or live file events** — bounded lexical Asset search is shipped; relations, semantic ranking, file watching, and browser invalidation streams are deferred.
