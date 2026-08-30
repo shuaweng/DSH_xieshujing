@@ -16,7 +16,11 @@ Status: implemented
 
 对于每个发现的项目，浏览器读取当前 `manuscript.chapter` head 与保留的 Revision 元数据。总字数是当前 head 中排除空白后的字符数。今日数据使用净增量：当前章节字符数减去浏览器本地零点之前最后一份保留 Revision 的字符数。因此反复保存与 Agent 提案不会把数字虚增。
 
-被选中的小说 surface 会从浏览器本地 `home` 页面开始，页面只包含三个汇总数字、一个继续创作动作和已登记书本列表。打开书本时先使用 `ctx.workspaces.connectWorkspace()` 与 `ctx.sessions.open()`，再让既有 Explorer 根据稳定 Asset id 打开目标。跨文件夹内容不会因此注入模型 Prompt。
+被选中的小说 surface 会从浏览器本地 `home` 页面开始，页面只包含三个汇总数字、一个继续创作动作和已登记书本列表。每个列表项和继续创作目标都复用一张包内所有的封面底图，并实时叠加书名。可选且有边界的 `novel.yaml` `description` 提供小说简介。缺少简介时只显示浏览器占位，不伪造进度数据。
+
+打开书本时先使用 `ctx.workspaces.connectWorkspace()` 与 `ctx.sessions.open()`，再让既有 Explorer 根据稳定 Asset id 打开目标。`connectWorkspace()` 会刻意复用该 Workspace 下合格的空白对话，或者创建一个；工作台不会发明第二套 Session 生命周期。客户端插件明确依赖原生 `workspaces` 服务，切换失败也会在首页显示。顶部“新建小说”动作通过 DSH 原生控制器关闭工作台并清空活动 Session，把作者带回已有的新 Session/Workspace 流程，而不是打开第二套项目选择器。
+
+首页可见时，Context Tray 会把自动章节跟随替换为一份有边界的 `library-home` surface：汇总数字，以及最多 24 本可见书籍的标题、截断简介、章节数、字数和继续创作标题。工作集与冻结 V3 source 仍保留当前 Session 的 Project id。这只是首页已经可见的展示元数据，不是能力令牌：它不会授予另一部书的 Remote 或 Repository 读取权，也不会复制那些书的作者 Asset。重新进入书本后，surface 会移除并恢复普通 Asset 跟随。
 
 ## Alternatives considered
 
@@ -26,8 +30,10 @@ Status: implemented
 
 **累加今天创建的所有 Revision。** 实现便宜，却会把改写和反复保存当作新增正文，奖励版本抖动而不是创作产出。
 
+**把封面和简介放进小说专属全局注册表。** 这会让首页成为书本身份的所有者，并与每个 Session 根目录中的 `novel.yaml` 产生漂移。共享封面只是展示资源；简介仍随书存储。
+
 ## Consequences
 
-首页只会看到作者已经登记为 DSH Workspace 的跨文件夹书本。它不扫描整盘，也不改变 Session 作用域、模型上下文、工具或项目 Manifest。
+首页只会看到作者已经登记为 DSH Workspace 的跨文件夹书本。它不扫描整盘，也不改变 Session 作用域。它的有界可见摘要通过既有 Novel Context 工作集和 Session Log 冻结，但不会建立跨项目 Asset 权威。版本一项目 Manifest 增加一个可选 `description`；旧清单继续有效，浏览器与需批准的初始化工具共用同一请求。
 
 首版复用现有 Remote 读取；存在日初基线时，每章最多需要读取当前版和一份基线版。未来可以在 Repository 中增加汇总投影来优化成本，而无需改变首页契约或制造新真相源。当天删除的章节与当天首次导入的旧稿，会按当前状态变化反映，而不会试图重建键盘输入历史。

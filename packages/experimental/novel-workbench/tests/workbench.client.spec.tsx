@@ -32,7 +32,11 @@ import { Explorer } from '../src/client/Explorer.tsx'
 import { Canvas, shortReferenceLabel } from '../src/client/Canvas.tsx'
 import { ContextTray, humanContextLabel } from '../src/client/ContextTray.tsx'
 import { NovelHome, type NovelLibraryBook } from '../src/client/Home.tsx'
-import { NovelContextFocusController, NovelProjectStatusController } from '../src/client/context-controller.ts'
+import {
+  NovelContextFocusController,
+  NovelLibraryContextFocusController,
+  NovelProjectStatusController,
+} from '../src/client/context-controller.ts'
 import { ChangeSetCard, type NovelChangeReview } from '../src/client/ChangeSetCard.tsx'
 import { createNovelWorkbenchStore } from '../src/client/store.ts'
 import { NovelWorkbenchViewController } from '../src/client/view-controller.ts'
@@ -447,10 +451,13 @@ describe('NovelHome', () => {
   it('projects registered Workspaces into concise library totals and a continue action', async () => {
     const inspectLibrary = vi.fn(async () => [{
       workspaceId: 'workspace-1', sessionId: SID, title: '白港', path: '/stories/white-harbor',
+      description: '一名调查员回到白港，追查姐姐留下的失踪谜案。',
       chapterCount: 2, manuscriptCharacters: 4321, todayCharacterDelta: 286,
-      updatedAt: '2026-08-30T08:00:00.000Z', continueAsset: chapter(),
+      updatedAt: '2026-08-30T08:00:00.000Z', continueAsset: chapter(), continueCharacters: 2113,
     }] satisfies readonly NovelLibraryBook[])
     const openBook = vi.fn(async () => {})
+    const startNewBook = vi.fn()
+    const reportLibraryContext = vi.fn()
     const useWorkspaces = (<T, >(select: (state: unknown) => T): T => select({
       items: [{ workspaceId: 'workspace-1', title: '白港', path: '/stories/white-harbor',
         sessionIds: [SID], createdAt: '2026-08-01T00:00:00.000Z', updatedAt: '2026-08-30T08:00:00.000Z' }],
@@ -458,17 +465,58 @@ describe('NovelHome', () => {
       baselinesReady: true, recentWorkspaceId: 'workspace-1',
     })) as never
     const view = render(<NovelHome useSessions={useSessions as never} useWorkspaces={useWorkspaces}
-      inspectLibrary={inspectLibrary} openBook={openBook} t={t} />)
+      inspectLibrary={inspectLibrary} openBook={openBook} startNewBook={startNewBook}
+      reportLibraryContext={reportLibraryContext} currentProjectId={'project-1' as never} t={t} />)
 
     expect(await view.findByText('4,321')).toBeTruthy()
     expect(view.getByText('+286')).toBeTruthy()
+    expect(view.getAllByText('一名调查员回到白港，追查姐姐留下的失踪谜案。').length).toBeGreaterThan(0)
     expect(view.getAllByText('白港').length).toBeGreaterThan(0)
-    fireEvent.click(view.getByRole('button', { name: /白港.*第一章.*继续写/su }))
+    await waitFor(() => { expect(reportLibraryContext).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: SID,
+      projectId: 'project-1',
+      surface: expect.objectContaining({
+        kind: 'library-home', bookCount: 1, manuscriptCharacters: 4321, todayCharacterDelta: 286,
+      }),
+    })) })
+    fireEvent.click(view.getByRole('button', { name: zh.continueWriting }))
     expect(openBook).toHaveBeenCalledWith(expect.objectContaining({ title: '白港' }), 'asset-chapter-1')
+    fireEvent.click(view.getByRole('button', { name: /新建小说/u }))
+    expect(startNewBook).toHaveBeenCalledTimes(1)
   })
 })
 
 describe('Canvas', () => {
+  it('never republishes the previous Session project while a Workspace switch is loading', async () => {
+    const store = createNovelWorkbenchStore().create()
+    const previousSessionId = 'session-book-a' as SessionId
+    const nextSessionId = 'session-book-b' as SessionId
+    act(() => {
+      store.actions.bindSession(previousSessionId)
+      store.actions.loaded({ id: 'project-a', title: '小说 A' } as never, [chapter()] as never)
+      store.actions.open(chapter())
+    })
+    const reportContextFocus = vi.fn()
+    const reportProjectStatus = vi.fn()
+    const useNextSession = (<T, >(select: (state: SessionListState) => T): T => select({
+      ids: [nextSessionId], byId: { [nextSessionId]: { id: nextSessionId } }, current: nextSessionId,
+      phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
+    } as never)) as never
+
+    render(<Canvas
+      {...canvasAnalysisStubs}
+      open={openStub} create={createStub}
+      useStore={hookOf(store) as never} actions={store.actions}
+      useSessions={useNextSession} useWorkspaces={vi.fn() as never}
+      save={vi.fn()} capture={vi.fn()} appendReference={vi.fn()} renderers={renderers} t={t}
+      reportContextFocus={reportContextFocus} reportProjectStatus={reportProjectStatus}
+    />)
+
+    await waitFor(() => { expect(reportContextFocus).toHaveBeenCalledWith(undefined) })
+    expect(reportContextFocus.mock.calls.some(([value]) => value?.sessionId === nextSessionId)).toBe(false)
+    expect(reportProjectStatus.mock.calls.some(([value]) => value?.sessionId === nextSessionId)).toBe(false)
+  })
+
   it('turns an uninitialized folder into a ready Novel Project from one quiet empty state', async () => {
     const store = createNovelWorkbenchStore().create()
     act(() => { store.actions.uninitialized() })
@@ -490,9 +538,15 @@ describe('Canvas', () => {
     expect(view.getByRole('heading', { name: zh.initializeProjectTitle })).toBeTruthy()
     expect(view.queryByRole('alert')).toBeNull()
     fireEvent.change(view.getByLabelText(zh.projectTitleLabel), { target: { value: '国运擂台' } })
+    fireEvent.change(view.getByLabelText(zh.projectDescriptionLabel), {
+      target: { value: '神明擂台降临，华夏以失落神话迎战。' },
+    })
     fireEvent.click(view.getByRole('button', { name: zh.initializeProject }))
 
-    await waitFor(() => { expect(initialize).toHaveBeenCalledWith(SID, '国运擂台') })
+    await waitFor(() => { expect(initialize).toHaveBeenCalledWith(SID, {
+      title: '国运擂台',
+      description: '神明擂台降临，华夏以失落神话迎战。',
+    }) })
     await waitFor(() => { expect(store.getSnapshot()).toMatchObject({
       projectStatus: 'ready', project: { id: 'project-new', title: '国运擂台' }, reload: 1,
     }) })
@@ -944,6 +998,8 @@ describe('ContextTray', () => {
     return hookOf(controller) as never
   }
 
+  function libraryHook() { return hookOf(new NovelLibraryContextFocusController()) as never }
+
   it('shows compact human labels while keeping coordinates out of visible tray text', () => {
     expect(humanContextLabel('第一章 觉醒老爷爷')).toBe('第一章：觉醒老爷爷')
     expect(humanContextLabel('白港 · 全书大纲')).toBe('白港 · 全书大纲')
@@ -956,6 +1012,7 @@ describe('ContextTray', () => {
       session={{} as never} input={{} as never} sessionId={SID}
       useSessions={useSessions as never} useProjection={() => null}
       useContextFocus={hookOf(new NovelContextFocusController()) as never}
+      useLibraryContext={libraryHook()}
       useProjectStatus={statusHook('uninitialized')}
       search={search} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
@@ -980,7 +1037,8 @@ describe('ContextTray', () => {
     const view = render(<ContextTray
       session={{} as never} input={{} as never}
       sessionId={SID} useSessions={useSessions as never} useProjection={() => null}
-      useContextFocus={hookOf(focus) as never} useProjectStatus={statusHook()} search={search} replace={replace} t={t}
+      useContextFocus={hookOf(focus) as never} useLibraryContext={libraryHook()}
+      useProjectStatus={statusHook()} search={search} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       useWorkspaces={vi.fn() as never}
     />)
@@ -1015,7 +1073,8 @@ describe('ContextTray', () => {
         ids: [SID], byId: { [SID]: { id: SID, agentPreset: 'code' } }, current: SID,
         phase: 'ready', subagentsByParent: {}, jobsBySession: {}, currentAddress: undefined,
       } as never)) as never}
-      useProjection={() => null} useContextFocus={hookOf(focus) as never} useProjectStatus={statusHook()}
+      useProjection={() => null} useContextFocus={hookOf(focus) as never}
+      useLibraryContext={libraryHook()} useProjectStatus={statusHook()}
       search={search} replace={replace} t={t} useSession={vi.fn() as never}
       useInput={vi.fn() as never} inputActions={{} as never} useWorkspaces={vi.fn() as never}
     />)
@@ -1035,12 +1094,55 @@ describe('ContextTray', () => {
     const view = render(<ContextTray
       session={{} as never} input={{} as never}
       sessionId={SID} useSessions={useSessions as never} useProjection={() => workset}
-      useContextFocus={hookOf(focus) as never} useProjectStatus={statusHook()} search={vi.fn()} replace={replace} t={t}
+      useContextFocus={hookOf(focus) as never} useLibraryContext={libraryHook()}
+      useProjectStatus={statusHook()} search={vi.fn()} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       useWorkspaces={vi.fn() as never}
     />)
     expect(view.getAllByText(zh.contextNeedsSave).length).toBeGreaterThan(0)
     expect(replace).not.toHaveBeenCalled()
+  })
+
+  it('replaces active-asset follow with a bounded library-home surface on the homepage', async () => {
+    const library = new NovelLibraryContextFocusController()
+    act(() => { library.set({
+      sessionId: SID,
+      projectId: 'project-1' as never,
+      surface: {
+        kind: 'library-home', label: '写书鲸首页', bookCount: 3,
+        manuscriptCharacters: 34781, todayCharacterDelta: 3376,
+        books: [{
+          title: '白港', description: '海港悬疑故事。', chapterCount: 1,
+          manuscriptCharacters: 2113, continueTitle: '第一章',
+        }],
+        omittedBooks: 2,
+      },
+    }) })
+    const prior: NovelContextWorksetDescriptor = {
+      version: 2, projectId: 'project-1' as never, items: [{
+        projectId: 'project-1' as never, assetId: 'asset-chapter-1' as never,
+        label: '第一章', mode: 'follow', origin: 'active-asset',
+      }],
+    }
+    const replace = vi.fn(async (value: NovelContextWorksetDescriptor) => value)
+    const view = render(<ContextTray
+      session={{} as never} input={{} as never} sessionId={SID}
+      useSessions={useSessions as never} useProjection={() => prior}
+      useContextFocus={hookOf(new NovelContextFocusController()) as never}
+      useLibraryContext={hookOf(library) as never} useProjectStatus={statusHook()}
+      search={vi.fn()} replace={replace} t={t}
+      useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
+      useWorkspaces={vi.fn() as never}
+    />)
+
+    expect(view.getByText('写书鲸首页 · 3本')).toBeTruthy()
+    expect(view.queryByText(`＋ ${zh.searchContext}`)).toBeNull()
+    await waitFor(() => { expect(replace).toHaveBeenCalledWith({
+      version: 2,
+      projectId: 'project-1',
+      items: [],
+      surface: expect.objectContaining({ kind: 'library-home', bookCount: 3 }),
+    }) })
   })
 })
 
@@ -1615,7 +1717,11 @@ describe('Novel workbench stores and browser assembly', () => {
     const locale = new LocaleRuntime(ctx)
     ctx.provide('locale', locale)
     const sessionScope: { value?: object } = {}
-    ctx.provide('sessions', { scope: () => sessionScope.value } as never)
+    const openSession = vi.fn()
+    const clearSession = vi.fn()
+    ctx.provide('sessions', { scope: () => sessionScope.value, open: openSession, clear: clearSession } as never)
+    const connectWorkspace = vi.fn(async () => SID)
+    ctx.provide('workspaces', { connectWorkspace } as never)
     let referenceSource: InputTriggerSource | undefined
     ctx.provide('inputTriggers', {
       registerSource: (source: InputTriggerSource) => { referenceSource = source; return () => { referenceSource = undefined } },
@@ -1702,7 +1808,11 @@ describe('Novel workbench stores and browser assembly', () => {
 
     const tray = slots.entries('conversation.input.dock').find(entry => entry.component === ContextTray)!
     const trayFace = (tray.inject as (sessionId: SessionId) => {
-      hooks: { contextFocus: NovelContextFocusController; projectStatus: NovelProjectStatusController }
+      hooks: {
+        contextFocus: NovelContextFocusController
+        libraryContext: NovelLibraryContextFocusController
+        projectStatus: NovelProjectStatusController
+      }
       search: (request: unknown) => Promise<unknown>
       replace: (workset: NovelContextWorksetDescriptor) => Promise<unknown>
     })(SID)
@@ -1724,19 +1834,43 @@ describe('Novel workbench stores and browser assembly', () => {
     await expect(explorerFace.open(SID, 'asset-chapter-1')).resolves.toMatchObject({ title: '第一章' })
 
     const canvas = slots.entries('novel.canvas')[0]!.inject as () => {
-      initialize: (id: SessionId, title: string) => Promise<unknown>
+      initialize: (id: SessionId, request: { readonly title: string; readonly description?: string }) => Promise<unknown>
       save: (id: SessionId, request: unknown) => Promise<unknown>
       capture: (id: SessionId, request: unknown) => Promise<unknown>
       appendReference: (id: SessionId, reference: NovelSelectionDescriptor, label: string) => void
       reportContextFocus: (value?: Parameters<NovelContextFocusController['set']>[0]) => void
+      reportLibraryContext: (value?: Parameters<NovelLibraryContextFocusController['set']>[0]) => void
       reportProjectStatus: (value?: Parameters<NovelProjectStatusController['set']>[0]) => void
+      openLibraryBook: (book: NovelLibraryBook, assetId?: string) => Promise<void>
     }
     const canvasFace = canvas()
     canvasFace.reportProjectStatus({ sessionId: SID, status: 'uninitialized' })
     expect(trayFace.hooks.projectStatus.getSnapshot()).toEqual({ sessionId: SID, status: 'uninitialized' })
-    await expect(canvasFace.initialize(SID, '白港')).resolves.toMatchObject({ title: '白港' })
+    await expect(canvasFace.initialize(SID, { title: '白港', description: '海港悬疑故事。' }))
+      .resolves.toMatchObject({ title: '白港' })
+    expect(remote.initialize).toHaveBeenCalledWith(SID, { title: '白港', description: '海港悬疑故事。' })
     canvasFace.reportContextFocus({ sessionId: SID, project: project as never, document: chapter(), dirty: false })
     expect(trayFace.hooks.contextFocus.getSnapshot()).toMatchObject({ sessionId: SID, document: { id: 'asset-chapter-1' } })
+    canvasFace.reportLibraryContext({
+      sessionId: SID, projectId: 'project-1' as never,
+      surface: {
+        kind: 'library-home', label: '写书鲸首页', bookCount: 1,
+        manuscriptCharacters: 100, todayCharacterDelta: 10, books: [], omittedBooks: 0,
+      },
+    })
+    expect(trayFace.hooks.libraryContext.getSnapshot()).toMatchObject({
+      sessionId: SID, surface: { kind: 'library-home', bookCount: 1 },
+    })
+    await canvasFace.openLibraryBook({
+      workspaceId: 'workspace-1', sessionId: SID, title: '白港', path: '/story',
+      chapterCount: 1, manuscriptCharacters: 100, todayCharacterDelta: 10,
+      updatedAt: '2026-08-30T00:00:00.000Z',
+    }, 'asset-chapter-1')
+    expect(connectWorkspace).toHaveBeenCalledWith('workspace-1')
+    expect(openSession).toHaveBeenCalledWith(SID)
+    expect(workbenchFace.workbench.getSnapshot()).toMatchObject({
+      page: 'book', requestedAssetId: 'asset-chapter-1',
+    })
     await expect(canvasFace.save(SID, {})).resolves.toMatchObject({ revisionId: 'revision-2' })
     await expect(canvasFace.capture(SID, {})).resolves.toMatchObject({ id: 'selection-1' })
     expect(() => { canvasFace.appendReference(SID, selection(), '[新句]') }).toThrow(/no browser scope/u)

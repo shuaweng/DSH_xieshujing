@@ -10,13 +10,14 @@ import type {
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type {} from '@deepseek-ai/dsh-experimental-novel-context/client'
 import type { NovelContextFocus } from './context-controller.ts'
-import type { NovelProjectStatusFocus } from './context-controller.ts'
+import type { NovelLibraryContextFocus, NovelProjectStatusFocus } from './context-controller.ts'
 import { NOVEL_WORKBENCH_PRESET } from './constants.ts'
 import css from './ContextTray.module.css'
 
 export interface ContextTrayInjected {
   hooks: {
     contextFocus: HostObservable<NovelContextFocus | undefined>
+    libraryContext: HostObservable<NovelLibraryContextFocus | undefined>
     projectStatus: HostObservable<NovelProjectStatusFocus | undefined>
   }
   search: (request: SearchNovelAssetsRequest) => Promise<readonly NovelAssetSearchResult[]>
@@ -29,11 +30,12 @@ type ContextTrayProps = PropsRuntime<'conversation.input.dock'>
 
 /** Human-visible controls for exact follow/pin references; model payload stays in the Session Log. */
 export function ContextTray({
-  sessionId, useSessions, useProjection, useContextFocus, useProjectStatus, search, replace, t,
+  sessionId, useSessions, useProjection, useContextFocus, useLibraryContext, useProjectStatus, search, replace, t,
 }: ContextTrayProps) {
   const preset = useSessions(state => state.byId[sessionId]?.agentPreset)
   const projected = useProjection('novelContextWorkset') as NovelContextWorksetDescriptor | null | undefined
   const focus = useContextFocus(value => value?.sessionId === sessionId ? value : undefined)
+  const library = useLibraryContext(value => value?.sessionId === sessionId ? value : undefined)
   const projectStatus = useProjectStatus(value => value?.sessionId === sessionId ? value.status : 'loading')
   const [picker, setPicker] = useState(false)
   const [query, setQuery] = useState('')
@@ -41,11 +43,12 @@ export function ContextTray({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
 
-  const workset = projected ?? (focus === undefined ? undefined : {
-    version: 2 as const, projectId: focus.project.id, items: [],
+  const focusedProjectId = focus?.project.id ?? library?.projectId
+  const workset = projected ?? (focusedProjectId === undefined ? undefined : {
+    version: 2 as const, projectId: focusedProjectId, items: [],
   })
   const follow = workset?.items.find(item => item.mode === 'follow')
-  const currentFollow = follow ?? (focus === undefined || focus.dirty ? undefined : {
+  const currentFollow = library !== undefined ? undefined : follow ?? (focus === undefined || focus.dirty ? undefined : {
     projectId: focus.project.id,
     assetId: focus.document.id,
     label: focus.document.title,
@@ -56,10 +59,11 @@ export function ContextTray({
     () => workset?.items.filter(item => item.mode === 'pinned') ?? [],
     [workset],
   )
+  const currentSurface = library === undefined ? undefined : (workset?.surface ?? library.surface)
 
   useEffect(() => {
-    if (preset !== NOVEL_WORKBENCH_PRESET || focus === undefined || focus.dirty) return
-    if (workset?.version === 2 && follow?.assetId === focus.document.id
+    if (preset !== NOVEL_WORKBENCH_PRESET || library !== undefined || focus === undefined || focus.dirty) return
+    if (workset?.version === 2 && workset.surface === undefined && follow?.assetId === focus.document.id
       && follow.projectId === focus.project.id && follow.label === focus.document.title) return
     const next: NovelContextWorksetDescriptor = {
       version: 2,
@@ -76,7 +80,20 @@ export function ContextTray({
       ],
     }
     void replace(next).catch((cause: unknown) => { setError(errorMessage(cause)) })
-  }, [focus, follow, pinned, preset, replace, workset?.version])
+  }, [focus, follow, library, pinned, preset, replace, workset?.surface, workset?.version])
+
+  useEffect(() => {
+    if (preset !== NOVEL_WORKBENCH_PRESET || library === undefined) return
+    const kept = pinned.filter(item => item.projectId === library.projectId)
+    const next: NovelContextWorksetDescriptor = {
+      version: 2,
+      projectId: library.projectId,
+      items: kept,
+      surface: library.surface,
+    }
+    if (workset?.version === 2 && JSON.stringify(workset) === JSON.stringify(next)) return
+    void replace(next).catch((cause: unknown) => { setError(errorMessage(cause)) })
+  }, [library, pinned, preset, replace, workset])
 
   if (preset !== NOVEL_WORKBENCH_PRESET) return null
   if (projectStatus !== 'ready') {
@@ -89,10 +106,15 @@ export function ContextTray({
   }
 
   const commit = async (items: NovelContextWorksetDescriptor['items']): Promise<void> => {
-    const projectId = focus?.project.id ?? workset?.projectId
+    const projectId = focus?.project.id ?? library?.projectId ?? workset?.projectId
     if (projectId === undefined) return
     setBusy(true); setError(undefined)
-    try { await replace({ version: 2, projectId, items }) }
+    try {
+      await replace({
+        version: 2, projectId, items,
+        ...(library === undefined ? {} : { surface: library.surface }),
+      })
+    }
     catch (cause: unknown) { setError(errorMessage(cause)) }
     finally { setBusy(false) }
   }
@@ -124,9 +146,11 @@ export function ContextTray({
 
   return <div className={css.tray} data-novel-context-tray>
     <span className={css.title}>{t('context')}</span>
-    <span className={css.follow} data-active={currentFollow !== undefined || undefined}
-      title={currentFollow === undefined ? t('followCurrent') : `${currentFollow.label} · ${contextCoordinate(currentFollow)}`}>
-      <span aria-hidden="true">◎</span>{currentFollow === undefined ? t('followCurrent') : humanContextLabel(currentFollow.label)}
+    <span className={css.follow} data-active={currentFollow !== undefined || currentSurface !== undefined || undefined}
+      title={currentSurface?.label ?? (currentFollow === undefined ? t('followCurrent') : `${currentFollow.label} · ${contextCoordinate(currentFollow)}`)}>
+      <span aria-hidden="true">◎</span>{currentSurface === undefined
+        ? (currentFollow === undefined ? t('followCurrent') : humanContextLabel(currentFollow.label))
+        : `${currentSurface.label} · ${currentSurface.bookCount}${t('bookUnit')}`}
     </span>
     {pinned.map(item => <span className={css.chip} key={`${item.assetId}:${item.revisionId}`}>
       <span title={`${item.label} · ${contextCoordinate(item)}`}>{humanContextLabel(item.label)}</span>
@@ -136,12 +160,11 @@ export function ContextTray({
           ...pinned.filter(candidate => candidate !== item),
         ]) }}>×</button>
     </span>)}
-    <button type="button" className={css.add} aria-expanded={picker} onClick={() => { setPicker(value => !value) }}>
-      ＋ {t('searchContext')}
-    </button>
+    {library === undefined && <button type="button" className={css.add} aria-expanded={picker}
+      onClick={() => { setPicker(value => !value) }}>＋ {t('searchContext')}</button>}
     {focus?.dirty === true && follow !== undefined && <small>{t('contextNeedsSave')}</small>}
     {error !== undefined && <small className={css.error} role="alert">{error}</small>}
-    {picker && <div className={css.picker}>
+    {library === undefined && picker && <div className={css.picker}>
       <div className={css.searchRow}>
         <input value={query} autoFocus placeholder={t('searchContextPlaceholder')}
           onChange={(event) => { setQuery(event.target.value) }}

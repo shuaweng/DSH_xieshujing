@@ -12,7 +12,7 @@ This experimental Host Consumer turns canonical Novel references and explicit ta
 - `NovelContextResolver` intercepts direct user messages at `agent/pre-step`, removes only recognized canonical mentions from the readable message, and appends one immutable `user/message` with source kind `novel-context` immediately after it.
 - `compile()` accepts a closed task policy and exact targets. Policies cover direct turns, chapter writing, selection rewrite/review, outline editing, chapter review, preference learning, and Story State extraction. Policy is selected by an explicit workflow or `novelContextPolicy` Skill metadata, never guessed from user prose.
 - Policies expand only deterministic typed relations: chapter writing/review can include its Chapter Outline, Book Brief, Book Style Profile, and confirmed Story State while retaining the root Book Outline as a coordinate. Selection rewrite/review includes style and Story State. Project-global guidance is not always-on context.
-- `replaceWorkset()` records a version-two whole value. Its single `follow` item stores only active Asset identity and resolves the current head at compile time; `pinned` items retain exact Revisions and optional selectors. Legacy version-one events replay and normalize on replacement.
+- `replaceWorkset()` records a version-two whole value. Its single `follow` item stores only active Asset identity and resolves the current head at compile time; `pinned` items retain exact Revisions and optional selectors. The value may alternatively carry one bounded `library-home` surface snapshot containing only visible library metadata; it grants no repository or cross-project read capability. Legacy version-one events replay and normalize on replacement.
 - A client-visible `novelContextWorkset` Session Projection folds the latest whole value. It is coordination state only; the model-visible authority is the version-three Context Manifest frozen into the Session Log.
 - Direct turns materialize explicit Composer references while follow/pinned workset items remain coordinates. An explicit `/skill-name` turn compiles the Skill policy immediately; after the model loads a Skill, the next step adds related material without copying text already materialized in the prior Manifest.
 - The compiler deduplicates identical exact coordinates while preserving distinct selections; required material for an Asset/Revision also prevents a lower-priority optional copy from broadening it. It caps references at eight and budgets 256 KiB of authored UTF-8 text by default. Required targets fail closed on overflow; optional materials degrade to coordinates rather than being truncated.
@@ -26,11 +26,11 @@ This experimental Host Consumer turns canonical Novel references and explicit ta
 
 #### What the model sees
 
-The model sees the user's readable message followed by a `NovelContextManifestSourceV3` frame containing canonical exact-Revision coordinates and only the material selected by the active task policy. Ordinary direct turns remain lean. Skill and fixed-workflow requests can add chapter outline, brief, style, confirmed Story State, or outline relations with an explicit reason and projection. Session replay reconstructs the same exact context cut.
+The model sees the user's readable message followed by a `NovelContextManifestSourceV3` frame containing canonical exact-Revision coordinates and only the material selected by the active task policy. On the library homepage, the frame instead includes the bounded visible library summary while preserving the Session's one-Project binding; it never opens another Book's Assets. Ordinary direct turns remain lean. Skill and fixed-workflow requests can add chapter outline, brief, style, confirmed Story State, or outline relations with an explicit reason and projection. Session replay reconstructs the same exact context cut.
 
 #### Token effect
 
-Coordinates add only bounded metadata. Materialized target and related text are the variable portions governed by the configured byte limit; optional text becomes a coordinate when the budget is exhausted.
+Coordinates and the library-home surface add only bounded metadata. Materialized target and related text are the variable portions governed by the configured byte limit; optional text becomes a coordinate when the budget is exhausted.
 
 #### KV Cache effect
 

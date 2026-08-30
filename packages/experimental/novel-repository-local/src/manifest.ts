@@ -9,12 +9,14 @@ import {
 import type { ProjectId as ProjectIdValue } from '@deepseek-ai/dsh-experimental-novel-repository/types'
 
 const MAX_CONTENT_ROOTS = 32
+const MAX_PROJECT_DESCRIPTION_LENGTH = 1_000
 
 /** Validated provider-internal form before content-root resolution. */
 export interface ParsedProjectManifest {
   readonly schema: 1
   readonly id: ProjectIdValue
   readonly title: string
+  readonly description?: string
   readonly contentRoots: Readonly<Record<string, string>>
   readonly assetOrder: Readonly<Record<string, readonly AssetId[]>>
   readonly deletedAssetIds: readonly AssetId[]
@@ -31,6 +33,7 @@ export function serializeProjectManifest(value: ParsedProjectManifest): string {
     schema: value.schema,
     id: value.id,
     title: value.title,
+    ...(value.description === undefined ? {} : { description: value.description }),
     contentRoots: value.contentRoots,
     ...(Object.keys(value.assetOrder).length === 0 ? {} : { assetOrder: value.assetOrder }),
     ...(value.deletedAssetIds.length === 0 ? {} : { deletedAssetIds: value.deletedAssetIds }),
@@ -113,6 +116,16 @@ export function parseProjectManifest(text: string, path: string): ParsedProjectM
   if (typeof title !== 'string' || title.trim().length === 0) {
     invalid(path, 'title must be a non-empty string without control characters')
   }
+  const descriptionValue = value['description']
+  if (descriptionValue !== undefined && typeof descriptionValue !== 'string') {
+    invalid(path, 'description must be a string when present')
+  }
+  const description = typeof descriptionValue === 'string' && descriptionValue.trim().length > 0
+    ? descriptionValue.trim()
+    : undefined
+  if (description !== undefined && description.length > MAX_PROJECT_DESCRIPTION_LENGTH) {
+    invalid(path, `description must contain at most ${MAX_PROJECT_DESCRIPTION_LENGTH} characters`)
+  }
 
   const contentRoots = value['contentRoots']
   if (!isRecord(contentRoots)) invalid(path, 'contentRoots must be a mapping')
@@ -170,5 +183,9 @@ export function parseProjectManifest(text: string, path: string): ParsedProjectM
     return AssetId(assetId)
   })
 
-  return { schema: 1, id: ProjectId(id), title, contentRoots: roots, assetOrder, deletedAssetIds }
+  return {
+    schema: 1, id: ProjectId(id), title,
+    ...(description === undefined ? {} : { description }),
+    contentRoots: roots, assetOrder, deletedAssetIds,
+  }
 }

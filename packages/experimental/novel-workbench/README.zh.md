@@ -4,7 +4,7 @@
 
 ## 用途
 
-这个实验性 Client Consumer 向原生 DSH 外壳贡献 Agent 原生 Novel Studio 界面：在一个按 preset 限定的工作台中组合类型化作者 Asset、由注册表驱动的画布、紧凑而精确的 Agent 引用、对话和可审阅 ChangeSet。
+这个实验性 Client Consumer 向原生 DSH 外壳贡献 Agent 原生小说工作台“写书鲸”：在一个按 preset 限定的工作台中组合类型化作者 Asset、由注册表驱动的画布、紧凑而精确的 Agent 引用、对话和可审阅 ChangeSet。
 
 ## 行为
 
@@ -12,9 +12,10 @@
 - 整个工作台按 Preset 限定。只有精确选择 `novel-workbench` 时，才会在 `conversation.input.left`、原生 access/plan 控件旁得到纯图标“小说工作台”开关；其无障碍名称与悬浮提示仍保留完整动作说明。已经开始的 Session 读取已提交摘要，空白 Composer 则读取 Agent preset 选择器所用的同一份只读暂存值。Session 仍从普通 DSH Frame 开始；作者无需切换 preset 或修改作者数据即可展开/收起工作台。切到任何其他 preset 会立即恢复普通 Frame 并移除按钮。
 - 桌面组合把 Agent 对话放在左侧，把正文浏览器与创作画布放在右侧，同时在最外侧保留可折叠的原生 DSH Session 侧栏。无障碍拖拽分隔条（也支持方向键）会按动画帧频率预览 CSS track，并在松开时只提交一次经过边界限制的宽度，因此作者工作台不会随每个 pointer 事件重渲染。
 - 原生 DSH 侧栏仍然可用，可收起或展开以搜索和导航会话。切换 Session 不会替换已选中的小说 surface；切到不符合条件的 preset 会关闭它。
-- 被选中的小说 surface 会先打开极简书库首页。它复用 DSH 原生 Workspace 注册表，在互不相关的文件夹间发现 Novel Project、自动略过普通 Workspace，并显示书本数、当前正文字数、本地自然日净增字数、一个继续创作目标和书本列表。点击书本时会先连接并打开该 Workspace 的原生 Session，再由既有 Explorer 按稳定章节 id 定位；系统不另建小说书库数据库，也不扫描整盘。
+- 被选中的小说 surface 会先打开极简书库首页。它复用 DSH 原生 Workspace 注册表，在互不相关的文件夹间发现 Novel Project、自动略过普通 Workspace，并显示书本数、当前正文字数、本地自然日净增字数、一个继续创作目标和书本列表。顶部不展示账号入口；“新建小说”会回到 DSH 原生新 Session/Workspace 流程。每本书共用一张包内生成的封面底图并实时叠加书名；可选的 `novel.yaml` `description` 会取代没有数据依据的进度条。点击书本时调用原生 `connectWorkspace()`（复用合格的空白对话，或创建一个），打开该 Session，再由既有 Explorer 按稳定章节 id 定位；失败会显示在首页，不再成为无反馈的 rejected click Promise。系统不另建小说书库数据库，也不扫描整盘。
+- 写书鲸 B5 视觉由包内 PNG 素材拥有：笔尖鲸尾、墨海蓝与暖纸白色系、透明横向组合、为 Composer 和 Explorer 准备的尺寸化标志、应用图标、低对比度首页主视觉和共用默认封面底图。书库首页低调呈现主视觉，Explorer 使用横向品牌组合，Composer 开关使用小尺寸应用图标。这些素材只改变界面展示，不进入模型上下文。
 - 资产浏览器发现当前 Session 的 Novel Project，呈现逻辑“本书”引导分组、稳定的“正文”与“大纲 → 卷纲”分支（包括空分支），可以创建可编辑章节与缺失的项目级唯一书本指导 Asset，打开绑定精确 Revision 的类型化 Asset 文档，并可独立于 DSH Session 侧栏收起。唯一的全书大纲仍只交给 Agent/领域工具创建；每个已显示的全书大纲在其下方提供作用域明确的“新建卷纲”操作。外部遗留的单例冲突仍会显示并允许删除修复，不再拖垮整个 Explorer。删除使用工作台自有且跟随主题的确认弹窗，并保留作者文件与历史。正文章节支持原生拖动排序，先乐观预览，再由 Remote 确认权威顺序，失败时回滚。层级来自语义类型与父级 id，而不是文件路径。
-- 当精确 Session 根目录没有 `novel.yaml` 时，资产浏览器与 Context Tray 会进入中性未初始化状态，不发起 Asset 或上下文工作集请求。画布只要求输入书名，通过与 Agent 工具相同的 Remote/Repository 操作完成初始化，然后刷新为普通资产界面；已有但损坏的清单仍会明确报错。
+- 当精确 Session 根目录没有 `novel.yaml` 时，资产浏览器与 Context Tray 会进入中性未初始化状态，不发起 Asset 或上下文工作集请求。画布要求输入书名，并可选填写一段简短小说简介，通过与 Agent 工具相同的 Remote/Repository 操作完成初始化，然后刷新为普通资产界面；已有但损坏的清单仍会明确报错。
 - `ctx.novelAssetRenderers` 拥有 effect 作用域内、按精确类型匹配的编辑器、选区描述、可选阅读展示和 Diff contribution。键盘输入只更新浏览器本地脏草稿，不调用 Repository，也不创建永久 Revision。共享画布只会在显式保存，或引用、分析、定稿、Revision 导航等语义 Context Commit Barrier 上发布这份草稿；缺少 renderer 时会明确拒绝，而不是展示误导性的通用编辑器。
 - 内置正文 Renderer 通过同一次带 Revision 保护的保存编辑章节名称与正文、捕获简单 UTF-16 范围、统计排除空白后的作者字符，并启用全高居中的纸张画布。跨整个工作台的底栏及六套联动皮肤、字体和字号控件由所有 Asset Renderer 共用；只有正文额外显示本章字数与章纲入口。
 - 工作台全宽底栏可以打开 Skills 抽屉，列出当前小说 Preset 提供且作者可见的 Skills。每个开关都会为当前 Session 写入一份完整禁用集合：关闭的 Skill 会从 Agent 下一份 Skill 目录中消失，不能再通过 `skill` 工具或显式调用加载，但其他对话不受影响。
@@ -25,7 +26,7 @@
 - Agent 创建的 Asset 会返回可回放创建卡片并刷新权威 Explorer。人类与 Agent 创建都经过同一条类型化 Remote/Repository 链路，任何一方都不能自行发明文件路径。
 - 小说 Agent 可以用 `novel_present` 调用 `open-workbench` 或 `close-workbench`。其持久工具结果 metadata 与 Composer 开关驱动同一个浏览器本地 `ctx.layout` 选择；普通 Agent 回复文字绝不控制布局，展示动作也绝不修改 Asset。
 - “引用选区到 Agent”先保存脏的类型化草稿，保存失败即安全停止，然后冻结选区。Composer 会在当前光标处插入可见引用，或替换 Composer 当前选区，不再一律追加到末尾。它只显示 `@[引用文字前十个字…]`；隐藏的 occurrence 保留完整规范 `dsh-novel:` mention，并在提交时把精确值序列化给 Agent。
-- 按 Preset 限定的 `conversation.input.dock` 会加入与 Composer 等宽的紧凑坐标栏。实时跟随项只保存当前可见 Asset 的身份，在下一次任务编译时解析当前已保存 head；搜索后固定的条目仍保留精确 Revision 坐标。有脏稿时仍指向最后已保存的 head，并明确提示保存。显式划词引用则另行发送规范精确坐标与完整选中文字。
+- 按 Preset 限定的 `conversation.input.dock` 会加入与 Composer 等宽的紧凑坐标栏。实时跟随项只保存当前可见 Asset 的身份，在下一次任务编译时解析当前已保存 head；搜索后固定的条目仍保留精确 Revision 坐标。回到书库首页时，自动 Asset 跟随会替换为一份有边界、可重放的首页可见快照，其中只含汇总数字和最多 24 本书的摘要，同时保留同项目的显式固定项；该快照不会授予访问另一本书 Asset 的能力。有脏稿时仍指向最后已保存的 head，并明确提示保存。显式划词引用则另行发送规范精确坐标与完整选中文字。
 - `novel_propose_changes` 工具结果渲染持久的行内 Diff 卡片。接受和拒绝调用 Session 所属 Remote 方法；接受后从权威 Repository 状态刷新资产浏览器和画布。
 - 工作台在对话插槽所有者挂载后延迟解析 conversation service，在避免 Client 插件依赖循环的同时继续使用 DSH 普通 Composer 草稿状态。
 
@@ -35,11 +36,11 @@
 
 #### 模型看到什么
 
-Client 包本身不加入隐藏模型内容。显式 mention 与可见 Context Tray 工作集只是 `@deepseek-ai/dsh-experimental-novel-context` 的输入；其显式任务策略决定这些引用保留坐标，还是在冻结 V3 Manifest 中加入有边界的关联材料。模型提案和显式报告读取由 `@deepseek-ai/dsh-experimental-tool-novel` 提供。打开章节审稿页不使用模型；点击“开始审查”才启动有边界的审稿 Subagent。把满足条件的 Revision 标记为定稿会启动独立的有边界偏好 worker；点击 NOAI 不使用模型。
+Client 包只通过可见 Context Tray 契约加入模型内容。显式 mention、Asset 跟随/固定项与有边界的书库首页摘要会成为 `@deepseek-ai/dsh-experimental-novel-context` 的输入；其显式任务策略决定 Asset 引用保留坐标，还是在冻结 V3 Manifest 中加入有边界的关联材料。模型提案和显式报告读取由 `@deepseek-ai/dsh-experimental-tool-novel` 提供。打开章节审稿页不使用模型；点击“开始审查”才启动有边界的审稿 Subagent。把满足条件的 Revision 标记为定稿会启动独立的有边界偏好 worker；点击 NOAI 不使用模型。
 
 #### Token 影响
 
-布局、编辑器、控件、短引用 label、Tray 外观和审阅卡片不增加 token。工作集坐标只增加有界元数据；只有显式引用文本与稳定 Novel 工具 Schema 增加可变请求内容。
+布局、编辑器、控件、短引用 label、Tray 外观和审阅卡片不增加 token。工作集坐标与封顶的书库摘要只增加有界元数据；只有显式引用文本与稳定 Novel 工具 Schema 增加可变请求内容。
 
 #### KV Cache 影响
 

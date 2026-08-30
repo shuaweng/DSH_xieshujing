@@ -1020,6 +1020,7 @@ function projectDescriptor(project: NovelProjectSnapshot): NovelProjectDescripto
     schema: project.schema,
     id: project.id,
     title: project.title,
+    ...(project.description === undefined ? {} : { description: project.description }),
     rootDisplayPath: project.root.displayPath,
     manifestDisplayPath: project.manifest.displayPath,
     contentRootDisplayPaths: Object.fromEntries(

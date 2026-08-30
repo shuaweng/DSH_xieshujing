@@ -18,6 +18,7 @@ import type {
   NovelAssetRevisionDescriptor,
   NovelSelectionDescriptor,
   NovelProjectDescriptor,
+  InitializeNovelProjectRequest,
   NovelSkillSettingsDescriptor,
   ReplaceNovelSkillSettingsRequest,
   RestoreNovelAssetDescriptor,
@@ -26,7 +27,11 @@ import type {
 } from '@deepseek-ai/dsh-experimental-novel-repository-remote/types'
 import type { NovelAssetRendererDefinition, NovelAssetRendererRegistry } from './renderers.tsx'
 import type { NovelReaderFont, NovelReaderSkin, createNovelWorkbenchStore } from './store.ts'
-import type { NovelContextFocus, NovelProjectStatusFocus } from './context-controller.ts'
+import type {
+  NovelContextFocus,
+  NovelLibraryContextFocus,
+  NovelProjectStatusFocus,
+} from './context-controller.ts'
 import { NovelHome, type NovelHomeInjected } from './Home.tsx'
 import { NovelWorkbenchViewController, useNovelWorkbenchView } from './view-controller.ts'
 import css from './workbench.module.css'
@@ -37,8 +42,9 @@ export interface CanvasInjected {
   workbench?: NovelWorkbenchViewController
   inspectLibrary?: NovelHomeInjected['inspectLibrary']
   openLibraryBook?: NovelHomeInjected['openBook']
+  startNewBook?: NovelHomeInjected['startNewBook']
   renderers: NovelAssetRendererRegistry
-  initialize: (sessionId: SessionId, title: string) => Promise<NovelProjectDescriptor>
+  initialize: (sessionId: SessionId, request: InitializeNovelProjectRequest) => Promise<NovelProjectDescriptor>
   open: (sessionId: SessionId, assetId: string, revisionId?: string) => Promise<NovelAssetDocument>
   revisions: (sessionId: SessionId, assetId: string) => Promise<readonly NovelAssetRevisionDescriptor[]>
   restore: (sessionId: SessionId, request: RestoreNovelAssetRequest) => Promise<RestoreNovelAssetDescriptor>
@@ -71,6 +77,7 @@ export interface CanvasInjected {
   capture: (sessionId: SessionId, request: CaptureNovelSelectionRequest) => Promise<NovelSelectionDescriptor>
   appendReference: (sessionId: SessionId, reference: NovelSelectionDescriptor, label: string) => void
   reportContextFocus?: (value?: NovelContextFocus) => void
+  reportLibraryContext?: (value?: NovelLibraryContextFocus) => void
   reportProjectStatus?: (value?: NovelProjectStatusFocus) => void
 }
 
@@ -81,6 +88,7 @@ type CanvasProps = PropsRuntime<'novel.canvas'>
 
 const SKINS: readonly NovelReaderSkin[] = ['paper', 'warm', 'green', 'rose', 'blue', 'night']
 const ignoreContextFocus = (): void => {}
+const ignoreLibraryContext = (): void => {}
 const ignoreProjectStatus = (): void => {}
 const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 
@@ -119,16 +127,18 @@ const CHAPTER_OUTLINE_TEMPLATE = `# 本章核心事件
 /** One exact-revision typed Asset editor with an optional chapter-local planning surface. */
 export function Canvas({
   useSessions, useWorkspaces, useStore, actions, workbench = fallbackWorkbench,
-  inspectLibrary, openLibraryBook,
+  inspectLibrary, openLibraryBook, startNewBook,
   renderers, initialize, open, revisions, restore, analysisReports, scanNoAi, reviewChapter,
   finalizations, preferenceCandidates, storyStateCandidates, finalizeChapter, acceptPreference, rejectPreference,
   acceptStoryState, rejectStoryState,
   create, save, capture, appendReference, skills, replaceSkillSettings,
-  reportContextFocus = ignoreContextFocus, reportProjectStatus = ignoreProjectStatus, t,
+  reportContextFocus = ignoreContextFocus, reportLibraryContext = ignoreLibraryContext,
+  reportProjectStatus = ignoreProjectStatus, t,
 }: CanvasProps) {
   const sessionId = useSessions(snapshot => snapshot.current)
   const page = useNovelWorkbenchView(workbench, value => value.page)
   const state = useStore(value => value)
+  const ownsCurrentSession = sessionId !== undefined && state.sessionId === sessionId
   const [busy, setBusy] = useState(false)
   const [chapterOutlineOpen, setChapterOutlineOpen] = useState(false)
   const [revisionItems, setRevisionItems] = useState<readonly NovelAssetRevisionDescriptor[]>([])
@@ -159,12 +169,15 @@ export function Canvas({
   useEffect(() => { setStatusHost(document.querySelector('[data-novel-status-host]')) }, [])
 
   useEffect(() => {
-    reportProjectStatus(sessionId === undefined ? undefined : { sessionId, status: state.projectStatus })
-  }, [reportProjectStatus, sessionId, state.projectStatus])
+    reportProjectStatus(!ownsCurrentSession || sessionId === undefined
+      ? undefined
+      : { sessionId, status: state.projectStatus })
+  }, [ownsCurrentSession, reportProjectStatus, sessionId, state.projectStatus])
   useEffect(() => () => { reportProjectStatus(undefined) }, [reportProjectStatus])
 
   useEffect(() => {
-    if (sessionId === undefined || state.project === undefined || state.document === undefined) {
+    if (!ownsCurrentSession || page !== 'book' || sessionId === undefined
+      || state.project === undefined || state.document === undefined) {
       reportContextFocus(undefined)
       return
     }
@@ -174,7 +187,7 @@ export function Canvas({
       document: state.document,
       dirty: state.dirty,
     })
-  }, [reportContextFocus, sessionId, state.dirty, state.document, state.project])
+  }, [ownsCurrentSession, page, reportContextFocus, sessionId, state.dirty, state.document, state.project])
   useEffect(() => () => { reportContextFocus(undefined) }, [reportContextFocus])
 
   useEffect(() => {
@@ -271,6 +284,15 @@ export function Canvas({
       actions.fail(errorMessage(error))
       return undefined
     } finally { setBusy(false) }
+  }
+
+  const openLibraryBookSafely: NovelHomeInjected['openBook'] = async (book, assetId) => {
+    // A Workspace switch replaces the current Session projection. Flush the
+    // editor draft first so navigating from Home cannot discard local prose.
+    const hadDirtyDraft = state.dirty
+    const saved = await persist()
+    if (hadDirtyDraft && saved === undefined) throw new Error(t('switchBookSaveFailed'))
+    if (openLibraryBook !== undefined) await openLibraryBook(book, assetId)
   }
 
   const referenceSelection = async () => {
@@ -445,9 +467,11 @@ export function Canvas({
       t={t}
     />
   }
-  if (page === 'home' && inspectLibrary !== undefined && openLibraryBook !== undefined) {
+  if (page === 'home' && inspectLibrary !== undefined && openLibraryBook !== undefined && startNewBook !== undefined) {
     return <NovelHome useSessions={useSessions} useWorkspaces={useWorkspaces}
-      inspectLibrary={inspectLibrary} openBook={openLibraryBook} t={t} />
+      inspectLibrary={inspectLibrary} openBook={openLibraryBookSafely} startNewBook={startNewBook}
+      {...(!ownsCurrentSession || state.project === undefined ? {} : { currentProjectId: state.project.id })}
+      reportLibraryContext={reportLibraryContext} t={t} />
   }
   if (state.document === undefined || state.draft === undefined) {
     return <div className={css.empty}>{state.error ?? t('noChapter')}</div>
@@ -636,11 +660,18 @@ function ProjectBootstrap({ sessionId, initialize, onInitialized, fail, t }: {
   readonly t: CanvasProps['t']
 }) {
   const [title, setTitle] = useState('')
+  const [description, setDescription] = useState('')
   const [busy, setBusy] = useState(false)
   const submit = async () => {
     if (sessionId === undefined || title.trim() === '' || busy) return
     setBusy(true)
-    try { onInitialized(await initialize(sessionId, title.trim())) }
+    try {
+      const synopsis = description.trim()
+      onInitialized(await initialize(sessionId, {
+        title: title.trim(),
+        ...(synopsis === '' ? {} : { description: synopsis }),
+      }))
+    }
     catch (cause: unknown) { fail(errorMessage(cause)) }
     finally { setBusy(false) }
   }
@@ -655,6 +686,11 @@ function ProjectBootstrap({ sessionId, initialize, onInitialized, fail, t }: {
         <input value={title} autoFocus placeholder={t('projectTitlePlaceholder')}
           onChange={(event) => { setTitle(event.target.value) }}
           onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} />
+      </label>
+      <label>
+        <span>{t('projectDescriptionLabel')}</span>
+        <textarea value={description} maxLength={1000} placeholder={t('projectDescriptionPlaceholder')}
+          onChange={(event) => { setDescription(event.target.value) }} />
       </label>
       <button type="button" disabled={busy || title.trim() === ''} onClick={() => { void submit() }}>
         {busy ? t('initializingProject') : t('initializeProject')}

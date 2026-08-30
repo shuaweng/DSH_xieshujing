@@ -143,6 +143,8 @@ export interface NovelProjectSnapshot {
   readonly id: ProjectId
   /** Author-visible project title. */
   readonly title: string
+  /** Optional author-visible synopsis used by library surfaces. */
+  readonly description?: string
   /** Canonical project root in the active filesystem provider. */
   readonly root: FsTarget
   /** Canonical `novel.yaml` target. */
@@ -159,6 +161,8 @@ export interface NovelProjectSnapshot {
 export interface InitializeNovelProjectRequest {
   /** Author-visible book title; the provider owns ids, paths, and manifest layout. */
   readonly title: string
+  /** Optional concise synopsis stored in the project manifest. */
+  readonly description?: string
 }
 
 /** One current authored asset discovered from the project files. */

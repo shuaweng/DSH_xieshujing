@@ -11,10 +11,10 @@
 import { readFile } from 'node:fs/promises'
 import { existsSync, globSync, readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
-import { basename, dirname, isAbsolute, relative, resolve as resolvePath, sep } from 'node:path'
+import { basename, dirname, extname, isAbsolute, relative, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { UserConfig } from 'tsdown'
-import { transform } from 'lightningcss'
+import { transform, type Dependency } from 'lightningcss'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
@@ -50,6 +50,49 @@ function styleInjectionModule(
   ]
   source.push(classMap === undefined ? 'export {};' : `export default ${JSON.stringify(classMap)};`)
   return source.join('\n')
+}
+
+const CSS_ASSET_MIME = new Map([
+  ['.gif', 'image/gif'],
+  ['.jpeg', 'image/jpeg'],
+  ['.jpg', 'image/jpeg'],
+  ['.png', 'image/png'],
+  ['.svg', 'image/svg+xml'],
+  ['.webp', 'image/webp'],
+  ['.woff', 'font/woff'],
+  ['.woff2', 'font/woff2'],
+])
+
+/**
+ * Resolve relative CSS `url()` values into the dynamic client bundle.
+ *
+ * Dynamic plugins are served as one `/plugins/<id>/client.js` resource; there
+ * is no sibling static-file route for a stylesheet's images or fonts. Keeping
+ * those URLs relative would therefore make a source build look correct while
+ * the browser receives 404s. Lightning CSS gives every URL a stable
+ * placeholder, which lets the bundle own small package-local assets without a
+ * second serving protocol.
+ */
+async function inlineCssAssets(
+  fileId: string,
+  code: Uint8Array,
+  dependencies: Dependency[] | void,
+  addWatchFile: (file: string) => void,
+): Promise<string> {
+  let css = code.toString()
+  for (const dependency of dependencies ?? []) {
+    if (dependency.type !== 'url') continue
+    const mime = CSS_ASSET_MIME.get(extname(dependency.url).toLowerCase())
+    if (mime === undefined || !dependency.url.startsWith('.')) {
+      css = css.replaceAll(dependency.placeholder, dependency.url)
+      continue
+    }
+    const asset = resolvePath(dirname(fileId), dependency.url)
+    addWatchFile(asset)
+    const bytes = await readFile(asset)
+    css = css.replaceAll(dependency.placeholder, `data:${mime};base64,${bytes.toString('base64')}`)
+  }
+  return css
 }
 
 /**
@@ -508,17 +551,19 @@ function clientConfig(id: string, entry: string): UserConfig {
         // The virtual id otherwise hides the physical stylesheet from Rolldown's watch graph.
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
-        const { code, exports: cssExports } = transform({
+        const { code, dependencies, exports: cssExports } = transform({
           filename: fileId,
           code: source,
           cssModules: { pattern: '[hash]_[local]' },
           minify: true,
+          analyzeDependencies: true,
         })
         const classMap: Record<string, string> = {}
         const exportEntries = Object.entries(cssExports ?? {})
           .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
         for (const [local, exp] of exportEntries) classMap[local] = exp.name
-        return styleInjectionModule(id, fileId, code.toString(), classMap)
+        const css = await inlineCssAssets(fileId, code, dependencies, file => this.addWatchFile(file))
+        return styleInjectionModule(id, fileId, css, classMap)
       },
     }, {
       name: 'dsh-css-text-inline',
@@ -533,8 +578,14 @@ function clientConfig(id: string, entry: string): UserConfig {
         const fileId = virtualId.slice(INLINE_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
-        const { code } = transform({ filename: fileId, code: source, minify: true })
-        return `export default ${JSON.stringify(code.toString())};`
+        const { code, dependencies } = transform({
+          filename: fileId,
+          code: source,
+          minify: true,
+          analyzeDependencies: true,
+        })
+        const css = await inlineCssAssets(fileId, code, dependencies, file => this.addWatchFile(file))
+        return `export default ${JSON.stringify(css)};`
       },
     }, {
       name: 'dsh-css-global-inline',
@@ -548,8 +599,14 @@ function clientConfig(id: string, entry: string): UserConfig {
         const fileId = virtualId.slice(GLOBAL_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
-        const { code } = transform({ filename: fileId, code: source, minify: true })
-        return styleInjectionModule(id, fileId, code.toString())
+        const { code, dependencies } = transform({
+          filename: fileId,
+          code: source,
+          minify: true,
+          analyzeDependencies: true,
+        })
+        const css = await inlineCssAssets(fileId, code, dependencies, file => this.addWatchFile(file))
+        return styleInjectionModule(id, fileId, css)
       },
     }],
     outputOptions: {

@@ -92,6 +92,27 @@ export interface NovelContextWorksetV1 {
   readonly items: readonly NovelContextWorksetItemV1[]
 }
 
+/** Bounded cross-Workspace library summary visible on the Novel home surface. */
+export interface NovelLibraryHomeSurface {
+  readonly kind: 'library-home'
+  readonly label: string
+  readonly bookCount: number
+  readonly manuscriptCharacters: number
+  readonly todayCharacterDelta: number
+  readonly books: readonly {
+    readonly title: string
+    readonly description?: string
+    readonly chapterCount: number
+    readonly manuscriptCharacters: number
+    readonly continueTitle?: string
+  }[]
+  /** Registered books omitted from the bounded summary. */
+  readonly omittedBooks: number
+}
+
+/** Non-Asset workbench surface context retained beside one project-bound workset. */
+export type NovelContextSurface = NovelLibraryHomeSurface
+
 /** Live active-Asset pointer resolved to the current Revision at prompt time. */
 export interface NovelContextFollowItem {
   readonly projectId: ProjectId
@@ -115,6 +136,8 @@ export interface NovelContextWorksetV2 {
   readonly version: 2
   readonly projectId: ProjectId
   readonly items: readonly (NovelContextFollowItem | NovelContextPinnedItem)[]
+  /** Optional visible non-Asset surface; it never grants cross-project reads. */
+  readonly surface?: NovelContextSurface
 }
 
 /** Every durable workset accepted during Session replay. */
@@ -181,6 +204,8 @@ export interface NovelContextSourceV3 {
   readonly projectId: ProjectId
   readonly policies: readonly NovelContextPolicyId[]
   readonly references: readonly NovelContextManifestItem[]
+  /** Exact bounded UI surface facts frozen for this model request. */
+  readonly surface?: NovelContextSurface
 }
 
 /** Every durable Novel context source accepted during Session replay. */

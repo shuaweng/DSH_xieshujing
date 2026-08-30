@@ -1,6 +1,6 @@
 /** Shared browser state for explorer, typed editors, reader presentation, and proposal cards. */
 
-import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-runtime/client'
+import { defineStore, type EngineStoreHandle, type SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {
   NovelAssetDescriptor,
   NovelAssetDocument,
@@ -15,6 +15,8 @@ export type NovelReaderFont = 'song' | 'kai' | 'sans'
 
 /** Shared chapter, draft, selection, and loading state for Novel workbench surfaces. */
 export interface NovelWorkbenchState {
+  /** Session whose project/document projection currently owns this shared root store. */
+  sessionId?: SessionId
   projectStatus: 'loading' | 'uninitialized' | 'ready' | 'error'
   project?: NovelProjectDescriptor
   assets: readonly NovelAssetDescriptor[]
@@ -33,6 +35,7 @@ export interface NovelWorkbenchState {
 }
 
 type Actions = {
+  bindSession: (draft: NovelWorkbenchState, sessionId?: SessionId) => void
   reset: (draft: NovelWorkbenchState) => void
   loaded: (draft: NovelWorkbenchState, project: NovelProjectDescriptor, assets: readonly NovelAssetDescriptor[]) => void
   uninitialized: (draft: NovelWorkbenchState) => void
@@ -68,17 +71,14 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       reload: 0,
     }),
     actions: {
+      bindSession: (draft, sessionId) => {
+        if (draft.sessionId === sessionId) return
+        if (sessionId === undefined) delete draft.sessionId
+        else draft.sessionId = sessionId
+        resetProjectProjection(draft)
+      },
       reset: (draft) => {
-        draft.projectStatus = 'loading'
-        delete draft.project
-        delete draft.document
-        delete draft.titleDraft
-        delete draft.error
-        draft.assets = []
-        delete draft.draft
-        delete draft.selection
-        draft.dirty = false
-        draft.loading = true
+        resetProjectProjection(draft)
       },
       loaded: (draft, project, assets) => {
         draft.projectStatus = 'ready'
@@ -155,6 +155,19 @@ export function createNovelWorkbenchStore(): EngineStoreHandle<NovelWorkbenchSta
       refresh: (draft) => { draft.reload += 1 },
     },
   })
+}
+
+function resetProjectProjection(draft: NovelWorkbenchState): void {
+  draft.projectStatus = 'loading'
+  delete draft.project
+  delete draft.document
+  delete draft.titleDraft
+  delete draft.error
+  draft.assets = []
+  delete draft.draft
+  delete draft.selection
+  draft.dirty = false
+  draft.loading = true
 }
 
 function isDirty(state: NovelWorkbenchState): boolean {

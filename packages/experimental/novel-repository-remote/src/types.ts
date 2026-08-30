@@ -20,6 +20,8 @@ export interface NovelProjectDescriptor {
   readonly id: ProjectId
   /** Author-visible project title. */
   readonly title: string
+  /** Optional author-visible synopsis from `novel.yaml`. */
+  readonly description?: string
   /** Host display path of the canonical project root. */
   readonly rootDisplayPath: string
   /** Host display path of the canonical `novel.yaml`. */
@@ -32,6 +34,8 @@ export interface NovelProjectDescriptor {
 export interface InitializeNovelProjectRequest {
   /** Author-visible book title; the Host owns generated identity and layout. */
   readonly title: string
+  /** Optional concise synopsis stored in `novel.yaml`. */
+  readonly description?: string
 }
 
 /** One author-visible Skill contributed by the current Novel Preset. */
@@ -104,6 +108,21 @@ export interface NovelContextWorksetDescriptor {
   readonly version: 2
   readonly projectId: ProjectId
   readonly items: readonly (NovelContextFollowItemDescriptor | NovelContextPinnedItemDescriptor)[]
+  readonly surface?: {
+    readonly kind: 'library-home'
+    readonly label: string
+    readonly bookCount: number
+    readonly manuscriptCharacters: number
+    readonly todayCharacterDelta: number
+    readonly books: readonly {
+      readonly title: string
+      readonly description?: string
+      readonly chapterCount: number
+      readonly manuscriptCharacters: number
+      readonly continueTitle?: string
+    }[]
+    readonly omittedBooks: number
+  }
 }
 
 /** Browser request to create one new typed Asset at a provider-owned path. */

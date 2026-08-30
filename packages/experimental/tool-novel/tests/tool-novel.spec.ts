@@ -319,7 +319,10 @@ describe('Novel model tools', () => {
       return Promise.resolve<ApprovalOutcome>('allowed-once')
     })
 
-    const result = await execute(ctx, agent, 'novel_initialize_project', { title: '国运擂台' })
+    const result = await execute(ctx, agent, 'novel_initialize_project', {
+      title: '国运擂台',
+      description: '神明擂台降临，华夏以失落神话迎战。',
+    })
     expect(result).toMatchObject({
       isError: false,
     })
@@ -336,6 +339,7 @@ describe('Novel model tools', () => {
     )
     expect(await readFile(join(dir, 'author-note.txt'), 'utf8')).toBe('保留我。')
     expect(await readFile(join(dir, 'novel.yaml'), 'utf8')).toContain('title: 国运擂台')
+    expect(await readFile(join(dir, 'novel.yaml'), 'utf8')).toContain('description: 神明擂台降临，华夏以失落神话迎战。')
     expect(agent.session.events.map(event => event.type)).toContain('approval/asked')
     expect(agent.session.events.map(event => event.type)).toContain('approval/decided')
   })

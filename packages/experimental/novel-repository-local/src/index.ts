@@ -241,6 +241,7 @@ export class LocalNovelRepository extends NovelRepository {
       schema: 1,
       id: parsed.id,
       title: parsed.title,
+      ...(parsed.description === undefined ? {} : { description: parsed.description }),
       root: { ...root },
       manifest: { ...manifest },
       contentRoots,
@@ -266,6 +267,13 @@ export class LocalNovelRepository extends NovelRepository {
     if (title.length === 0 || /[\u0000-\u001F\u007F]/u.test(title)) {
       throw new NovelRepositoryError(
         'novel repository: project title must contain visible text without control characters',
+        'NOVEL_PROJECT_INITIALIZATION_INVALID',
+      )
+    }
+    const description = request.description?.trim()
+    if (description !== undefined && (description.length > 1_000 || /[\u0000-\u001F\u007F]/u.test(description))) {
+      throw new NovelRepositoryError(
+        'novel repository: project description must contain at most 1000 characters without control characters',
         'NOVEL_PROJECT_INITIALIZATION_INVALID',
       )
     }
@@ -316,6 +324,7 @@ export class LocalNovelRepository extends NovelRepository {
       schema: 1,
       id: ProjectId(`project-${randomUUID()}`),
       title,
+      ...(description === undefined || description.length === 0 ? {} : { description }),
       contentRoots: { manuscript: 'manuscript', planning: 'planning' },
       assetOrder: {},
       deletedAssetIds: [],

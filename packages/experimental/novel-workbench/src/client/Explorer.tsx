@@ -59,6 +59,7 @@ export function Explorer({
   useEffect(() => { if (state.active !== undefined) activeAssetId.current = state.active }, [state.active])
   useEffect(() => onRefresh(() => { actions.refresh() }), [actions, onRefresh])
   useEffect(() => {
+    actions.bindSession(sessionId)
     actions.reset()
     if (sessionId === undefined) return
     let live = true
@@ -197,7 +198,9 @@ export function Explorer({
 
   return <div className={css.explorerInner}>
     <header className={css.brand}><button type="button" className={css.homeLink}
-      onClick={() => { workbench.openHome() }}>{t('studio')}</button></header>
+      onClick={() => { workbench.openHome() }} aria-label={t('studio')}>
+      <span className={css.sidebarBrandLogo} aria-hidden="true" />
+    </button></header>
     <div className={css.projectTitle}><strong>{state.project?.title ?? t('newProject')}</strong></div>
     {state.loading && <p className={css.muted}>{t('loading')}</p>}
     {state.error !== undefined && <p className={css.error}>{state.error}</p>}

@@ -70,6 +70,7 @@ export function apply(ctx: Context): void {
     description: 'Initialize the current Session working directory as a Novel Project after explicit user approval. Preserves existing files and creates only repository-owned project metadata and empty content roots.',
     parameters: {
       title: { type: 'string', required: true, description: 'Author-visible title of the book.' },
+      description: { type: 'string', description: 'Optional concise author-visible synopsis for the project manifest.' },
     },
     output: {
       schema: {
@@ -119,7 +120,10 @@ export function apply(ctx: Context): void {
       }
       const project = await ctx.novelRepository.initializeProject(
         root,
-        { title: args.title },
+        {
+          title: args.title,
+          ...(args.description === undefined ? {} : { description: args.description }),
+        },
         exec.signal,
         ctx.sandboxPolicy.resolve({ session: agent.session }),
       )

@@ -15,6 +15,7 @@ import NovelRepository, {
   type ChangeSetAuthorization,
   type CreateAssetRequest,
   type NovelProjectSnapshot,
+  type InitializeNovelProjectRequest,
   type NovelAnalysisReport,
   type NovelSelectionInput,
   type PutNovelAnalysisReportRequest,
@@ -45,7 +46,7 @@ class StubNovelRepository extends NovelRepository {
   creations: CreateAssetRequest[] = []
   revisions: readonly AssetRevisionSummary[] = []
   reports: readonly NovelAnalysisReport[] = []
-  initializations: string[] = []
+  initializations: InitializeNovelProjectRequest[] = []
   reorders: ReorderAssetsRequest[] = []
   restores: RestoreAssetRevisionRequest[] = []
   restoreResult: RestoreAssetRevisionResult | undefined
@@ -54,12 +55,13 @@ class StubNovelRepository extends NovelRepository {
     return Promise.resolve(this.project)
   }
 
-  override initializeProject(root: FsTarget, request: { title: string }): Promise<NovelProjectSnapshot> {
-    this.initializations.push(request.title)
+  override initializeProject(root: FsTarget, request: InitializeNovelProjectRequest): Promise<NovelProjectSnapshot> {
+    this.initializations.push(request)
     const project: NovelProjectSnapshot = {
       schema: 1,
       id: ProjectId('project-initialized'),
       title: request.title.trim(),
+      ...(request.description === undefined ? {} : { description: request.description.trim() }),
       root,
       manifest: { targetKey: FsTargetKey('manifest'), displayPath: `${root.displayPath}/novel.yaml` },
       contentRoots: {
@@ -231,6 +233,7 @@ describe('NovelRepositoryRemote Host service', () => {
       schema: 1,
       id: ProjectId('project-1'),
       title: 'White Harbor',
+      description: 'A detective returns to a harbor that remembers too much.',
       root,
       manifest,
       contentRoots: { manuscript: chapters },
@@ -245,6 +248,7 @@ describe('NovelRepositoryRemote Host service', () => {
         schema: 1,
         id: 'project-1',
         title: 'White Harbor',
+        description: 'A detective returns to a harbor that remembers too much.',
         rootDisplayPath: '/story',
         manifestDisplayPath: '/story/novel.yaml',
         contentRootDisplayPaths: { manuscript: '/story/manuscript' },
@@ -317,11 +321,16 @@ describe('NovelRepositoryRemote Host service', () => {
     await remoteFiber
 
     const agent = testAgent('/new-book')
-    await expect(ctx.novelRepositoryRemote.initialize(agent, { title: '  国运擂台  ' }, new AbortController().signal))
-      .resolves.toMatchObject({ id: 'project-initialized', title: '国运擂台', rootDisplayPath: '/new-book' })
+    await expect(ctx.novelRepositoryRemote.initialize(agent, {
+      title: '  国运擂台  ',
+      description: '  神明擂台降临。  ',
+    }, new AbortController().signal))
+      .resolves.toMatchObject({
+        id: 'project-initialized', title: '国运擂台', description: '神明擂台降临。', rootDisplayPath: '/new-book',
+      })
     await expect(ctx.novelRepositoryRemote.initialize(agent, { title: '忽略此标题' }, new AbortController().signal))
       .resolves.toMatchObject({ id: 'project-initialized', title: '国运擂台' })
-    expect(repository.initializations).toEqual(['  国运擂台  '])
+    expect(repository.initializations).toEqual([{ title: '  国运擂台  ', description: '  神明擂台降临。  ' }])
     expect(resolve).toHaveBeenCalledWith('/new-book', expect.any(Object))
 
     await remoteFiber.dispose()
@@ -483,6 +492,15 @@ describe('NovelRepositoryRemote Host service', () => {
         label: '第一章',
         mode: 'follow', origin: 'active-asset',
       }],
+      surface: {
+        kind: 'library-home', label: '小说工作台首页', bookCount: 1,
+        manuscriptCharacters: 1200, todayCharacterDelta: 300,
+        books: [{
+          title: '白港', description: '海港悬疑故事。', chapterCount: 1,
+          manuscriptCharacters: 1200, continueTitle: '第一章',
+        }],
+        omittedBooks: 0,
+      },
     }
     const replaceWorkset = vi.fn(async () => workset as never)
     const disposeContext = ctx.provide('novelContextResolver', { replaceWorkset } as never)

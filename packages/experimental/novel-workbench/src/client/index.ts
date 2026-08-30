@@ -26,7 +26,11 @@ import { WorkbenchToggle, type WorkbenchToggleInjected } from './WorkbenchToggle
 import { NovelFrame, type NovelFrameInjected } from './NovelFrame.tsx'
 import { ContextTray, type ContextTrayInjected } from './ContextTray.tsx'
 import type { NovelLibraryBook, NovelLibraryCandidate } from './Home.tsx'
-import { NovelContextFocusController, NovelProjectStatusController } from './context-controller.ts'
+import {
+  NovelContextFocusController,
+  NovelLibraryContextFocusController,
+  NovelProjectStatusController,
+} from './context-controller.ts'
 import {
   manuscriptChapterRenderer,
   NovelAssetRendererRegistry,
@@ -65,7 +69,7 @@ export {
 } from './renderers.tsx'
 
 export const inject = [
-  'slots', 'sessions', 'remote', 'remote.novelRepository', 'theme', 'locale', 'inputTriggers', 'layout',
+  'slots', 'sessions', 'workspaces', 'remote', 'remote.novelRepository', 'theme', 'locale', 'inputTriggers', 'layout',
 ]
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -98,6 +102,7 @@ export function apply(ctx: Context): void {
   const store = createNovelWorkbenchStore()
   const workbench = new NovelWorkbenchViewController('home')
   const contextFocus = new NovelContextFocusController()
+  const libraryContext = new NovelLibraryContextFocusController()
   const projectStatus = new NovelProjectStatusController()
   const refreshListeners = new Set<() => void>()
   const refreshWorkbench = (): void => { for (const listener of refreshListeners) listener() }
@@ -137,6 +142,7 @@ export function apply(ctx: Context): void {
           workspaceId: candidate.workspaceId,
           sessionId: candidate.sessionId,
           title: project.title,
+          ...(project.description === undefined ? {} : { description: project.description }),
           path: candidate.workspacePath,
           chapterCount: chapters.length,
           manuscriptCharacters: measures.reduce((sum, item) => sum + item.currentCharacters, 0),
@@ -144,7 +150,10 @@ export function apply(ctx: Context): void {
             (sum, item) => sum + item.currentCharacters - item.baselineCharacters, 0,
           ),
           updatedAt: recent?.updatedAt ?? candidate.workspaceUpdatedAt,
-          ...(recent === undefined ? {} : { continueAsset: recent.asset }),
+          ...(recent === undefined ? {} : {
+            continueAsset: recent.asset,
+            continueCharacters: recent.currentCharacters,
+          }),
         }
       } catch (cause: unknown) {
         console.warn(`novel library skipped Workspace ${JSON.stringify(candidate.workspacePath)}:`, cause)
@@ -202,7 +211,7 @@ export function apply(ctx: Context): void {
     order: 5,
     locale: NS,
     inject: (sessionId): ContextTrayInjected => ({
-      hooks: { contextFocus, projectStatus },
+      hooks: { contextFocus, libraryContext, projectStatus },
       search: async request => await unwrapRemote(remote.search(sessionId, request), 'search Novel Assets'),
       replace: async workset => await unwrapRemote(
         remote.replaceContextWorkset(sessionId, workset),
@@ -261,9 +270,13 @@ export function apply(ctx: Context): void {
         ctx.sessions.open(targetSessionId)
         workbench.openBook(assetId)
       },
+      startNewBook: () => {
+        ctx.layout.closeWorkbench()
+        ctx.sessions.clear()
+      },
       renderers,
-      initialize: async (sessionId, title) => await unwrapRemote(
-        remote.initialize(sessionId, { title }),
+      initialize: async (sessionId, request) => await unwrapRemote(
+        remote.initialize(sessionId, request),
         'initialize Novel Project',
       ),
       open: async (sessionId, assetId, revisionId) => await unwrapRemote(
@@ -355,6 +368,7 @@ export function apply(ctx: Context): void {
         if (!inserted) throw new Error('novel workbench: Composer rejected the SelectionRef insertion')
       },
       reportContextFocus: (value) => { contextFocus.set(value) },
+      reportLibraryContext: (value) => { libraryContext.set(value) },
       reportProjectStatus: (value) => { projectStatus.set(value) },
     }),
   }, Canvas)

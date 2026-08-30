@@ -301,6 +301,39 @@ describe('Novel context preparation', () => {
       () => Promise.resolve({ kind: 'enter' as const, messages: [toolContinuation] }),
     )
     expect(continuation).toMatchObject({ kind: 'enter', messages: [toolContinuation] })
+
+    const surfaceWorkset = {
+      version: 2 as const,
+      projectId: ProjectId('project-context'),
+      items: [],
+      surface: {
+        kind: 'library-home' as const,
+        label: '小说工作台首页',
+        bookCount: 3,
+        manuscriptCharacters: 34781,
+        todayCharacterDelta: 3376,
+        books: [{
+          title: '白港', description: '海港悬疑故事。', chapterCount: 1,
+          manuscriptCharacters: 2113, continueTitle: '第一章',
+        }],
+        omittedBooks: 2,
+      },
+    }
+    await expect(ctx.novelContextResolver.replaceWorkset(agent, surfaceWorkset)).resolves.toEqual(surfaceWorkset)
+    const homePrompt = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: '我有哪些书？' }] })
+    const homeEntered = await agentEvents(ctx, agent).waterfall(
+      'agent/pre-step',
+      { messages: [homePrompt], turn: 2, step: 1, signal },
+      () => Promise.resolve({ kind: 'enter' as const, messages: [homePrompt] }),
+    )
+    if (homeEntered.kind !== 'enter') throw new Error('expected entered home step')
+    expect(homeEntered.messages[1]?.source).toMatchObject({
+      kind: 'novel-context', version: 3,
+      surface: { kind: 'library-home', label: '小说工作台首页', bookCount: 3 },
+      references: [],
+    })
+    const homeContext = homeEntered.messages[1]?.content[0]
+    expect(homeContext?.type === 'text' ? homeContext.text : '').toContain('"title":"白港"')
   })
 
   it('compiles task-related exact material once and keeps lower-priority global context coordinate-only', async () => {

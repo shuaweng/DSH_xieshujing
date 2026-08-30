@@ -10,12 +10,13 @@
   background: transparent;
   font: inherit;
   cursor: pointer;
-  transition: color 120ms ease, background 120ms ease, border-color 120ms ease;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, transform 120ms ease;
 }
 
 .toggle:hover {
   color: var(--ds-color-text-primary);
   background: var(--ds-color-bg-tertiary);
+  transform: translateY(-1px);
 }
 
 .toggle[data-open] {
@@ -29,4 +30,15 @@
   outline-offset: 2px;
 }
 
-.toggle svg { display: block; }
+.mark {
+  display: block;
+  width: 20px;
+  height: 20px;
+  background: url('./assets/brand/xieshujing-mark.png') center / contain no-repeat;
+  transition: filter 140ms ease, opacity 140ms ease;
+}
+
+:global(body[data-ds-dark-theme]) .mark {
+  filter: brightness(0) invert(1);
+  opacity: .92;
+}

@@ -62,9 +62,7 @@ export function WorkbenchToggle({
       title={label}
       onClick={toggleWorkbench}
     >
-      <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden>
-        <path d="M2.25 2.75h11.5v10.5H2.25zM5.5 3v10M6 6.25h5.4M6 8.2h4.25M6 10.15h3.1" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
+      <span className={css.mark} aria-hidden="true" />
     </button>
   )
 }

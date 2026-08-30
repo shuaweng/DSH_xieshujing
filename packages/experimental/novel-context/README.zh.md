@@ -12,7 +12,7 @@
 - `NovelContextResolver` 在 `agent/pre-step` 拦截直接用户消息，只从可读消息中移除已识别的规范引用，并紧随其后追加一条来源类型为 `novel-context` 的不可变 `user/message`。
 - `compile()` 接受闭集任务策略与精确目标。策略覆盖普通 Turn、章节写作、选区改写/审查、大纲编辑、章节审查、偏好学习与 Story State 提取。策略由显式流程或 Skill 的 `novelContextPolicy` metadata 选择，绝不从用户自然语言猜测。
 - 策略只扩展确定的类型化关系。章节写作/审查可加入对应章纲、本书概述、本书风格与已确认 Story State，而全书大纲只保留坐标；选区改写/审查加入风格与 Story State。项目级指导不是常驻上下文。
-- `replaceWorkset()` 记录第二版整值。唯一 `follow` 条目只保存活动 Asset 身份，在编译时解析 current head；`pinned` 条目保留精确 Revision 和可选 selector。旧版事件可继续重放，并在替换时规范化。
+- `replaceWorkset()` 记录第二版整值。唯一 `follow` 条目只保存活动 Asset 身份，在编译时解析 current head；`pinned` 条目保留精确 Revision 和可选 selector。该整值也可以携带一份有边界的 `library-home` surface 快照，其中只有首页可见的书库元数据，且不会授予仓库或跨项目读取能力。旧版事件可继续重放，并在替换时规范化。
 - 客户端可见的 `novelContextWorkset` Session Projection 折叠最新整值。它只是协调状态；模型可见权威是冻结进 Session Log 的第三版 Context Manifest。
 - 普通 Turn 物化 Composer 显式引用，follow/pinned 工作集只给坐标。显式 `/skill-name` Turn 会立即按 Skill 策略编译；模型加载 Skill 后，下一 Step 会增加关联材料，不复制上一份 Manifest 已经物化的文本。
 - 编译器会合并完全相同的精确坐标，同时保留不同选区；同一 Asset/Revision 已有必需材料时，也不会再被较低优先级的可选副本扩成全文。默认最多八个引用和 256 KiB 作者 UTF-8 文本。必需目标超预算时失败关闭；可选材料降级成坐标，而不是被截断。
@@ -26,11 +26,11 @@
 
 #### 模型看到什么
 
-模型先看到用户的可读消息，随后看到一份 `NovelContextManifestSourceV3` 框架，其中包含规范精确 Revision 坐标，以及当前任务策略选中的必要材料。普通直接 Turn 保持轻量；Skill 与固定流程可以按显式原因和投影加入章纲、概述、风格、已确认 Story State 或大纲关系。Session 回放能重建同一个精确上下文切面。
+模型先看到用户的可读消息，随后看到一份 `NovelContextManifestSourceV3` 框架，其中包含规范精确 Revision 坐标，以及当前任务策略选中的必要材料。在书库首页，该框架改为包含有边界的可见书库摘要，同时仍维持 Session 的单项目绑定，绝不会借此打开另一本书的 Asset。普通直接 Turn 保持轻量；Skill 与固定流程可以按显式原因和投影加入章纲、概述、风格、已确认 Story State 或大纲关系。Session 回放能重建同一个精确上下文切面。
 
 #### Token 影响
 
-坐标只增加有界元数据；物化的目标和关联文本才是受配置字节上限约束的可变部分。预算耗尽时，可选文本会变成坐标。
+坐标和书库首页 surface 只增加有界元数据；物化的目标和关联文本才是受配置字节上限约束的可变部分。预算耗尽时，可选文本会变成坐标。
 
 #### KV Cache 影响
 

@@ -14,7 +14,7 @@ Agent 还必须先用 `novel_list` 枚举完整目录，才能读取相关 Asset
 
 新增 Session 所属的小说上下文工作集和有界词法 Asset 检索，同时保持精确 Revision 是模型输入的唯一权威。
 
-工作集是 whole-value 的 `novel/context-workset` Session 事件，最多包含一个 `follow` 引用和若干显式 `pinned` 引用。每项都携带同一个项目、Asset、保留 Revision、可选的类型化 selector、面向作者的 label 与来源。浏览器通过类型化 Remote mutation 替换整个值；客户端可见 Session Projection 折叠最新事件，使刷新、其他标签页和重放都能恢复同一工作集。该事件是协作状态，不是书籍作者数据，因此绝不进入 Frontmatter 或 `.novel/history.sqlite`。
+工作集是 whole-value 的 `novel/context-workset` Session 事件，最多包含一个 `follow` 引用和若干显式 `pinned` 引用。每项都携带同一个项目、Asset、保留 Revision、可选的类型化 selector、面向作者的 label 与来源。版本二也可以携带一个有边界的展示 surface，目前是 `library-home`；该 surface 只含可见元数据，仍绑定工作集 Project，并不会授予跨项目 Asset 访问权。浏览器通过类型化 Remote mutation 替换整个值；客户端可见 Session Projection 折叠最新事件，使刷新、其他标签页和重放都能恢复同一工作集。该事件是协作状态，不是书籍作者数据，因此绝不进入 Frontmatter 或 `.novel/history.sqlite`。
 
 在 `agent/pre-step`，小说上下文解析器把当前工作集与直接用户消息中解析出的规范引用合并。显式消息引用优先，按精确 URI 身份去重，仍然执行单项目 Session 绑定，所有仓库读取都指向指定的保留 Revision。解析器只生成一条模型可见的 `user/message`，其 `novel-context` source 是版本二 Context Manifest。Manifest 拥有确定性的内容派生 ID，并记录每个冻结引用的来源与模式；完整材料继续保存在 append-only Session Log 中，重放时无需重新读取可变 head。
 

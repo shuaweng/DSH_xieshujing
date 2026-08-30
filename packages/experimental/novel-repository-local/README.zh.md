@@ -9,10 +9,10 @@
 ## 行为
 
 - 候选根必须是目录。缺少 `novel.yaml` 时返回 `undefined`；清单存在但非法（包括标记为悬空链接）时，则以类型化的 `NovelRepositoryError` 失败。
-- 初始化只允许创建：它先校验标题和默认内容根路径，再创建 `manuscript` 与 `planning`，最后写入 `novel.yaml`。已有作者文件会被保留；若清单已存在或内容根路径不是目录，则不会发布新的标记文件。
+- 初始化只允许创建：它先校验标题、可选且经过 trim 的 `description`（最多 1,000 字符）与默认内容根路径，再创建 `manuscript` 与 `planning`，最后写入 `novel.yaml`。已有作者文件会被保留；若清单已存在或内容根路径不是目录，则不会发布新的标记文件。
 - 完整 UTF-8 清单受 `manifestMaxBytes` 限制，该值默认是 64 KiB，必须为正的安全整数，且不能超过运行时最大 buffer 长度与最大字符串长度中的较小值。NUL 字节、解码后的控制字符，以及包括重复键和 alias 在内的所有 YAML 解析错误或 warning 都会被拒绝。
 - `novel.yaml` 中可选的 `assetOrder` 按精确 Asset 类型保存完整稳定 ID 序列。排序会在文件系统版本保护下替换清单，不创建 Asset Revision；未列入顺序的旧 Asset 继续按确定性项目路径排列。
-- Schema `1` 要求 `kind: novel-project`、非空 `id` 与 `title` 字符串，以及总条目数不超过 32 的 `contentRoots` mapping。内置章节定义要求存在 `manuscript` 条目；内容根名称采用小写 kebab-case。
+- Schema `1` 要求 `kind: novel-project`、非空 `id` 与 `title` 字符串，以及总条目数不超过 32 的 `contentRoots` mapping。可选的 `description` 是书本展示元数据，本身不会进入模型上下文。内置章节定义要求存在 `manuscript` 条目；内容根名称采用小写 kebab-case。
 - 提供方通过 `ctx.fs` 解析每条已声明的内容根路径，并要求位于项目内的规范化目标已作为目录存在。内容根缺失、不是目录、为悬空链接或其规范化目标位于项目根之外时，都会拒绝该项目。
 - 已注册 Asset 定义选择声明过的内容根、接受的扩展名、创建行为、语义父级规则与可选项目级单例 cardinality。Markdown Frontmatter 会把每个候选文件分派给 `ctx.novelAssetTypes`；未知类型、扩展名不匹配、重复 id、非法父级、层级循环、项目级单例重复和扫描期间发生变化的文件都会失败关闭。内置章节定义使用 `manuscript` 下的 Markdown；策划 contribution 使用可选 `planning` 下的自由 Markdown。
 - `searchAssets()` 会协调同一份类型化目录，检索作者可见标题与每个已注册定义的 `modelText()`，支持精确类型白名单，并返回确定性、有边界的摘要、评分和当前 Revision 目录项。检索不会写项目文件，也不会把结果偷偷加入模型上下文。

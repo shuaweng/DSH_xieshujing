@@ -22,7 +22,7 @@ Skill 只把已确认结果映射到当前已经注册的工作台 Asset：项�
 
 Skill 声明现有 `outline-edit` 上下文策略。该策略可以加入所引用大纲的确定父级与概述，而不会安装一份始终存在的开书上下文包。因此空白但已初始化的项目不会增加作者文本，已有项目则可以从精确的当前 Asset 继续开书。
 
-项目初始化是一个由浏览器与 Agent 工具共用的 Repository 操作。它校验非空作品名与现有 Session 根目录，拒绝现有 `novel.yaml` 或非目录的 `manuscript`/`planning` 冲突，通过受 sandbox 约束的仅创建写入建立缺失的最小内容根，并最后发布 `novel.yaml` 作为激活标记。它永不删除或替换已有作者文件。浏览器把 manifest 缺失表示为中性的作品名表单，并在项目就绪前禁止 Asset/上下文调用。`novel_initialize_project` 只在用户明确要求且通过一次性批准后向模型暴露同一操作；已完成的工具卡会刷新已打开工作台。
+项目初始化是一个由浏览器与 Agent 工具共用的 Repository 操作。它校验非空作品名、可选且有边界的小说简介与现有 Session 根目录，拒绝现有 `novel.yaml` 或非目录的 `manuscript`/`planning` 冲突，通过受 sandbox 约束的仅创建写入建立缺失的最小内容根，并最后发布 `novel.yaml` 作为激活标记。它永不删除或替换已有作者文件。浏览器把 manifest 缺失表示为中性的作品名与可选简介表单，并在项目就绪前禁止 Asset/上下文调用。`novel_initialize_project` 只在用户明确要求且通过一次性批准后向模型暴露同一操作；已完成的工具卡会刷新已打开工作台。
 
 Skill 判断作者何时明确要求开书，并可以调用 `novel_initialize_project`；它不自行写项目文件。初始化只建立项目身份与空内容根。创意确认与 Asset 创建随后继续通过 `novel_list`、`novel_create`、精确读取和 ChangeSet 提案完成。
 
