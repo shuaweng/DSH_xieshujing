@@ -1,0 +1,56 @@
+- main:
+  - separator "Resize conversation and workbench"
+  - complementary "Novel Asset sidebar":
+    - strong: Novel Workbench
+    - strong: 白港
+    - navigation:
+      - group:
+        - text: ›
+        - strong: Book
+        - text: 3 items
+        - button "Book Brief Brief"
+        - button "Book Style Style"
+        - button "Story State Story State"
+      - group:
+        - text: ›
+        - strong: Manuscript
+        - text: 1 chapters
+        - button "＋ New chapter"
+        - button "第一章，Drag to reorder chapters": 第一章 12 characters
+      - group:
+        - text: ›
+        - strong: Outline
+        - text: 1 items
+        - button "＋ New outline"
+        - button "Main Outline"
+        - button "＋ New volume outline"
+  - button "Collapse Asset sidebar": ‹
+  - navigation "Current novel location":
+    - strong: 白港
+    - text: 第一章
+    - combobox "Manuscript versions":
+      - option "Current · 8/27/2026, {{clock}} · Initial import" [selected]
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Mark final"
+  - button "Reference selection to Agent" [disabled]
+  - article:
+    - textbox "Chapter title": 第一章
+    - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
+  - dialog "NOAI scan":
+    - strong: NOAI scan
+    - text: Bound Revision · {{revision}}
+    - button "Run again"
+    - button "Collapse ›"
+    - text: 8/27/2026, {{clock}} noai-rules/2
+    - strong: "0"
+    - text: / 100 AI-style risk
+    - paragraph: Insufficient sample · 12 characters
+    - paragraph: No reportable findings.
+  - text: Chapter characters：
+  - strong: "12"
+  - button "Chapter plan"
+  - button "Chapter review"
+  - button "NOAI scan" [expanded]: NOAI
+  - button "Change reader skin"
+  - button "Typeface and size": A

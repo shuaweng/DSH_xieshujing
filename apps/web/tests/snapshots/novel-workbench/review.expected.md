@@ -1,0 +1,74 @@
+- main:
+  - separator "Resize conversation and workbench"
+  - complementary "Novel Asset sidebar":
+    - strong: Novel Workbench
+    - strong: 白港
+    - navigation:
+      - group:
+        - text: ›
+        - strong: Book
+        - text: 3 items
+        - button "Book Brief Brief"
+        - button "Book Style Style"
+        - button "Story State Story State"
+      - group:
+        - text: ›
+        - strong: Manuscript
+        - text: 1 chapters
+        - button "＋ New chapter"
+        - button "第一章，Drag to reorder chapters": 第一章 12 characters
+      - group:
+        - text: ›
+        - strong: Outline
+        - text: 1 items
+        - button "＋ New outline"
+        - button "Main Outline"
+        - button "＋ New volume outline"
+  - button "Collapse Asset sidebar": ‹
+  - navigation "Current novel location":
+    - strong: 白港
+    - text: 第一章
+    - combobox "Manuscript versions":
+      - option "Current · 8/27/2026, {{clock}} · Initial import" [selected]
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Mark final"
+  - button "Reference selection to Agent" [disabled]
+  - article:
+    - textbox "Chapter title": 第一章
+    - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
+  - dialog "Chapter review":
+    - strong: Chapter review
+    - text: Bound Revision · {{revision}}
+    - button "Run again"
+    - button "Collapse ›"
+    - text: 8/25/2026, {{clock}} chapter-review/1
+    - strong: "78"
+    - text: / 100 Chapter score
+    - paragraph: 开场克制，但人物行动目标和章末追读钩子还不够明确。
+    - article:
+      - strong: Plot progression
+      - text: "76"
+      - paragraph: 情境成立，目标信息偏少。
+    - article:
+      - strong: Reader hooks
+      - text: "68"
+      - paragraph: 章末缺少下一步行动。
+    - heading "Top priorities" [level=3]
+    - list:
+      - listitem: 明确人物本章目标
+      - listitem: 补强章末行动钩子
+    - heading "Findings · 1" [level=3]
+    - article:
+      - strong: 追读钩子
+      - text: Medium
+      - blockquote: 雨还在下。
+      - paragraph: 氛围收束，但没有形成可期待的下一步。
+      - paragraph: 补入人物即将采取的具体行动。
+  - text: Chapter characters：
+  - strong: "12"
+  - button "Chapter plan"
+  - button "Chapter review" [expanded]
+  - button "NOAI scan": NOAI
+  - button "Change reader skin"
+  - button "Typeface and size": A

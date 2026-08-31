@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "files": ["src/client/index.ts", "src/client/renderers.tsx", "src/css-modules.d.ts", "src/types.ts"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../client/locale" },
+    { "path": "../../client/ui-slots" },
+    { "path": "../novel-repository" },
+    { "path": "../novel-repository-remote" },
+    { "path": "../novel-workbench" }
+  ]
+}

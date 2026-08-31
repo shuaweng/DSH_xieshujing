@@ -1,0 +1,3 @@
+name: 小说工作台
+description: 通过冻结上下文和可审阅 ChangeSet 协助创作，不直接写入正式小说资产。
+order: 1

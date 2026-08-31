@@ -151,6 +151,8 @@
     "release:verify-packed-install": "tsx scripts/release/verify-packed-install.ts",
     "release:publish": "tsx scripts/release/publish.ts",
     "dsh": "node --import tsx/esm apps/cli/src/bin.ts",
+    "pack:xieshujing": "node --import tsx/esm scripts/package-xieshujing-plugin.ts",
+    "export:xieshujing-repository": "node --import tsx/esm scripts/package-xieshujing-plugin.ts --repository",
     "demo:ptc": "node scripts/demo-ptc.mjs",
     "demo:inspector": "node --import tsx/esm apps/cli/src/bin.ts web --patch ./packages/experimental/inspector/cordis.source.patch.yml",
     "mock:llm": "node --import tsx packages/test-support/llm-mock-server/src/bin.ts",

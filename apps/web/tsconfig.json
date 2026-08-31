@@ -84,6 +84,7 @@
     "tests/feedback-command.e2e.ts",
     "tests/feedback-release.e2e.ts",
     "tests/agent-team-panel.e2e.ts",
+    "tests/novel-workbench.e2e.ts",
     "tests/startup-auto-selection.e2e.ts",
     "tests/produced-files.e2e.ts",
     "tests/produced-file-mentions.e2e.ts",

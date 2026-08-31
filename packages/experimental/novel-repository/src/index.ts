@@ -1,0 +1,616 @@
+/**
+ * Experimental Novel Repository Service Definition. Providers locate and
+ * validate Novel Projects without making paths or browser state their identity.
+ * @module @deepseek-ai/dsh-experimental-novel-repository
+ */
+
+import { Service, type Context } from '@deepseek-ai/cordis'
+import type { FsTarget } from '@deepseek-ai/dsh-fs'
+import type { SandboxExecutionPolicy } from '@deepseek-ai/dsh-sandbox'
+import { NovelRepositoryError } from './error.ts'
+import type {
+  AssetId,
+  AssetSnapshot,
+  AssetRevisionSummary,
+  AssetSummary,
+  AssetSearchResult,
+  CaptureSelectionRequest,
+  CreateAssetRequest,
+  DeleteAssetRequest,
+  DeleteAssetResult,
+  InitializeNovelProjectRequest,
+  ChangeSet,
+  ChangeSetAuthorization,
+  ChangeSetId,
+  NovelProjectSnapshot,
+  NovelAnalysisReport,
+  NovelSelectionInput,
+  NovelSkillSettings,
+  PutNovelAnalysisReportRequest,
+  PutNovelPreferenceCandidateRequest,
+  NovelPreferenceCandidate,
+  PreferenceCandidateId,
+  NovelStoryStateCandidate,
+  PutNovelStoryStateCandidateRequest,
+  StoryStateCandidateId,
+  RevisionFinalization,
+  ReorderAssetsRequest,
+  RestoreAssetRevisionRequest,
+  RestoreAssetRevisionResult,
+  ProposeChangeSetRequest,
+  RevisionId,
+  SaveAssetContentRequest,
+  SearchAssetsRequest,
+  SelectionRef,
+} from './types.ts'
+
+export {
+  AssetId,
+  ChangeSetId,
+  PreferenceCandidateId,
+  ProjectId,
+  RevisionId,
+  SelectionRefId,
+  StoryStateCandidateId,
+} from './brand.ts'
+export { NovelRepositoryError }
+export type {
+  Asset,
+  AssetRevision,
+  AssetRevisionSummary,
+  AssetSnapshot,
+  AssetSummary,
+  AssetSearchResult,
+  CaptureSelectionRequest,
+  CreateAssetRequest,
+  DeleteAssetRequest,
+  DeleteAssetResult,
+  InitializeNovelProjectRequest,
+  ChangeSet,
+  ChangeSetAuthorization,
+  ContentHash,
+  ManuscriptChapterContent,
+  NovelAssetContent,
+  NovelAssetType,
+  NovelAssetTypeMap,
+  NovelAnalysisReport,
+  NovelAnalysisReportKind,
+  NovelPreferenceCandidate,
+  NovelPreferenceCandidateStatus,
+  NovelPreferenceEvidence,
+  NovelGenerationLineage,
+  NovelStoryStateCandidate,
+  NovelStoryStateCandidateStatus,
+  NovelStoryStateEvidence,
+  NovelOperation,
+  NovelSelectionInput,
+  NovelSkillSettings,
+  NovelSelector,
+  NovelSelectorFor,
+  NovelProjectSnapshot,
+  NovelRepositoryErrorCode,
+  ProposeChangeSetRequest,
+  PutNovelAnalysisReportRequest,
+  PutNovelPreferenceCandidateRequest,
+  PutNovelStoryStateCandidateRequest,
+  InsertTextOperation,
+  UpdateTitleOperation,
+  ReplaceTextOperation,
+  RevisionOrigin,
+  RevisionFinalization,
+  RestoreAssetRevisionRequest,
+  RestoreAssetRevisionResult,
+  ReorderAssetsRequest,
+  SaveAssetContentRequest,
+  SearchAssetsRequest,
+  SelectionRef,
+  TextRangeSelectionInput,
+  TextRangeSelector,
+} from './types.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    novelRepository: NovelRepository
+  }
+
+  interface Events {
+    /**
+     * Emitted after one Novel Project publishes a replacement Skill activation policy.
+     * @param projectId - stable identity of the Novel Project whose policy changed.
+     * @mode emit
+     */
+    'novel/skill-settings-changed'(projectId: string): void
+  }
+}
+
+/** Provider-neutral access to validated Novel Project declarations. */
+export abstract class NovelRepository extends Service {
+  constructor(ctx: Context) {
+    super(ctx, 'novelRepository')
+  }
+
+  /**
+   * Discover and validate the Novel Project rooted at one filesystem target.
+   * @param root - Canonical candidate project directory from the active filesystem provider.
+   * @param signal - Optional cancellation for all provider I/O.
+   * @returns the validated project, or `undefined` when `novel.yaml` is absent.
+   * @throws {NovelRepositoryError} when the root or present manifest is invalid or unsupported.
+   */
+  abstract discoverProject(root: FsTarget, signal?: AbortSignal): Promise<NovelProjectSnapshot | undefined>
+
+  /**
+   * Activate an existing directory as a Novel Project without overwriting authored files.
+   * @param _root - Canonical directory that will become the project root.
+   * @param _request - Minimal author input; the provider owns generated identity and layout.
+   * @param _signal - Optional cancellation for provider I/O.
+   * @param _sandboxPolicy - Optional per-call write policy for initialization publications.
+   * @returns the initialized and rediscovered project snapshot.
+   * @throws {NovelRepositoryError} when initialization is unsupported, invalid, or conflicts with existing paths.
+   */
+  initializeProject(
+    _root: FsTarget,
+    _request: InitializeNovelProjectRequest,
+    _signal?: AbortSignal,
+    _sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<NovelProjectSnapshot> {
+    return Promise.reject(new NovelRepositoryError(
+      'novel repository: the active provider does not support project initialization',
+      'NOVEL_PROJECT_INITIALIZATION_INVALID',
+    ))
+  }
+
+  /**
+   * Read the project-owned Novel Preset Skill activation policy.
+   * @param _project - validated Project declaration returned by this provider.
+   * @param _signal - optional cancellation before provider I/O.
+   * @returns the complete policy; providers return an empty disabled set when none was authored.
+   */
+  readSkillSettings(
+    _project: NovelProjectSnapshot,
+    _signal?: AbortSignal,
+  ): Promise<NovelSkillSettings> {
+    return Promise.resolve({ version: 1, disabled: [] })
+  }
+
+  /**
+   * Atomically replace the project-owned Novel Preset Skill activation policy.
+   * @param _project - validated Project declaration returned by this provider.
+   * @param _settings - complete normalized replacement policy.
+   * @param _signal - optional cancellation before provider I/O.
+   * @param _sandboxPolicy - optional per-call policy governing the settings-file publication.
+   * @returns the committed policy.
+   */
+  replaceSkillSettings(
+    _project: NovelProjectSnapshot,
+    _settings: NovelSkillSettings,
+    _signal?: AbortSignal,
+    _sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<NovelSkillSettings> {
+    return Promise.reject(new NovelRepositoryError(
+      'novel repository: the active provider does not support Skill settings',
+      'NOVEL_PROJECT_MANIFEST_INVALID',
+    ))
+  }
+
+  /**
+   * Rebuild the current authored catalog and reconcile exact file bytes into immutable Revisions.
+   * @param project - validated Project declaration returned by this provider.
+   * @param signal - optional cancellation for filesystem and history work.
+   * @param sandboxPolicy - optional per-call write policy used if reconciliation must recover an apply journal.
+   * @returns current typed Asset rows in authored manifest order with deterministic project-path fallback.
+   */
+  abstract listAssets(
+    project: NovelProjectSnapshot,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSummary[]>
+
+  /**
+   * Persist the complete author-selected order for one Asset type without changing Asset Revisions.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - exact type and every current Asset id of that type in desired order.
+   * @param signal - optional cancellation before manifest publication.
+   * @param sandboxPolicy - optional per-call policy governing manifest publication.
+   * @returns the current catalog sorted with the committed order.
+   */
+  abstract reorderAssets(
+    project: NovelProjectSnapshot,
+    request: ReorderAssetsRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSummary[]>
+
+  /**
+   * Search current typed Assets without exposing paths as identity.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - bounded text query, optional type allowlist, and result cap.
+   * @param signal - optional cancellation for scan and typed model-text extraction.
+   * @param sandboxPolicy - optional write policy if catalog reconciliation must recover a journal.
+   * @returns deterministically ranked exact current Revision results.
+   */
+  abstract searchAssets(
+    project: NovelProjectSnapshot,
+    request: SearchAssetsRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<readonly AssetSearchResult[]>
+
+  /**
+   * Create one new typed authored Asset at a provider-owned safe path.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - semantic type, title, optional parent, typed content, and actor.
+   * @param signal - optional cancellation before filesystem publication.
+   * @param sandboxPolicy - optional per-call policy governing file creation.
+   * @returns the committed initial Revision of the new Asset.
+   */
+  abstract createAsset(
+    project: NovelProjectSnapshot,
+    request: CreateAssetRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<AssetSnapshot>
+
+  /**
+   * Logically delete one current Asset and every semantic descendant.
+   * Providers retain authored bytes and immutable history for recovery.
+   * @param _project - validated Project declaration returned by this provider.
+   * @param _request - exact Asset and observed base Revision.
+   * @param _signal - optional cancellation before logical removal.
+   * @param _sandboxPolicy - optional per-call policy governing filesystem publication.
+   * @returns the removed identities and refreshed current Asset catalog.
+   */
+  deleteAsset(
+    _project: NovelProjectSnapshot,
+    _request: DeleteAssetRequest,
+    _signal?: AbortSignal,
+    _sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<DeleteAssetResult> {
+    return Promise.reject(new NovelRepositoryError(
+      'novel repository: the active provider does not support Asset deletion',
+      'NOVEL_ASSET_INVALID',
+    ))
+  }
+
+  /**
+   * Read either the reconciled current head or one retained immutable Revision.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable authored asset identity.
+   * @param revisionId - exact retained Revision; omission reconciles and returns the current file head.
+   * @param signal - optional cancellation for filesystem and history work.
+   * @param sandboxPolicy - optional per-call write policy used if current-head reconciliation must recover an apply journal.
+   * @returns exact serialized bytes and parsed typed Asset values.
+   * @throws {NovelRepositoryError} when the asset or Revision is absent or invalid.
+   */
+  abstract readAsset(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    revisionId?: RevisionId,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<AssetSnapshot>
+
+  /**
+   * List metadata for every retained Revision of one Asset, newest first.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable authored Asset identity.
+   * @param signal - optional cancellation before history access.
+   * @returns exact immutable Revision summaries without serialized prose bytes.
+   */
+  abstract listAssetRevisions(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    signal?: AbortSignal,
+  ): Promise<readonly AssetRevisionSummary[]>
+
+  /**
+   * Restore one retained Revision as a new guarded current head.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - current head, retained source, and confirming Session identity.
+   * @param signal - optional cancellation before authored-file publication.
+   * @param sandboxPolicy - optional per-call policy governing authored-file publication.
+   * @returns the new head and bounded follow-up effects; historical reports remain attached to their original Revisions.
+   */
+  abstract restoreAssetRevision(
+    project: NovelProjectSnapshot,
+    request: RestoreAssetRevisionRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<RestoreAssetRevisionResult>
+
+  /**
+   * Mark one exact chapter Revision final and retain its nearest Agent lineage.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable chapter Asset identity.
+   * @param revisionId - exact Revision selected as final.
+   * @param finalizedBySessionId - confirming Session identity.
+   * @param signal - optional cancellation before durable publication.
+   * @returns the retained finalization and generation lineage.
+   */
+  finalizeRevision(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    finalizedBySessionId: import('@deepseek-ai/dsh-session/types').SessionId,
+    signal?: AbortSignal,
+  ): Promise<RevisionFinalization> {
+    void project; void assetId; void revisionId; void finalizedBySessionId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Revision finalization'))
+  }
+
+  /**
+   * List explicit finalization decisions for one Asset, newest first.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable chapter Asset identity.
+   * @param signal - optional cancellation before history access.
+   * @returns retained finalization decisions newest first.
+   */
+  listRevisionFinalizations(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    signal?: AbortSignal,
+  ): Promise<readonly RevisionFinalization[]> {
+    void project; void assetId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Revision finalization'))
+  }
+
+  /**
+   * Retain one inert, reviewable preference candidate.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - extracted preference evidence and exact target Revision.
+   * @param signal - optional cancellation before durable publication.
+   * @returns the retained pending preference candidate.
+   */
+  putPreferenceCandidate(
+    project: NovelProjectSnapshot,
+    request: PutNovelPreferenceCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    void project; void request; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
+
+  /**
+   * List retained preference candidates for one final Revision.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable finalized chapter Asset identity.
+   * @param finalRevisionId - exact final Revision identity.
+   * @param signal - optional cancellation before history access.
+   * @returns retained preference candidates for the exact final Revision.
+   */
+  listPreferenceCandidates(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelPreferenceCandidate[]> {
+    void project; void assetId; void finalRevisionId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
+
+  /**
+   * Read one retained preference candidate.
+   * @param project - validated Project declaration returned by this provider.
+   * @param candidateId - stable preference candidate identity.
+   * @param signal - optional cancellation before history access.
+   * @returns the exact retained preference candidate.
+   */
+  readPreferenceCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: PreferenceCandidateId,
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    void project; void candidateId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
+
+  /**
+   * Record the explicit terminal user decision and optional applied lineage.
+   * @param project - validated Project declaration returned by this provider.
+   * @param candidateId - stable preference candidate identity.
+   * @param decision - explicit accepted or rejected terminal state.
+   * @param decidedBySessionId - Session recording the author decision.
+   * @param result - optional applied ChangeSet and result Revision lineage.
+   * @param signal - optional cancellation before durable publication.
+   * @returns the updated terminal preference candidate.
+   */
+  decidePreferenceCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: PreferenceCandidateId,
+    decision: 'accepted' | 'rejected',
+    decidedBySessionId: import('@deepseek-ai/dsh-session/types').SessionId,
+    result?: { readonly changeSetId: ChangeSetId; readonly revisionId: RevisionId },
+    signal?: AbortSignal,
+  ): Promise<NovelPreferenceCandidate> {
+    void project; void candidateId; void decision; void decidedBySessionId; void result; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement preference candidates'))
+  }
+
+  /**
+   * Retain one inert, reviewable Story State replacement candidate.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - extracted Story State replacement and evidence.
+   * @param signal - optional cancellation before durable publication.
+   * @returns the retained pending Story State candidate.
+   */
+  putStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    request: PutNovelStoryStateCandidateRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    void project; void request; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Story State candidates'))
+  }
+
+  /**
+   * List Story State candidates attached to one finalized chapter Revision.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable finalized chapter Asset identity.
+   * @param finalRevisionId - exact final Revision identity.
+   * @param signal - optional cancellation before history access.
+   * @returns retained Story State candidates for the exact final Revision.
+   */
+  listStoryStateCandidates(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    finalRevisionId: RevisionId,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelStoryStateCandidate[]> {
+    void project; void assetId; void finalRevisionId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Story State candidates'))
+  }
+
+  /**
+   * Read one retained Story State candidate.
+   * @param project - validated Project declaration returned by this provider.
+   * @param candidateId - stable Story State candidate identity.
+   * @param signal - optional cancellation before history access.
+   * @returns the exact retained Story State candidate.
+   */
+  readStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: StoryStateCandidateId,
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    void project; void candidateId; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Story State candidates'))
+  }
+
+  /**
+   * Record the explicit terminal Story State decision and optional applied lineage.
+   * @param project - validated Project declaration returned by this provider.
+   * @param candidateId - stable Story State candidate identity.
+   * @param decision - explicit accepted or rejected terminal state.
+   * @param decidedBySessionId - Session recording the author decision.
+   * @param result - optional applied ChangeSet and result Revision lineage.
+   * @param signal - optional cancellation before durable publication.
+   * @returns the updated terminal Story State candidate.
+   */
+  decideStoryStateCandidate(
+    project: NovelProjectSnapshot,
+    candidateId: StoryStateCandidateId,
+    decision: 'accepted' | 'rejected',
+    decidedBySessionId: import('@deepseek-ai/dsh-session/types').SessionId,
+    result?: { readonly changeSetId: ChangeSetId; readonly revisionId: RevisionId },
+    signal?: AbortSignal,
+  ): Promise<NovelStoryStateCandidate> {
+    void project; void candidateId; void decision; void decidedBySessionId; void result; void signal
+    return Promise.reject(new Error('Novel Repository Provider does not implement Story State candidates'))
+  }
+
+  /**
+   * List generated reports attached to one exact retained Revision.
+   * @param project - validated Project declaration returned by this provider.
+   * @param assetId - stable authored Asset identity.
+   * @param revisionId - exact retained Revision identity.
+   * @param signal - optional cancellation before history access.
+   * @returns reports in stable report-kind order.
+   */
+  abstract listAnalysisReports(
+    project: NovelProjectSnapshot,
+    assetId: AssetId,
+    revisionId: RevisionId,
+    signal?: AbortSignal,
+  ): Promise<readonly NovelAnalysisReport[]>
+
+  /**
+   * Atomically replace the successful report for one Revision and report kind.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - exact Revision, kind, analyzer identity, provenance, and JSON result.
+   * @param signal - optional cancellation before durable publication.
+   * @returns the validated persisted report.
+   */
+  abstract putAnalysisReport(
+    project: NovelProjectSnapshot,
+    request: PutNovelAnalysisReportRequest,
+    signal?: AbortSignal,
+  ): Promise<NovelAnalysisReport>
+
+  /**
+   * Guardedly publish user-authored typed content and retain its exact new Revision.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - target, current base Revision, and full typed replacement content.
+   * @param signal - optional cancellation before filesystem publication.
+   * @param sandboxPolicy - optional per-call policy governing authored-file publication and recovery.
+   * @returns the committed exact new head.
+   * @throws {NovelRepositoryError} when the base is stale or the resulting asset is invalid.
+   */
+  abstract saveAssetContent(
+    project: NovelProjectSnapshot,
+    request: SaveAssetContentRequest,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<AssetSnapshot>
+
+  /**
+   * Freeze one exact type-defined selection without rereading mutable latest content.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - retained Revision and type-defined selection input to validate.
+   * @param signal - optional cancellation for the history read.
+   * @returns immutable type-defined selection identity and bounded diagnostics.
+   */
+  abstract captureSelection<Input extends NovelSelectionInput>(
+    project: NovelProjectSnapshot,
+    request: CaptureSelectionRequest<Input>,
+    signal?: AbortSignal,
+  ): Promise<SelectionRef<Input>>
+
+  /**
+   * Retain one validated proposal without publishing it to authored files.
+   * @param project - validated Project declaration returned by this provider.
+   * @param request - exact base Revision, typed operation, actor, and review summary.
+   * @param signal - optional cancellation before durable proposal retention.
+   * @returns the durable proposal-only ChangeSet.
+   */
+  abstract proposeChangeSet(
+    project: NovelProjectSnapshot,
+    request: ProposeChangeSetRequest,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet>
+
+  /**
+   * Read one durable proposal or terminal ChangeSet.
+   * @param project - validated Project declaration returned by this provider.
+   * @param changeSetId - durable ChangeSet identity within the Project.
+   * @param signal - optional cancellation for history access.
+   * @returns the validated durable ChangeSet.
+   */
+  abstract readChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet>
+
+  /**
+   * Apply one authorized proposal through the crash-recoverable publication protocol.
+   * @param project - validated Project declaration returned by this provider.
+   * @param changeSetId - durable proposal identity within the Project.
+   * @param authorization - explicit Session identity accepting the proposal.
+   * @param signal - optional cancellation before authored-file publication begins.
+   * @param sandboxPolicy - optional per-call policy governing authored-file publication and recovery.
+   * @returns the applied, conflicted, or already terminal ChangeSet.
+   */
+  abstract applyChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    authorization: ChangeSetAuthorization,
+    signal?: AbortSignal,
+    sandboxPolicy?: SandboxExecutionPolicy,
+  ): Promise<ChangeSet>
+
+  /**
+   * Reject one authorized proposal without changing authored files.
+   * @param project - validated Project declaration returned by this provider.
+   * @param changeSetId - durable proposal identity within the Project.
+   * @param authorization - explicit Session identity rejecting the proposal.
+   * @param signal - optional cancellation before durable rejection.
+   * @returns the rejected or already terminal ChangeSet.
+   */
+  abstract rejectChangeSet(
+    project: NovelProjectSnapshot,
+    changeSetId: ChangeSetId,
+    authorization: ChangeSetAuthorization,
+    signal?: AbortSignal,
+  ): Promise<ChangeSet>
+}
+
+export default NovelRepository

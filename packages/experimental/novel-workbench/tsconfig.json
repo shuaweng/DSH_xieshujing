@@ -1,0 +1,27 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
+  "include": ["src"],
+  "references": [
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../api/session-controller/tsconfig.client.json" },
+    { "path": "../../api/workspace-controller/tsconfig.client.json" },
+    { "path": "../../client/store" },
+    { "path": "../../client/ui-slots" },
+    { "path": "../../client/ui-renderer" },
+    { "path": "../../client/ui-session" },
+    { "path": "../../client/ui-workspace" },
+    { "path": "../../client/ui-agent-preset" },
+    { "path": "../../client/ui-layout" },
+    { "path": "../../client/ui-input-trigger" },
+    { "path": "../../client/ui-theme" },
+    { "path": "../../client/ui-conversation" },
+    { "path": "../../client/ui-tool" },
+    { "path": "../../client/locale" },
+    { "path": "../../preset/agent-presets" },
+    { "path": "../novel-repository-client" },
+    { "path": "../novel-repository-remote" },
+    { "path": "../novel-context" },
+    { "path": "../../runtime-diagnostics/invariants" }
+  ]
+}

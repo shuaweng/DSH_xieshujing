@@ -1,0 +1,45 @@
+- main:
+  - separator "Resize conversation and workbench"
+  - complementary "Novel Asset sidebar":
+    - strong: Novel Workbench
+    - strong: 白港
+    - navigation:
+      - group:
+        - text: ›
+        - strong: Book
+        - text: 3 items
+        - button "Book Brief Brief"
+        - button "White Harbor Style Style"
+        - button "Story State Story State"
+      - group:
+        - text: ›
+        - strong: Manuscript
+        - text: 1 chapters
+        - button "＋ New chapter"
+        - button "雨夜归人，Drag to reorder chapters": 雨夜归人
+      - group:
+        - text: ›
+        - strong: Outline
+        - text: 1 items
+        - button "＋ New outline"
+        - button "Main Outline"
+        - button "＋ New volume outline"
+  - button "Collapse Asset sidebar": ‹
+  - navigation "Current novel location":
+    - strong: 白港
+    - text: White Harbor Style
+    - combobox "Manuscript versions":
+      - option "Current · 8/27/2026, {{clock}} · Author save" [selected]
+      - option "8/27/2026, {{clock}} · Initial import"
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Reference selection to Agent"
+  - region "White Harbor Style · Book style":
+    - text: Name
+    - textbox "Name": White Harbor Style
+    - button "Read" [pressed]
+    - textbox "Freeform planning content":
+      - /placeholder: Freely record narrative voice, sentence rhythm, dialogue, information release, serial pacing, hooks, positive references, and explicit avoidances…
+      - text: "## Voice Restrained, concrete, and character-specific."
+  - button "Change reader skin"
+  - button "Typeface and size": A

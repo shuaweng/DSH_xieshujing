@@ -1,0 +1,269 @@
+/** Deterministic Chinese web-fiction style heuristics adapted from the shipped Novel guard. */
+
+/** Severity attached to one deterministic style finding. */
+export type NoAiSeverity = 'high' | 'medium' | 'low'
+
+/** One exact textual finding produced without a model call. */
+export interface NoAiFinding {
+  readonly ruleId: string
+  readonly label: string
+  readonly severity: NoAiSeverity
+  readonly startUtf16: number
+  readonly endUtf16: number
+  readonly evidence: string
+  readonly advice: string
+}
+
+/** JSON-safe deterministic style report for one exact text snapshot. */
+export interface NoAiScanReport {
+  readonly version: 1
+  readonly characterCount: number
+  readonly sampleLevel: 'insufficient' | 'usable' | 'strong'
+  readonly riskScore: number
+  readonly counts: Readonly<Record<NoAiSeverity, number>>
+  readonly findings: readonly NoAiFinding[]
+}
+
+/** Tunable bounds and warning policy owned by the Novel analysis provider. */
+export interface NoAiScanOptions {
+  readonly minCharacters: number
+  readonly strongSampleCharacters: number
+  readonly maxFindings: number
+}
+
+interface Rule {
+  readonly id: string
+  readonly label: string
+  readonly severity: NoAiSeverity
+  readonly advice: string
+  readonly patterns: readonly RegExp[]
+}
+
+const RULES: readonly Rule[] = [
+  {
+    id: 'explanatory-dash', label: '解释性破折号', severity: 'high',
+    advice: '删掉作者式补充定义，改成动作、反应、对白或直接结果。',
+    patterns: [/——\s*(?:也就是|也就是说|换句话说|说白了|准确地说|其实|本质上|所谓|即|因为|为了)[^。\n！？!?；;]{1,80}/gu],
+  },
+  {
+    id: 'not-but-structure', label: '否定转折模板', severity: 'high',
+    advice: '直接写动作、判断或后果，避免“不是……而是……”绕圈下定义。',
+    patterns: [/(?:不是|没有)[^。\n！？!?；;]{0,50}而是/gu, /不仅[^。\n！？!?；;]{0,50}(?:更|而且|还)/gu],
+  },
+  {
+    id: 'not-like-structure', label: '不像/倒像模板', severity: 'medium',
+    advice: '用现场动作和可感知细节代替作者站出来解释比喻。',
+    patterns: [/不像是?在?[^。\n！？!?；;]{1,40}[，,]?倒像是?在?[^。\n！？!?；;]{1,60}/gu],
+  },
+  {
+    id: 'ratio-emotion', label: '比例式情绪描写', severity: 'high',
+    advice: '改成具体表情、动作或更贴角色的一句对白。',
+    patterns: [/(?:眼神|目光|脸上|表情|神色)[^。\n！？!?；;]{0,18}[一二三四五六七八九十\d]分[^。\n！？!?；;]{1,30}[一二三四五六七八九十\d]分[^。\n！？!?；;]{1,40}/gu],
+  },
+  {
+    id: 'expression-template', label: '表情模板句', severity: 'medium',
+    advice: '优先写动作选择、停顿、语气变化或对方反应。',
+    patterns: [/嘴角(?:勾起|扯出|扬起|泛起)[^。\n！？!?；;]{0,18}(?:一抹|一丝)[^。\n！？!?；;]{0,36}/gu, /眼神中?(?:闪过|掠过|浮现|写满|透着)[^。\n！？!?；;]{0,42}/gu],
+  },
+  {
+    id: 'stage-transition', label: '影视分镜式转场词', severity: 'low',
+    advice: '密集出现时删去提示词，用因果动作自然衔接。',
+    patterns: [/(?:就在)?下一秒[，,]?/gu, /与此同时[，,]?/gu, /紧接着[，,]?/gu, /时间仿佛在这一刻静止/gu],
+  },
+  {
+    id: 'expository-reveal', label: '设定揭示式旁白', severity: 'high',
+    advice: '把总结拆进动作、对白、界面信息或冲突后果。',
+    patterns: [/这就是[^。\n！？!?；;]{1,50}真相/gu, /真正可怕的是[^。\n！？!?；;]{1,80}/gu],
+  },
+  {
+    id: 'authorial-stamp', label: '作者旁白盖章', severity: 'high',
+    advice: '删去“意味着/标志着/注定”等盖章，让读者从结果自行判断。',
+    patterns: [/这(?:一刻|一下|一招|件事)?[^。\n]{0,18}(?:意味着|标志着|象征着|注定|将会|会彻底改变)[^。\n]{1,80}/gu],
+  },
+  {
+    id: 'omniscient-insert', label: '开天眼式身份塞入', severity: 'high',
+    advice: '若当前视角不知情，改用衣饰、称呼、旁人反应或对方自报。',
+    patterns: [/这是[^。\n]{1,60}(?:道上人称|人称|外门|小头目|头目|身份|名叫|叫作|乃是)[^。\n]{0,40}/gu],
+  },
+  {
+    id: 'empty-abstraction', label: '抽象情绪与气氛词堆叠', severity: 'medium',
+    advice: '补充可见动作、声音、物件变化或人物即时选择。',
+    patterns: [/(?:一种|某种)(?:难以言喻|莫名|说不清|无法形容)的[^。\n！？!?；;]{1,36}/gu, /空气中弥漫着[^。\n！？!?；;]{1,50}(?:气息|氛围|味道)/gu],
+  },
+  {
+    id: 'repeated-emphasis', label: '重复强调式短排比', severity: 'high',
+    advice: '删掉作者式二次盖章，把信息压回角色当前能感知到的动作、疼痛、选择或处境。',
+    patterns: [/[他她它我][^。\n！？!?]{0,12}是个[^。\n！？!?]{1,24}[。\n！？!?]\s*一个[^。\n！？!?]{1,50}/gu,
+      /[他她它我][^。\n！？!?]{0,12}只是[^。\n！？!?]{1,24}[。\n！？!?]\s*一个[^。\n！？!?]{1,50}/gu],
+  },
+  {
+    id: 'anaphora-stack', label: '连续排比式自我强调', severity: 'medium',
+    advice: '连续“没有/不是/更没有”容易像模板化强调；保留最有画面的一个结果。',
+    patterns: [/(?:^|\n)\s*没有[^。\n！？!?]{0,30}[。\n！？!?]\s*\n\s*没有[^。\n！？!?]{0,30}[。\n！？!?](?:\s*\n\s*(?:更)?没有[^。\n！？!?]{0,35}[。\n！？!?])?/gu,
+      /(?:^|\n)\s*不是[^。\n！？!?]{0,30}[。\n！？!?]\s*\n\s*不是[^。\n！？!?]{0,30}[。\n！？!?]/gu],
+  },
+  {
+    id: 'quote-hedging', label: '引号包裹俗语或概念', severity: 'medium',
+    advice: '若不是实物标签、书名、引用或角色命名，删掉引号或换成更具体的表达。',
+    patterns: [/[“"][^”"\n]{0,8}(?:拳风|气势|惊天|震撼|冷漠|残暴|不可理解|仙法|规矩|节目效果|眼前一亮)[^”"\n]{0,8}[”"]/gu],
+  },
+  {
+    id: 'logic-chain-exposition', label: '规则推演式解释', severity: 'medium',
+    advice: '保留理解情节所需的规则，其余用试探动作、现场反馈和后果呈现。',
+    patterns: [/按照(?:剧本|规则|系统判定)[：:][^。\n！？!?；;]{1,140}/gu,
+      /(?:直接|绕过|强行|现在)[^。\n！？!?；;]{1,36}[？?]?不行[，,][^。\n！？!?；;]{1,100}/gu,
+      /必须让一切发生得[^。\n！？!?；;]{1,100}/gu],
+  },
+  {
+    id: 'perfect-logic-claim', label: '完美判定或完美扮演', severity: 'medium',
+    advice: '改成实际判定结果、失败风险或旁观者反应，不让系统替文本鼓掌。',
+    patterns: [/(?:完美|100%|百分百)[^。\n！？!?；;]{0,36}(?:符合|通过|人设|逻辑|判定|扮演)/gu, /极其自然[，,]顺理成章/gu],
+  },
+  {
+    id: 'detached-voice-camera', label: '脱离人物视角的声音镜头', severity: 'medium',
+    advice: '让声音落到视角人物的听觉、身体反应或现场动作上。',
+    patterns: [/[“"][^”"\n]{4,80}[”"]\s*(?:\n\s*)?一个[^。\n]{0,24}声音[^。\n]{0,40}(?:炸开|响起|传来)/gu,
+      /一个[^。\n]{0,24}声音[^。\n]{0,40}(?:炸开|响起|传来)/gu],
+  },
+  {
+    id: 'pov-camera-switch', label: '导演镜头式视角切换', severity: 'high',
+    advice: '除非明确切换视角，否则改成当前视角能观察到的动作和反应。',
+    patterns: [/[他她它][^。\n]{0,6}看得很清楚[:：][^。\n]{1,80}/gu, /他们[^。\n]{0,8}(?:甚至不知道|只看到)[^。\n]{1,80}/gu],
+  },
+  {
+    id: 'technique-explainer', label: '作者式技巧或机制解释', severity: 'medium',
+    advice: '除非是明确的角色判断，否则用可见后果代替作者贴出的说明牌。',
+    patterns: [/(?:这|那)是[^。\n！？!?；;]{1,60}(?:技巧|规矩|经验|手段|办法|忌讳|排异感|代价|后遗症)[^。\n！？!?；;]{0,60}/gu,
+      /(?:犯了|坏了)[^。\n！？!?；;]{0,24}(?:规矩|忌讳)[^。\n！？!?；;]{0,60}/gu],
+  },
+  {
+    id: 'action-evaluation', label: '动作后作者评价', severity: 'medium',
+    advice: '把动作后的抽象评价换成对手反应、身体代价或战术结果。',
+    patterns: [/(?:这一连串动作|这一刀|这一拳|这一击)[^。\n！？!?；;]{0,30}(?:快得离谱|精准|残忍|霸道|狠辣)[^。\n！？!?；;]{0,80}/gu,
+      /(?:透着|带着)一种令人(?:胆寒|窒息|心悸|发毛|头皮发麻)[^。\n！？!?；;]{0,50}/gu],
+  },
+  {
+    id: 'explanation-marker', label: '解释或结论先行', severity: 'medium',
+    advice: '先写现象、反应和代价，再判断是否还需要解释。',
+    patterns: [/(?:原因很简单|本质上|这说明|这代表|这意味着)[^。\n]{1,80}/gu],
+  },
+  {
+    id: 'generic-pain-imagery', label: '通用痛感或暴力比喻', severity: 'medium',
+    advice: '痛感比喻密集时改成身体失控、呼吸变化、可见动作或战术后果。',
+    patterns: [/(?:像|如同)[^。\n]{0,16}(?:野狗|风箱|破麻袋|刀子|重锤|烂泥|死人|铁钉|蚂蚁|岩浆|凌迟)[^。\n]{0,40}/gu,
+      /(?:潮水般|地狱般|非人(?:的)?力道|令人胆寒的平静)[^。\n]{0,40}/gu],
+  },
+  {
+    id: 'abstract-emotion-label', label: '抽象情绪标签', severity: 'medium',
+    advice: '不要替角色命名情绪，改成身体反应、动作失控、停顿或贴角色的对白。',
+    patterns: [/[他她它我][^。\n！？!?；;]{0,10}(?:感到|觉得|心中|心里|内心)[^。\n！？!?；;]{0,8}(?:一[阵丝股])?(?:难受|崩溃|绝望|震惊|恐惧|愤怒|痛苦|心痛|心碎|慌乱|焦虑|无助|屈辱|悲伤|惊恐)/gu,
+      /[他她它我][^。\n！？!?；;]{0,10}(?:感到|觉得|感受到|心中|心里|内心|心头)[^。\n！？!?；;]{0,8}(?:愕然|错愕|释然|欣慰|激动)/gu,
+      /一(?:种|股|阵)[^。\n！？!?；;]{0,12}(?:绝望|崩溃|恐惧|愤怒|屈辱|悲凉|无力|窒息)(?:感|的情绪|的感觉)/gu],
+  },
+  {
+    id: 'low-specificity-scenery', label: '低具体度描写', severity: 'low',
+    advice: '用一个可感的具体细节替代笼统形容词与抽象气氛词。',
+    patterns: [/(?:古朴|斑驳|陈旧|破旧|神秘|诡异|压抑|阴森|宁静|祥和|繁华|萧条|肃穆)的(?:客栈|房间|屋子|院子|建筑|街道|气息|气氛|氛围|感觉|地方)/gu,
+      /空气中(?:弥漫|充斥|飘荡|流动)着[^。\n！？!?；;]{0,20}(?:气息|寒意|压抑|诡异|危险|不安|紧张)/gu],
+  },
+  {
+    id: 'enemy-cognition-overreach', label: '对手认知越界', severity: 'medium',
+    advice: '把对手脑内活动改成当前视角可见的物理反应。',
+    patterns: [/(?:对方|敌人|对面那?[人个]?|那几[人个]|那些人|众人|对面)[^。\n！？!?；;]{0,12}(?:无法理解|想不通|看不懂|不明白|无法想象|完全没料到|怎么也想不到|做梦也想不到|心中认定|早已看穿|早就看穿)/gu],
+  },
+  {
+    id: 'when-clause-opener', label: '当…时叙事开场', severity: 'medium',
+    advice: '改成直接动作、具象场景或角色当下的选择。',
+    patterns: [/(?:^|\n)\s*(?![“"「『])(?:当|每当|正当|就在)[^。！？!?；;\n]{1,24}(?:时|的时候)[，,][^。！？!?；;\n]{2,44}[。！？!?]/gu],
+  },
+  {
+    id: 'markdown-residue', label: '正文中的 Markdown 残留', severity: 'high',
+    advice: '小说正文不使用 Markdown 标题、加粗或列表标记；删除格式符号并保留正文。',
+    patterns: [/(?:^|\n)\s{0,3}#{1,6}\s+[^\n]+/gu, /\*\*[^*\n]{1,80}\*\*/gu, /(?:^|\n)\s*[-*+]\s+[^\n]+/gu],
+  },
+  {
+    id: 'promotional-vocabulary', label: '宣传式与高频 AI 词汇', severity: 'medium',
+    advice: '删除抽象宣传词，直接写可感知事实和后果。',
+    patterns: [/(?:值得注意的是|毫无疑问|至关重要|深入探讨|令人印象深刻|充满活力|丰富的底蕴|令人叹为观止|不可磨灭的印记)/gu],
+  },
+  {
+    id: 'overqualification', label: '过度限定', severity: 'medium',
+    advice: '保留一个必要的不确定词，删除其余回避性限定。',
+    patterns: [/(?:或许|可能|也许)[^。\n]{0,18}(?:可能|或许|也许|某种程度|一定程度)[^。\n]{0,40}/gu],
+  },
+  {
+    id: 'generic-positive-ending', label: '通用积极结尾', severity: 'medium',
+    advice: '用尚未解决的问题、具体行动或不确定后果收尾，不替章节总结希望。',
+    patterns: [/(?:虽然前路|尽管前路)[^。\n]{0,60}(?:终有一天|充满希望|希望之火|迎接未来)[^。\n]{0,80}[。！？!?]?\s*$/gu,
+      /(?:眼中|心中)[^。\n]{0,20}(?:重新)?燃起了?(?:不灭的)?希望(?:之火)?[^。\n]{0,30}[。！？!?]?\s*$/gu],
+  },
+]
+
+const SEVERITY_WEIGHT: Readonly<Record<NoAiSeverity, number>> = { high: 3, medium: 2, low: 1 }
+
+/**
+ * Scan exact prose with deterministic, source-offset-preserving rules.
+ * @param text - exact Asset model text or materialized ChangeSet candidate.
+ * @param options - provider-owned sample and result bounds.
+ * @returns a stable JSON-safe report; insufficient samples remain explicit.
+ */
+export function scanNoAi(text: string, options: NoAiScanOptions): NoAiScanReport {
+  validateOptions(options)
+  let characterCount = 0
+  for (const character of text) {
+    if (!/\s/u.test(character)) characterCount += 1
+  }
+  const sampleLevel = characterCount < options.minCharacters
+    ? 'insufficient' as const
+    : characterCount < options.strongSampleCharacters ? 'usable' as const : 'strong' as const
+  const findings: NoAiFinding[] = []
+  const seen = new Set<string>()
+  for (const rule of RULES) {
+    for (const pattern of rule.patterns) {
+      pattern.lastIndex = 0
+      for (const match of text.matchAll(pattern)) {
+        const start = match.index
+        const evidence = match[0]
+        if (evidence.length === 0) continue
+        const key = `${rule.id}:${start}:${evidence.length}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        findings.push({
+          ruleId: rule.id,
+          label: rule.label,
+          severity: rule.severity,
+          startUtf16: start,
+          endUtf16: start + evidence.length,
+          evidence,
+          advice: rule.advice,
+        })
+      }
+    }
+  }
+  findings.sort((left, right) => SEVERITY_WEIGHT[right.severity] - SEVERITY_WEIGHT[left.severity]
+    || left.startUtf16 - right.startUtf16 || left.ruleId.localeCompare(right.ruleId))
+  const counts = findings.reduce<Record<NoAiSeverity, number>>((result, finding) => {
+    result[finding.severity] += 1
+    return result
+  }, { high: 0, medium: 0, low: 0 })
+  const weighted = findings.reduce((total, finding) => total + SEVERITY_WEIGHT[finding.severity], 0)
+  const densityBase = Math.max(1, characterCount / 1000)
+  const riskScore = sampleLevel === 'insufficient' ? 0 : Math.min(100, Math.round(weighted * 8 / densityBase))
+  return {
+    version: 1,
+    characterCount,
+    sampleLevel,
+    riskScore,
+    counts,
+    findings: findings.slice(0, options.maxFindings),
+  }
+}
+
+function validateOptions(options: NoAiScanOptions): void {
+  for (const [name, value] of Object.entries(options)) {
+    if (!Number.isSafeInteger(value) || value < 1) throw new TypeError(`novel-analysis: ${name} must be a positive integer`)
+  }
+  if (options.strongSampleCharacters < options.minCharacters) {
+    throw new TypeError('novel-analysis: strongSampleCharacters must not be smaller than minCharacters')
+  }
+}

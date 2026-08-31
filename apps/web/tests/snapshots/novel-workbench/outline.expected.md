@@ -1,0 +1,45 @@
+- main:
+  - separator "Resize conversation and workbench"
+  - complementary "Novel Asset sidebar":
+    - strong: Novel Workbench
+    - strong: 白港
+    - navigation:
+      - group:
+        - text: ›
+        - strong: Book
+        - text: 3 items
+        - button "Book Brief Brief"
+        - button "White Harbor Style Style"
+        - button "Story State Story State"
+      - group:
+        - text: ›
+        - strong: Manuscript
+        - text: 1 chapters
+        - button "＋ New chapter"
+        - button "雨夜归人，Drag to reorder chapters": 雨夜归人
+      - group:
+        - text: ›
+        - strong: Outline
+        - text: 1 items
+        - button "＋ New outline"
+        - button "White Harbor Story Outline"
+        - button "＋ New volume outline"
+  - button "Collapse Asset sidebar": ‹
+  - navigation "Current novel location":
+    - strong: 白港
+    - text: White Harbor Story Outline
+    - combobox "Manuscript versions":
+      - option "Current · 8/27/2026, {{clock}} · Author save" [selected]
+      - option "8/27/2026, {{clock}} · Initial import"
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Reference selection to Agent"
+  - region "White Harbor Story Outline · Freeform outline":
+    - text: Name
+    - textbox "Name": White Harbor Story Outline
+    - button "Read" [pressed]
+    - textbox "Freeform planning content":
+      - /placeholder: Write freely. Use headings, lists, tables, or any method that fits this book…
+      - text: "# Act One Opening: Open with hunger, rain, and an uncertain arrival."
+  - button "Change reader skin"
+  - button "Typeface and size": A

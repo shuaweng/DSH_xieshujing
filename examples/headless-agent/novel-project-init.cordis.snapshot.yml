@@ -1,0 +1,56 @@
+# Keyless real-Loader proof for the Novel Project initialization tool surface.
+
+- id: persistence
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: './.sessions'
+    compression: none
+
+- id: novel-init-mock
+  name: './tests/fixtures/novel-project-init-mock-llm.ts'
+
+- id: agent
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    agents:
+      - id: novel-project-init-snapshot
+        provider: novel-project-init-mock
+        model: novel-project-init-mock
+        cwd: !!js process.cwd()
+    workspaceContext: false
+    dshHome: './.dsh-home'
+    toolBash: false
+    toolJobs: false
+    goals: false
+    skills:
+      enabled: false
+    persona: 'Initialize a Novel Project only with the dedicated Novel tool.'
+
+- id: fs
+  name: '@deepseek-ai/dsh-fs-local'
+  config:
+    cwd: !!js process.cwd()
+
+- id: sandbox-policy
+  name: '@deepseek-ai/dsh-sandbox-policy'
+  config:
+    mode: workspace-write
+    workspaceRoot: !!js process.cwd()
+
+- id: novel-asset-types
+  name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
+
+- id: novel-asset-outline
+  name: '@deepseek-ai/dsh-experimental-novel-asset-outline'
+
+- id: novel-repository
+  name: '@deepseek-ai/dsh-experimental-novel-repository-local'
+
+- id: novel-context
+  name: '@deepseek-ai/dsh-experimental-novel-context'
+
+- id: novel-analysis-stub
+  name: './tests/fixtures/novel-analysis-stub.ts'
+
+- id: tool-novel
+  name: '@deepseek-ai/dsh-experimental-tool-novel'

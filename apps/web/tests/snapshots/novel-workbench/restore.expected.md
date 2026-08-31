@@ -1,0 +1,63 @@
+- main:
+  - separator "Resize conversation and workbench"
+  - complementary "Novel Asset sidebar":
+    - strong: Novel Workbench
+    - strong: 白港
+    - navigation:
+      - group:
+        - text: ›
+        - strong: Book
+        - text: 3 items
+        - button "Book Brief Brief"
+        - button "Book Style Style"
+        - button "Story State Story State"
+      - group:
+        - text: ›
+        - strong: Manuscript
+        - text: 1 chapters
+        - button "＋ New chapter"
+        - button "第一章，Drag to reorder chapters": 第一章 12 characters
+      - group:
+        - text: ›
+        - strong: Outline
+        - text: 1 items
+        - button "＋ New outline"
+        - button "Main Outline"
+        - button "＋ New volume outline"
+  - button "Collapse Asset sidebar": ‹
+  - navigation "Current novel location":
+    - strong: 白港
+    - text: 第一章
+    - combobox "Manuscript versions":
+      - option "Current · 8/27/2026, {{clock}} · Accepted Agent change"
+      - option "8/27/2026, {{clock}} · Initial import" [selected]
+    - text: Historical Revision · read-only
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Restore this version"
+  - button "Mark final"
+  - button "Reference selection to Agent" [disabled]
+  - article:
+    - textbox "Chapter title": 第一章
+    - textbox "第一章 · Chapter manuscript": 她没有再解释。雨还在下。
+  - dialog "Restore historical version":
+    - paragraph: Manuscript versions
+    - heading "Restore historical version" [level=2]
+    - button "Dismiss": ×
+    - paragraph: Compare the current content with the version to restore. Confirming creates a new current Revision without deleting history.
+    - article:
+      - strong: Current version before restore
+      - textbox "Current version before restore · 第一章": 她沉默片刻没有再解释。雨还在下。
+    - article:
+      - strong: Historical version to restore
+      - textbox "Historical version to restore · 第一章": 她没有再解释。雨还在下。
+    - text: Restore never moves history backward or deletes a Revision.
+    - button "Cancel"
+    - button "Confirm restore"
+  - text: Chapter characters：
+  - strong: "12"
+  - button "Chapter plan"
+  - button "Chapter review"
+  - button "NOAI scan": NOAI
+  - button "Change reader skin"
+  - button "Typeface and size": A

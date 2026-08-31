@@ -1,0 +1,44 @@
+.toggle {
+  display: inline-grid;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ds-color-text-secondary);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.toggle:hover {
+  color: var(--ds-color-text-primary);
+  background: var(--ds-color-bg-tertiary);
+  transform: translateY(-1px);
+}
+
+.toggle[data-open] {
+  border-color: color-mix(in srgb, #687d63 30%, transparent);
+  color: #50684c;
+  background: color-mix(in srgb, #78906f 14%, var(--ds-color-bg-primary));
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--ds-color-border-focus, #4c84f4);
+  outline-offset: 2px;
+}
+
+.mark {
+  display: block;
+  width: 20px;
+  height: 20px;
+  background: url('./assets/brand/xieshujing-mark.png') center / contain no-repeat;
+  transition: filter 140ms ease, opacity 140ms ease;
+}
+
+:global(body[data-ds-dark-theme]) .mark {
+  filter: brightness(0) invert(1);
+  opacity: .92;
+}

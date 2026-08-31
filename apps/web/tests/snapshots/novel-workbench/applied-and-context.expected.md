@@ -1,0 +1,58 @@
+- main:
+  - separator "Resize conversation and workbench"
+  - complementary "Novel Asset sidebar":
+    - strong: Novel Workbench
+    - strong: 白港
+    - navigation:
+      - group:
+        - text: ›
+        - strong: Book
+        - text: 3 items
+        - button "Book Brief Brief"
+        - button "Book Style Style"
+        - button "Story State Story State"
+      - group:
+        - text: ›
+        - strong: Manuscript
+        - text: 1 chapters
+        - button "＋ New chapter"
+        - button "雨夜归人，Drag to reorder chapters": 雨夜归人 12 characters
+      - group:
+        - text: ›
+        - strong: Outline
+        - text: 1 items
+        - button "＋ New outline"
+        - button "Main Outline"
+        - button "＋ New volume outline"
+  - button "Collapse Asset sidebar": ‹
+  - navigation "Current novel location":
+    - strong: 白港
+    - text: 雨夜归人
+    - combobox "Manuscript versions":
+      - option "Current · 8/27/2026, {{clock}} · Author save" [selected]
+      - option "8/27/2026, {{clock}} · Restored historical version"
+      - option "8/27/2026, {{clock}} · Accepted Agent change"
+      - option "8/27/2026, {{clock}} · Initial import"
+  - text: Saved
+  - button "Save" [disabled]
+  - button "Mark final"
+  - button "Reference selection to Agent"
+  - article:
+    - textbox "Chapter title": 雨夜归人
+    - textbox "雨夜归人 · Chapter manuscript": 她只看着窗外。雨还在下。
+  - text: Chapter characters：
+  - strong: "12"
+  - dialog "Typeface and size":
+    - strong: Typeface and size
+    - group "Typeface":
+      - button "Song serif"
+      - button "Kai serif" [pressed]
+      - button "Sans serif"
+    - button "Decrease font size": −
+    - status: 19px
+    - button "Increase font size": ＋
+  - button "Chapter plan"
+  - button "Chapter review"
+  - button "NOAI scan": NOAI
+  - button "Change reader skin"
+  - button "Typeface and size" [expanded]: A

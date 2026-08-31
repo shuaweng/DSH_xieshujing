@@ -1,0 +1,313 @@
+/** Browser-safe Novel Repository Remote values. */
+
+import type {
+  AssetId,
+  ChangeSetId,
+  ProjectId,
+  PreferenceCandidateId,
+  RevisionId,
+  SelectionRefId,
+  StoryStateCandidateId,
+} from '@deepseek-ai/dsh-experimental-novel-repository/brand'
+/** Closed JSON wire value; exact Asset schemas remain owned by the two registries. */
+export type NovelWireValue = null | boolean | number | string | NovelWireValue[] | { [key: string]: NovelWireValue }
+
+/** Read-only project discovery result with no filesystem capability identity. */
+export interface NovelProjectDescriptor {
+  /** Project format version. */
+  readonly schema: 1
+  /** Stable manifest-owned project identity. */
+  readonly id: ProjectId
+  /** Author-visible project title. */
+  readonly title: string
+  /** Optional author-visible synopsis from `novel.yaml`. */
+  readonly description?: string
+  /** Host display path of the canonical project root. */
+  readonly rootDisplayPath: string
+  /** Host display path of the canonical `novel.yaml`. */
+  readonly manifestDisplayPath: string
+  /** Host display paths of canonical content roots, keyed by manifest name. */
+  readonly contentRootDisplayPaths: Readonly<Record<string, string>>
+}
+
+/** Browser request to activate the addressed Session working directory. */
+export interface InitializeNovelProjectRequest {
+  /** Author-visible book title; the Host owns generated identity and layout. */
+  readonly title: string
+  /** Optional concise synopsis stored in `novel.yaml`. */
+  readonly description?: string
+}
+
+/** One author-visible Skill contributed by the current Novel Preset. */
+export interface NovelSkillDescriptor {
+  readonly name: string
+  readonly description: string
+  readonly whenToUse?: string
+  readonly enabled: boolean
+}
+
+/** Complete Novel Preset Skill catalog and current-project activation state. */
+export interface NovelSkillSettingsDescriptor {
+  readonly version: 1
+  readonly skills: readonly NovelSkillDescriptor[]
+}
+
+/** Complete replacement of disabled Skills for the addressed Novel Project. */
+export interface ReplaceNovelSkillSettingsRequest {
+  readonly disabled: readonly string[]
+}
+
+/** One current browser navigation row. */
+export interface NovelAssetDescriptor {
+  readonly id: AssetId
+  readonly projectId: ProjectId
+  readonly type: string
+  readonly parentId?: AssetId
+  readonly projectRelativePath: string
+  readonly revisionId: RevisionId
+  /** Canonical `sha256:` content hash validated by the Host repository. */
+  readonly contentHash: string
+  readonly title: string
+}
+
+/** Browser and Agent-facing bounded Asset discovery query. */
+export interface SearchNovelAssetsRequest {
+  readonly query: string
+  readonly types?: readonly string[]
+  readonly limit?: number
+}
+
+/** Exact current Revision discovered by the Host repository. */
+export interface NovelAssetSearchResult extends NovelAssetDescriptor {
+  readonly excerpt: string
+  readonly score: number
+}
+
+/** Active-Asset identity whose current Revision is resolved when a prompt is compiled. */
+export interface NovelContextFollowItemDescriptor {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly label: string
+  readonly mode: 'follow'
+  readonly origin: 'active-asset'
+}
+
+/** One exact Revision retained until the author removes it. */
+export interface NovelContextPinnedItemDescriptor {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly label: string
+  readonly selector?: NovelWireValue
+  readonly mode: 'pinned'
+  readonly origin: 'selection' | 'search'
+}
+
+/** Whole current workset submitted through one guarded Remote mutation. */
+export interface NovelContextWorksetDescriptor {
+  readonly version: 2
+  readonly projectId: ProjectId
+  readonly items: readonly (NovelContextFollowItemDescriptor | NovelContextPinnedItemDescriptor)[]
+  readonly surface?: {
+    readonly kind: 'library-home'
+    readonly label: string
+    readonly bookCount: number
+    readonly manuscriptCharacters: number
+    readonly todayCharacterDelta: number
+    readonly books: readonly {
+      readonly title: string
+      readonly description?: string
+      readonly chapterCount: number
+      readonly manuscriptCharacters: number
+      readonly continueTitle?: string
+    }[]
+    readonly omittedBooks: number
+  }
+}
+
+/** Browser request to create one new typed Asset at a provider-owned path. */
+export interface CreateNovelAssetRequest {
+  readonly type: string
+  readonly title: string
+  readonly parentId?: AssetId
+  readonly content: NovelWireValue
+}
+
+/** Browser request to persist the complete order of one current Asset type. */
+export interface ReorderNovelAssetsRequest {
+  readonly type: string
+  readonly orderedAssetIds: readonly AssetId[]
+}
+
+/** Guarded browser request to remove one current Asset. */
+export interface DeleteNovelAssetRequest {
+  readonly assetId: AssetId
+  readonly baseRevisionId: RevisionId
+}
+
+/** Browser-safe current catalog after logical deletion. */
+export interface DeleteNovelAssetDescriptor {
+  readonly deletedAssetIds: readonly AssetId[]
+  readonly assets: readonly NovelAssetDescriptor[]
+}
+
+/** Browser-safe typed Asset content bound to one exact Revision. */
+export interface NovelAssetDocument extends NovelAssetDescriptor {
+  readonly content: NovelWireValue
+}
+
+/** Metadata-only browser projection of one immutable retained Revision. */
+export interface NovelAssetRevisionDescriptor {
+  readonly id: RevisionId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly parentRevisionId?: RevisionId
+  readonly contentHash: string
+  readonly origin: 'initial-scan' | 'user-edit' | 'agent-apply' | 'external-edit'
+  readonly createdAt: string
+  readonly restoredFromRevisionId?: RevisionId
+  readonly restoredBySessionId?: string
+}
+
+/** Guarded browser request to restore one historical Revision as a new head. */
+export interface RestoreNovelAssetRequest {
+  readonly assetId: AssetId
+  readonly baseRevisionId: RevisionId
+  readonly sourceRevisionId: RevisionId
+}
+
+/** Browser-safe committed restore and its bounded follow-up effects. */
+export interface RestoreNovelAssetDescriptor {
+  readonly document: NovelAssetDocument
+  readonly conflictedChangeSetCount: number
+  readonly storyStateReviewRecommended: boolean
+}
+
+/** One generated analysis result bound to the exact Revision on screen. */
+export interface NovelAnalysisReportDescriptor {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly kind: 'chapter-review' | 'noai-scan'
+  readonly analyzerVersion: string
+  readonly generatedAt: string
+  readonly data: NovelWireValue
+  readonly sourceSessionId?: string
+  readonly workerSessionId?: string
+}
+
+/** Browser-safe explicit finalization lineage for one exact chapter Revision. */
+export interface NovelRevisionFinalizationDescriptor {
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly finalizedAt: string
+  readonly finalizedBySessionId: string
+  readonly sourceRevisionId?: RevisionId
+  readonly sourceChangeSetId?: ChangeSetId
+  readonly sourceSessionId?: string
+}
+
+export interface NovelPreferenceEvidenceDescriptor {
+  readonly before: string
+  readonly after: string
+  readonly inference: string
+}
+
+/** Browser-safe, inert preference candidate awaiting an explicit user decision. */
+export interface NovelPreferenceCandidateDescriptor {
+  readonly id: PreferenceCandidateId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly sourceRevisionId: RevisionId
+  readonly finalRevisionId: RevisionId
+  readonly targetStyleAssetId: AssetId
+  readonly targetStyleRevisionId: RevisionId
+  readonly generatedAt: string
+  readonly summary: string
+  readonly guidanceMarkdown: string
+  readonly evidence: readonly NovelPreferenceEvidenceDescriptor[]
+  readonly status: 'pending' | 'accepted' | 'rejected'
+  readonly resultRevisionId?: RevisionId
+}
+
+export interface NovelStoryStateEvidenceDescriptor {
+  readonly quote: string
+  readonly update: string
+}
+
+/** Browser-safe inert Story State replacement awaiting an explicit decision. */
+export interface NovelStoryStateCandidateDescriptor {
+  readonly id: StoryStateCandidateId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly finalRevisionId: RevisionId
+  readonly targetStoryStateAssetId: AssetId
+  readonly targetStoryStateRevisionId: RevisionId
+  readonly generatedAt: string
+  readonly summary: string
+  readonly replacementMarkdown: string
+  readonly evidence: readonly NovelStoryStateEvidenceDescriptor[]
+  readonly status: 'pending' | 'accepted' | 'rejected'
+  readonly resultRevisionId?: RevisionId
+}
+
+export interface FinalizeNovelChapterDescriptor {
+  readonly finalization: NovelRevisionFinalizationDescriptor
+  readonly candidate?: NovelPreferenceCandidateDescriptor
+  readonly noCandidateReason?: 'no-agent-source' | 'no-author-diff' | 'missing-style-profile'
+  readonly storyCandidate?: NovelStoryStateCandidateDescriptor
+  readonly noStoryCandidateReason?: 'missing-story-state'
+  readonly storyCandidateError?: 'extraction-failed'
+}
+
+export interface DecideNovelPreferenceDescriptor {
+  readonly candidate: NovelPreferenceCandidateDescriptor
+  readonly changeSet?: NovelChangeSetDescriptor
+}
+
+export interface DecideNovelStoryStateDescriptor {
+  readonly candidate: NovelStoryStateCandidateDescriptor
+  readonly changeSet?: NovelChangeSetDescriptor
+}
+
+/** Guarded browser save of one complete typed Asset content value. */
+export interface SaveNovelAssetRequest {
+  readonly assetId: AssetId
+  readonly baseRevisionId: RevisionId
+  readonly title?: string
+  readonly content: NovelWireValue
+}
+
+/** Exact browser range to freeze after any required save completes. */
+export interface CaptureNovelSelectionRequest {
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly selector: NovelWireValue
+}
+
+/** Frozen SelectionRef returned directly to the browser. */
+export interface NovelSelectionDescriptor {
+  readonly version: 1
+  readonly id: SelectionRefId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly revisionId: RevisionId
+  readonly selector: NovelWireValue
+  readonly preview?: string
+  /** Canonical mention inserted into the Agent composer after the commit barrier. */
+  readonly mention: string
+}
+
+/** Browser-safe review projection of one durable ChangeSet. */
+export interface NovelChangeSetDescriptor {
+  readonly id: ChangeSetId
+  readonly projectId: ProjectId
+  readonly assetId: AssetId
+  readonly assetType: string
+  readonly baseRevisionId: RevisionId
+  readonly summary: string
+  readonly status: 'proposed' | 'applying' | 'applied' | 'rejected' | 'conflicted'
+  readonly resultRevisionId?: RevisionId
+  readonly operations: readonly NovelWireValue[]
+}

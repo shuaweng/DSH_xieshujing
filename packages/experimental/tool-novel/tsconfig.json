@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
+  "include": ["src"],
+  "references": [
+    { "path": "../../../vendor/cosmokit" },
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../core/tools" },
+    { "path": "../../core/system-prompt" },
+    { "path": "../../sandbox/sandbox-policy" },
+    { "path": "../../interaction/user-questions" },
+    { "path": "../novel-repository" },
+    { "path": "../novel-context" },
+    { "path": "../novel-analysis" },
+    { "path": "../../runtime-diagnostics/invariants" }
+  ]
+}

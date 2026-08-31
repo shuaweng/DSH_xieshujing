@@ -1,0 +1,43 @@
+# Neutral Profile overlay: the host's default Preset remains untouched; Novel Studio adds a
+# selector-routed workbench surface, a safe proposal-only preset, and Novel services.
+# The Preset root is an effect-scoped runtime contribution; this neutral bundle
+# never replaces the deployment's default Preset.
+# Novel rows are an overlay appended after the Web bundle. The client-modules
+# service snapshots Loader entries when it activates, so make both the roster
+# builder and the Web readiness signal wait for the final Novel Studio marker.
+- id: web-runtime
+  inject: [webStartup, novelStudioPaths]
+
+- id: modules
+  inject: [novelStudioPaths]
+
+- insert:
+    - id: novel-asset-types
+      name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types'
+
+    - id: novel-asset-outline
+      name: '@deepseek-ai/dsh-experimental-novel-asset-outline'
+
+    - id: novel-repository-local
+      name: '@deepseek-ai/dsh-experimental-novel-repository-local'
+
+    - id: novel-context
+      name: '@deepseek-ai/dsh-experimental-novel-context'
+
+    - id: novel-analysis
+      name: '@deepseek-ai/dsh-experimental-novel-analysis'
+
+    - id: novel-repository-remote
+      name: '@deepseek-ai/dsh-experimental-novel-repository-remote'
+
+    - id: novel-repository-client
+      name: '@deepseek-ai/dsh-experimental-novel-repository-client'
+
+    - id: novel-workbench
+      name: '@deepseek-ai/dsh-experimental-novel-workbench'
+
+    # Final marker: modules and web-runtime wait for this provider, so every
+    # Novel client row and the package Preset contribution exist before the
+    # browser roster is first composed.
+    - id: novel-studio-paths
+      name: '@deepseek-ai/dsh-experimental-novel-studio'

@@ -1,0 +1,38 @@
+# Keyless real-Loader proof for progressive Novel Workbench Skill loading.
+
+- id: persistence
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: './.sessions'
+    compression: none
+
+- id: novel-skill-mock
+  name: './tests/fixtures/novel-skill-mock-llm.ts'
+
+- id: agent
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    agents: []
+    workspaceContext: false
+    dshHome: './.dsh-home'
+    toolBash: false
+    toolJobs: false
+    goals: false
+    skills:
+      enabled: false
+    persona: 'Use the exact Novel Workbench Skill that matches the task before answering.'
+
+- id: skills
+  name: '@deepseek-ai/dsh-skill'
+
+- id: agent-presets
+  name: '@deepseek-ai/dsh-agent-presets'
+  config:
+    default: novel-skill-preset
+    includeUserRoot: false
+    roots:
+      - path: !!js process.env.DSH_NOVEL_SKILL_PRESET_ROOT
+        trust: system
+
+- id: preset-agent
+  name: './tests/fixtures/novel-skill-preset-agent.ts'

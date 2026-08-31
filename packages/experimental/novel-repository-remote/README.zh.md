@@ -1,0 +1,78 @@
+---
+description: "面向 Novel Project、Asset、分析、上下文工作集与项目 Skill 设置的类型化 Host Remote 访问层。"
+kind: "package-reference"
+---
+
+# @deepseek-ai/dsh-experimental-novel-repository-remote
+
+[English](README.md) | 中文
+
+## 概述
+
+这个实验性 Host Consumer 提供 Novel Project 发现，以及有边界的类型化 Asset 目录、检索、创建、读取、版本保护保存、历史恢复、选区、上下文工作集和审阅方法，同时避免把传输行为加入提供方无关的 Repository Service Definition。
+
+## 目录
+
+- [行为](#behavior)
+- [模型体验](#model-experience)
+- [已知限制与暂缓事项](#known-limitations-and-deferred-work)
+- [开发备注](#dev-note)
+
+-----
+
+<a id="behavior"></a>
+## 行为
+
+- `NovelRepositoryRemote` 使用 Host service key `novelRepositoryRemote` 注册，消费 `ctx.novelRepository`、`ctx.fs` 与 `ctx.sandboxPolicy`，并导出 wire namespace `novelRepository`。
+- `novelRepository/discover` 解析被寻址 Agent Session 的工作目录，将校验委托给当前 Novel Repository 提供方，并且只在提供方找不到 `novel.yaml` 时返回 `undefined`。
+- `novelRepository/reorderAssets` 校验并替换某个精确 Asset 类型完整的稳定 ID 顺序，然后返回权威的已排序浏览器目录。
+- `novelRepository/initialize` 使用同一个精确 Session 根目录与 sandbox policy 初始化尚不存在的项目。它会原样返回已发现项目，并把只创建冲突校验委托给 Repository 提供方。
+- `NovelProjectDescriptor` 包含稳定项目 id、schema、标题与显示路径。它不会向浏览器暴露文件系统 target key 或可变的提供方对象。
+- `assets`、`createAsset`、`asset` 和 `saveAsset` 只投影浏览器安全的 id、语义父级 id、元数据和无损 JSON Asset 内容。浏览器创建只提交类型、标题、父级与内容，身份和路径由 Repository 拥有。`captureSelection` 携带类型定义的 JSON selector，并返回包含规范 `dsh-novel:` 引用的可读 Markdown mention。
+- `search` 把有边界的词法发现委托给当前 Repository 提供方，并返回浏览器安全摘要与精确当前 Revision 身份。结果保持为发现数据，直到用户固定它或发送显式引用。
+- `replaceContextWorkset` 把一份完整的第二版跟随/固定工作集委托给可选 Novel context 能力。跟随项携带活动 Asset 身份，并在编译上下文时解析当前已保存 head；固定项保留一个精确的已保留 Revision。Context Consumer 校验整值并记录 Session 事件；Remote 不拥有 fold 或模型注入。
+- Asset 类型、内容、selector 和 operation 通过 Remote 以有边界的 JSON 信封传输。Host 与 Client 注册表拥有其精确语义，因此增加类型不需要扩展生成的 Remote 方法清单；不兼容或非 JSON 的值会显式失败。
+- `changeSet`、`applyChangeSet` 和 `rejectChangeSet` 暴露浏览器审阅。应用和拒绝把被寻址 Agent Session id 作为显式授权，并返回持久终态或冲突状态。
+- `revisions` 返回不可变历史摘要，`asset` 可以打开一个已保留 Revision。`restoreAsset` 同时绑定当前 base 与选定源 Revision，从被寻址 Agent Session 派生恢复权威，并返回新的 head、转为冲突的提案数量和 Story State 复查建议。`analysisReports`、`scanNoAi` 和 `reviewChapter` 都是精确 Revision 端点；确定性扫描与 Subagent 编排归 `ctx.novelAnalysis` 所有，而不是传输层。
+- `revisionFinalizations` 与 `preferenceCandidates` 暴露浏览器安全的精确 Revision 历史；`finalizeChapter`、`acceptPreference` 与 `rejectPreference` 把显式用户流程委托给 `ctx.novelAnalysis`，任何模型工具都没有定稿权限。
+- 资产目录、创建、当前 head 读取、保存与应用都会解析被寻址 Agent Session 的 sandbox policy，并把它传入 Repository 协调流程。这样外部 Session 工作区可写，同时不会放宽部署 fallback 根目录。
+- `responseMaxBytes` 默认是 8 MiB，对所有非发现 JSON 完整响应设置边界；超出预算时明确失败，不截断也不静默漏掉数据。
+- 现有 Gateway 身份策略负责解析被寻址的 Agent；本包不增加授权机制。`descriptorMaxBytes` 限制以 UTF-8 编码的完整 descriptor JSON，默认值为 256 KiB，且不能超过运行时最大字符串长度。
+- 生成的 `./remote` contribution 对浏览器安全，由独立的 `@deepseek-ai/dsh-experimental-novel-repository-client` 包负责挂载；这个 Host 包不会进入 Client 编译 aggregate。
+- Host 服务拥有独立 Cordis key，因此安装传输层不会替换 `novelRepository` 提供方。不同的 wire namespace 则保留面向浏览器的 `ctx.remote.novelRepository` API。
+
+<a id="model-experience"></a>
+## 模型体验
+
+### 项目发现 Remote
+
+#### 模型看到的内容
+
+`novelRepository/discover` 的任何内容都不会加入模型上下文。此端点服务于浏览器插件，既不注册提示词 contribution，也不注册面向模型的工具。
+
+#### Token 影响
+
+Remote descriptor 与浏览器结果不会增加提示词或工具 schema token。
+
+#### KV Cache 影响
+
+本包不会改变消息顺序或可复用的 KV-cache 前缀。
+
+## 已知限制与暂缓事项
+<a id="known-limitations-and-deferred-work"></a>
+
+- **没有提案端点**：模型提案通过独立 Novel 工具进入；浏览器 Remote 只能读取、接受或拒绝已有 ChangeSet。
+- **没有工作台 UI**：本包发布类型化浏览器 API，但不渲染资产浏览器、编辑器、Context Tray 或审阅卡片。
+- **不拥有 Session Log**：独立 Novel context Consumer 拥有持久模型上下文；浏览器 discovery 响应本身不会进入 Session Log。
+- **仅分析传输**：Remote 暴露报告命令，但不解释报告 payload、不运行模型，也不应用任何建议修改。
+- **需要显式组合**：Host 服务不属于默认 Web Profile；Novel Studio 组合必须将其与 Repository 提供方及独立 Client adapter 一起安装。
+
+<a id="dev-note"></a>
+### 开发备注
+
+<details>
+<summary>维护者工作上下文——点击展开</summary>
+
+无。
+
+</details>
