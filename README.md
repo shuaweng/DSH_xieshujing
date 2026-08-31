@@ -20,7 +20,7 @@
 ## 要求
 
 - Node.js `^22.19.0 || >=24.0.0`
-- DeepSeek Harness `0.1.1-rc.2` 版本家族
+- DeepSeek Harness `0.1.2-alpha.2` 版本家族
 - 已可正常启动的 DSH Web Profile
 
 写书鲸目前跟随 DSH 预发布版本。升级 DSH 前请先查看 [兼容矩阵](COMPATIBILITY.md)。
@@ -31,7 +31,7 @@
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.1-rc.2
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.2
 dsh --profile web
 ```
 
@@ -43,7 +43,7 @@ dsh --profile web
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.1-rc.2
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.2
 ```
 
 卸载：

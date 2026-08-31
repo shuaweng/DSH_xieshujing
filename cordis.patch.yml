@@ -1,7 +1,11 @@
 # Neutral Profile overlay: the host's default Preset remains untouched; Novel Studio adds a
 # selector-routed workbench surface, a safe proposal-only preset, and Novel services.
-# The Preset root is an effect-scoped runtime contribution; this neutral bundle
-# never replaces the deployment's default Preset.
+# The Preset root is contributed through the shipped agent-presets config
+# surface. `baseUrl` belongs to the active Loader tree, so resolve the package
+# itself first instead of assuming a monorepo-relative directory. The public
+# packager rewrites the source package name below to @xieshujing/dsh-plugin.
+# User settings still decide the selected default; this neutral layer merely
+# keeps the shipped Web default when no setting exists.
 # Novel rows are an overlay appended after the Web bundle. The client-modules
 # service snapshots Loader entries when it activates, so make both the roster
 # builder and the Web readiness signal wait for the final Novel Studio marker.
@@ -10,6 +14,22 @@
 
 - id: modules
   inject: [novelStudioPaths]
+
+- id: agent-presets
+  config:
+    default: standard
+    includeShippedRoot: true
+    includeUserRoot: true
+    roots:
+      - path: !!js >-
+          process.getBuiltinModule('node:path').join(
+            process.getBuiltinModule('node:path').dirname(
+              process.getBuiltinModule('node:module').createRequire(baseUrl)
+                .resolve('@xieshujing/dsh-plugin/package.json')
+            ),
+            'presets'
+          )
+        trust: system
 
 - insert:
     - id: novel-asset-types
