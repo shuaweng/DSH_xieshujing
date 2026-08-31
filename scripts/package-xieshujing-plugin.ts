@@ -344,12 +344,18 @@ export function stagePluginPackage(root: string, directory: string): StagedPlugi
   if (sourceManifest.dsh !== undefined) manifest.dsh = sourceManifest.dsh
   writeManifest(join(directory, 'package.json'), manifest)
 
-  const patchPath = join(directory, sourceManifest.dsh?.bundle?.patch ?? '')
-  const patch = readFileSync(patchPath, 'utf8')
-  if (!patch.includes(SOURCE_PACKAGE_NAME)) {
-    throw new Error(`package-xieshujing-plugin: facade patch does not reference ${SOURCE_PACKAGE_NAME}`)
+  const patchNames = [
+    sourceManifest.dsh?.bundle?.patch,
+    'dedicated-profile.patch.yml',
+  ].filter((name): name is string => name !== undefined)
+  for (const patchName of patchNames) {
+    const patchPath = join(directory, patchName)
+    const patch = readFileSync(patchPath, 'utf8')
+    if (!patch.includes(SOURCE_PACKAGE_NAME)) {
+      throw new Error(`package-xieshujing-plugin: ${patchName} does not reference ${SOURCE_PACKAGE_NAME}`)
+    }
+    writeFileSync(patchPath, patch.replaceAll(SOURCE_PACKAGE_NAME, PRODUCT_NAME))
   }
-  writeFileSync(patchPath, patch.replaceAll(SOURCE_PACKAGE_NAME, PRODUCT_NAME))
 
   copyDistributionFiles(root, directory, sourceManifest.version)
 

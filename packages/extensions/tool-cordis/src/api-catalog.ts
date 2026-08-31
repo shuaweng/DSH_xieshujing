@@ -1319,7 +1319,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorksetV2>',
         description: 'Replace the complete non-prose context workset for one live Session.',
-        parameters: [{ name: 'agent', description: 'owning Agent whose Session records the whole value.' }, { name: 'workset', description: 'live follow identity and exact pinned references selected by the browser.' }, { name: 'signal', description: 'optional cancellation before validation and append.' }],
+        parameters: [{ name: 'agent', description: 'owning Agent whose live Session selects the value.' }, { name: 'workset', description: 'live follow identity and exact pinned references selected by the browser.' }, { name: 'signal', description: 'optional cancellation before validation and retention.' }],
         returns: 'the detached normalized value now in force.',
       },
       {
@@ -1592,9 +1592,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: '@Remote(\'replaceContextWorkset\') async replaceContextWorkset( agent: Agent, workset: NovelContextWorksetDescriptor, signal: AbortSignal, ): Promise<NovelContextWorksetDescriptor>',
-        description: 'Replace the Session-owned non-prose Novel context workset.',
-        parameters: [{ name: 'agent', description: 'Addressed Agent whose Session owns the workset event.' }, { name: 'workset', description: 'Complete next follow-and-pinned reference value.' }, { name: 'signal', description: 'Caller cancellation while validating and appending the update.' }],
-        returns: 'The validated whole workset retained by the Session.',
+        description: 'Replace the addressed Agent\'s live non-prose Novel context workset.',
+        parameters: [{ name: 'agent', description: 'Addressed Agent whose live workset is replaced.' }, { name: 'workset', description: 'Complete next follow-and-pinned reference value.' }, { name: 'signal', description: 'Caller cancellation while validating the update.' }],
+        returns: 'The validated whole workset retained for the active Agent.',
       },
       {
         signature: '@Remote(\'createAsset\') async createAsset( agent: Agent, request: CreateNovelAssetRequest, signal: AbortSignal, ): Promise<NovelAssetDocument>',

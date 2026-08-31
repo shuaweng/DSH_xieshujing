@@ -56,7 +56,6 @@
     "@deepseek-ai/dsh-tool-skill": "workspace:^"
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-agent-presets": "workspace:^",
     "@deepseek-ai/dsh-invariants": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },

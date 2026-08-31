@@ -1,3 +1,7 @@
+:global([data-novel-workbench-shell]) {
+  grid-template-columns: var(--novel-shell-sidebar-track, 0px) var(--novel-shell-conversation-track, 410px) 0px !important;
+}
+
 .frame {
   --novel-workspace-bg: #eee9e0;
   --novel-paper-bg: #fffdfa;
@@ -12,7 +16,7 @@
   --novel-accent: #748da0;
   --novel-accent-contrast: #fff;
   position: absolute;
-  inset: 0 0 0 var(--novel-agent-width, 410px);
+  inset: 0 0 0 calc(var(--novel-shell-sidebar-track, 0px) + var(--novel-shell-conversation-track, 410px));
   display: grid;
   width: auto;
   height: auto;

@@ -342,11 +342,11 @@ export class NovelRepositoryRemote extends TypertRemoteService {
   }
 
   /**
-   * Replace the Session-owned non-prose Novel context workset.
-   * @param agent Addressed Agent whose Session owns the workset event.
+   * Replace the addressed Agent's live non-prose Novel context workset.
+   * @param agent Addressed Agent whose live workset is replaced.
    * @param workset Complete next follow-and-pinned reference value.
-   * @param signal Caller cancellation while validating and appending the update.
-   * @returns The validated whole workset retained by the Session.
+   * @param signal Caller cancellation while validating the update.
+   * @returns The validated whole workset retained for the active Agent.
    */
   @Remote('replaceContextWorkset')
   async replaceContextWorkset(

@@ -138,9 +138,9 @@ Exact-read Consumer that freezes canonical references before a model step.
 ```ts cordis-catalog
 /**
  * Replace the complete non-prose context workset for one live Session.
- * @param agent - owning Agent whose Session records the whole value.
+ * @param agent - owning Agent whose live Session selects the value.
  * @param workset - live follow identity and exact pinned references selected by the browser.
- * @param signal - optional cancellation before validation and append.
+ * @param signal - optional cancellation before validation and retention.
  * @returns the detached normalized value now in force.
  */
 async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorksetV2>
@@ -570,11 +570,11 @@ Project browser projection consuming the provider-neutral repository service.
 @Remote('search') async search( agent: Agent, request: SearchNovelAssetsRequest, signal: AbortSignal, ): Promise<NovelAssetSearchResult[]>
 
 /**
- * Replace the Session-owned non-prose Novel context workset.
- * @param agent Addressed Agent whose Session owns the workset event.
+ * Replace the addressed Agent's live non-prose Novel context workset.
+ * @param agent Addressed Agent whose live workset is replaced.
  * @param workset Complete next follow-and-pinned reference value.
- * @param signal Caller cancellation while validating and appending the update.
- * @returns The validated whole workset retained by the Session.
+ * @param signal Caller cancellation while validating the update.
+ * @returns The validated whole workset retained for the active Agent.
  */
 @Remote('replaceContextWorkset') async replaceContextWorkset( agent: Agent, workset: NovelContextWorksetDescriptor, signal: AbortSignal, ): Promise<NovelContextWorksetDescriptor>
 

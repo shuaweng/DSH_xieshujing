@@ -1,6 +1,6 @@
 /** Stable Novel workbench surface: Asset explorer plus authored canvas. */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useNovelWorkbenchView } from './view-controller.ts'
 import type { NovelWorkbenchViewController } from './view-controller.ts'
@@ -24,9 +24,12 @@ export function NovelFrame({ renderSlot, t, workbench }: NovelFrameProps) {
   const explorerHidden = page === 'home' || explorerCollapsed
   const explorerWidth = explorerHidden ? 0 : 230
   const explorerBoundary = explorerWidth
+  const frameRef = useRef<HTMLElement | null>(null)
+  useNativeConversationSplit(frameRef, visible, agentWidth)
   if (!visible) return null
   return (
     <main
+      ref={frameRef}
       className={css.frame}
       data-novel-workbench
       data-novel-page={page}
@@ -65,6 +68,61 @@ export function NovelFrame({ renderSlot, t, workbench }: NovelFrameProps) {
   )
 }
 
+const SHELL_SIDEBAR_PROPERTY = '--novel-shell-sidebar-track'
+const SHELL_CONVERSATION_PROPERTY = '--novel-shell-conversation-track'
+
+/**
+ * Adapt the public `shell.overlay` seat to a native conversation/workbench split.
+ *
+ * DSH 0.1.2 exposes the shell seat but no cross-plugin column API. Keeping this
+ * compatibility adapter inside the plugin avoids requiring a patched Host: it
+ * temporarily overrides only the shell's rendered grid while the workbench is
+ * visible, follows the Host sidebar track, and removes every marker on teardown.
+ */
+function useNativeConversationSplit(
+  frameRef: React.RefObject<HTMLElement | null>,
+  visible: boolean,
+  preferredWidth: number,
+): void {
+  useLayoutEffect(() => {
+    const overlay = frameRef.current?.parentElement
+    const shell = overlay?.parentElement
+    if (!visible || overlay?.hasAttribute('data-shell-overlay') !== true || shell === undefined || shell === null) return
+
+    const sync = (): void => {
+      const sidebar = shell.style.gridTemplateColumns.match(/^([0-9.]+)px\b/u)?.[1] ?? '0'
+      const available = shell.clientWidth > 0
+        ? Math.max(AGENT_WIDTH_MIN, shell.clientWidth - Number(sidebar) - 320)
+        : AGENT_WIDTH_MAX
+      const conversation = Math.min(clampAgentWidth(preferredWidth), available)
+      const sidebarTrack = `${sidebar}px`
+      const conversationTrack = `${conversation}px`
+      if (shell.style.getPropertyValue(SHELL_SIDEBAR_PROPERTY) !== sidebarTrack) {
+        shell.style.setProperty(SHELL_SIDEBAR_PROPERTY, sidebarTrack)
+      }
+      if (shell.style.getPropertyValue(SHELL_CONVERSATION_PROPERTY) !== conversationTrack) {
+        shell.style.setProperty(SHELL_CONVERSATION_PROPERTY, conversationTrack)
+      }
+    }
+
+    shell.setAttribute('data-novel-workbench-shell', '')
+    sync()
+    const mutations = typeof MutationObserver === 'undefined'
+      ? undefined
+      : new MutationObserver(sync)
+    mutations?.observe(shell, { attributes: true, attributeFilter: ['style'] })
+    const resize = new ResizeObserver(sync)
+    resize.observe(shell)
+    return () => {
+      mutations?.disconnect()
+      resize.disconnect()
+      shell.removeAttribute('data-novel-workbench-shell')
+      shell.style.removeProperty(SHELL_SIDEBAR_PROPERTY)
+      shell.style.removeProperty(SHELL_CONVERSATION_PROPERTY)
+    }
+  }, [frameRef, preferredWidth, visible])
+}
+
 interface PanelResizerProps {
   readonly value: number
   readonly label: string
@@ -75,13 +133,14 @@ interface PanelResizerProps {
 const AGENT_WIDTH_MIN = 300
 const AGENT_WIDTH_MAX = 640
 const AGENT_WIDTH_DEFAULT = 410
-const AGENT_WIDTH_PROPERTY = '--dsh-workbench-agent-width'
+const AGENT_WIDTH_PROPERTY = '--novel-agent-width'
 
 interface PanelDrag {
   readonly pointerId: number
   readonly clientX: number
   readonly width: number
   readonly host: HTMLElement
+  readonly shell: HTMLElement | null
   latestClientX: number
 }
 
@@ -103,6 +162,7 @@ function PanelResizer({ value, label, resetLabel, onChange }: PanelResizerProps)
   const preview = (active: PanelDrag, clientX: number): number => {
     const width = clampAgentWidth(active.width + clientX - active.clientX)
     active.host.style.setProperty(AGENT_WIDTH_PROPERTY, `${width}px`)
+    active.shell?.style.setProperty(SHELL_CONVERSATION_PROPERTY, `${width}px`)
     return width
   }
   const cancelDrag = (): void => {
@@ -110,6 +170,7 @@ function PanelResizer({ value, label, resetLabel, onChange }: PanelResizerProps)
     cancelFrame()
     if (active !== null) {
       active.host.style.setProperty(AGENT_WIDTH_PROPERTY, `${value}px`)
+      active.shell?.style.setProperty(SHELL_CONVERSATION_PROPERTY, `${value}px`)
       active.host.removeAttribute('data-workbench-resizing')
     }
     drag.current = null
@@ -151,6 +212,7 @@ function PanelResizer({ value, label, resetLabel, onChange }: PanelResizerProps)
           latestClientX: event.clientX,
           width: value,
           host,
+          shell: host.parentElement?.parentElement ?? null,
         }
         host.setAttribute('data-workbench-resizing', '')
         event.currentTarget.setPointerCapture(event.pointerId)

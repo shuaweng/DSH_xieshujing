@@ -27,8 +27,8 @@ kind: "package-reference"
 - `NovelContextResolver` 在 `agent/pre-step` 拦截直接用户消息，只从可读消息中移除已识别的规范引用，并紧随其后追加一条来源类型为 `novel-context` 的不可变 `user/message`。
 - `compile()` 接受闭集任务策略与精确目标。策略覆盖普通 Turn、章节写作、选区改写/审查、大纲编辑、章节审查、偏好学习与 Story State 提取。策略由显式流程或 Skill 的 `novelContextPolicy` metadata 选择，绝不从用户自然语言猜测。
 - 策略只扩展确定的类型化关系。章节写作/审查可加入对应章纲、本书概述、本书风格与已确认 Story State，而全书大纲只保留坐标；选区改写/审查加入风格与 Story State。项目级指导不是常驻上下文。
-- `replaceWorkset()` 记录第二版整值。唯一 `follow` 条目只保存活动 Asset 身份，在编译时解析 current head；`pinned` 条目保留精确 Revision 和可选 selector。该整值也可以携带一份有边界的 `library-home` surface 快照，其中只有首页可见的书库元数据，且不会授予仓库或跨项目读取能力。旧版事件可继续重放，并在替换时规范化。
-- 客户端可见的 `novelContextWorkset` Session Projection 折叠最新整值。它只是协调状态；模型可见权威是冻结进 Session Log 的第三版 Context Manifest。
+- `replaceWorkset()` 为当前 Agent 保留第二版整值。唯一 `follow` 条目只保存活动 Asset 身份，在编译时解析 current head；`pinned` 条目保留精确 Revision 和可选 selector。该整值也可以携带一份有边界的 `library-home` surface 快照，其中只有首页可见的书库元数据，且不会授予仓库或跨项目读取能力。来自旧浏览器客户端的第一版值会在替换时规范化。
+- 浏览器用 Session 作用域的本地存储恢复这份实时协调值，并在重连后重新发布。它刻意不写入自定义 Session 事件，因此卸载插件不会导致普通 DSH Session 日志无法读取；模型可见权威仍是冻结进标准 Session 消息日志的第三版 Context Manifest。
 - 普通 Turn 物化 Composer 显式引用，follow/pinned 工作集只给坐标。显式 `/skill-name` Turn 会立即按 Skill 策略编译；模型加载 Skill 后，下一 Step 会增加关联材料，不复制上一份 Manifest 已经物化的文本。
 - 编译器会合并完全相同的精确坐标，同时保留不同选区；同一 Asset/Revision 已有必需材料时，也不会再被较低优先级的可选副本扩成全文。默认最多八个引用和 256 KiB 作者 UTF-8 文本。必需目标超预算时失败关闭；可选材料降级成坐标，而不是被截断。
 - 每份 V3 Manifest 在一个确定性 Manifest id 下记录策略、精确 Revision、类型、来源、保留模式、投影、选取原因、内容哈希、模型文本大小与模型文本哈希。

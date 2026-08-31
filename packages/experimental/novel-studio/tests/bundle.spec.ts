@@ -145,7 +145,7 @@ describe('experimental Novel Studio bundle', () => {
     expect(external).toEqual([])
   })
 
-  it('provides the package-owned preset root without mutating the active Preset registry', async () => {
+  it('provides only the package path and boot-readiness marker at runtime', async () => {
     const ctx = new Context()
     ctx.provide('novelWorkbenchReady', {} as never)
     const fiber = ctx.plugin(NovelStudioPaths)
@@ -178,7 +178,12 @@ describe('experimental Novel Studio bundle', () => {
     expect(parsed.find(row => row.id === 'modules')).toMatchObject({
       inject: ['novelStudioPaths'],
     })
-    expect(parsed.find(row => row.id === 'agent-presets')).toBeUndefined()
+    expect(parsed.find(row => row.id === 'agent-presets')).toMatchObject({
+      config: {
+        default: 'standard', includeShippedRoot: true, includeUserRoot: true,
+        roots: [{ trust: 'system' }],
+      },
+    })
     expect(parsed.flatMap(row => row.insert ?? [])).toEqual([
       { id: 'novel-asset-types', name: '@deepseek-ai/dsh-experimental-novel-repository/asset-types' },
       { id: 'novel-asset-outline', name: '@deepseek-ai/dsh-experimental-novel-asset-outline' },
@@ -209,10 +214,14 @@ describe('experimental Novel Studio bundle', () => {
       { schema: entryListSchema },
     ) as Array<{ id?: string; config?: { default?: string; includeUserRoot?: boolean } }>
 
-    expect(parsed).toEqual([{
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0]).toMatchObject({
       id: 'agent-presets',
-      config: { default: 'novel-workbench', includeUserRoot: true },
-    }])
+      config: {
+        default: 'novel-workbench', includeShippedRoot: true, includeUserRoot: true,
+        roots: [{ trust: 'system' }],
+      },
+    })
   })
 
   it('adds Novel services only to the explicit base + web-app + Novel composition', () => {
@@ -249,8 +258,10 @@ describe('experimental Novel Studio bundle', () => {
     expect(novel.find(row => row.id === 'ui-layout')?.config).toEqual(web.find(row => row.id === 'ui-layout')?.config)
     const presets = novel.find(row => row.id === 'agent-presets')
     expect(presets?.inject).toEqual(web.find(row => row.id === 'agent-presets')?.inject)
-    expect(presets?.config).toEqual(web.find(row => row.id === 'agent-presets')?.config)
-    expect(presets?.config).toMatchObject({ default: 'standard' })
+    expect(presets?.config).toMatchObject({
+      default: 'standard', includeShippedRoot: true, includeUserRoot: true,
+      roots: [{ trust: 'system' }],
+    })
     expect(PROFILE_TEMPLATES).not.toHaveProperty('novel-studio')
   })
 })

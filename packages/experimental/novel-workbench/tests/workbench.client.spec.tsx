@@ -50,6 +50,7 @@ import NovelWorkbenchReady from '../src/index.ts'
 import * as invariant from '../src/invariant.ts'
 
 beforeEach(() => {
+  window.localStorage.clear()
   vi.stubGlobal('ResizeObserver', class {
     observe(): void {}
     disconnect(): void {}
@@ -279,14 +280,20 @@ describe('NovelFrame', () => {
       calls.push(name)
       return <span data-testid={name}>surface</span>
     }) as never
-    const view = render(<div data-workbench="novel">
-      <NovelFrame
-        renderSlot={renderSlot} t={t} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-        workbench={workbench}
-      />
+    const view = render(<div data-workbench="novel" style={{ gridTemplateColumns: '280px minmax(0, 1fr) 0px' }}>
+      <div data-shell-overlay>
+        <NovelFrame
+          renderSlot={renderSlot} t={t} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+          workbench={workbench}
+        />
+      </div>
     </div>)
 
     expect(view.container.querySelector('[data-novel-workbench]')).not.toBeNull()
+    const shell = view.container.querySelector<HTMLElement>('[data-workbench="novel"]')!
+    expect(shell.hasAttribute('data-novel-workbench-shell')).toBe(true)
+    expect(shell.style.getPropertyValue('--novel-shell-sidebar-track')).toBe('280px')
+    expect(shell.style.getPropertyValue('--novel-shell-conversation-track')).toBe('410px')
     expect(view.getByLabelText(zh.assetSidebar)).toBeTruthy()
     const resizer = view.getByRole('separator', { name: zh.resizePanels })
     expect(resizer.getAttribute('aria-valuenow')).toBe('410')
@@ -317,11 +324,17 @@ describe('NovelFrame', () => {
     fireEvent.pointerMove(resizer, { pointerId: 7, clientX: 450 })
     expect(workbench.getSnapshot().agentWidth).toBe(410)
     act(() => { scheduled?.(0) })
-    expect(host.style.getPropertyValue('--dsh-workbench-agent-width')).toBe('460px')
+    expect(host.style.getPropertyValue('--novel-agent-width')).toBe('460px')
     expect(host.hasAttribute('data-workbench-resizing')).toBe(true)
     fireEvent.pointerUp(resizer, { pointerId: 7, clientX: 450 })
     expect(workbench.getSnapshot().agentWidth).toBe(460)
+    expect(shell.style.getPropertyValue('--novel-shell-conversation-track')).toBe('460px')
     expect(host.hasAttribute('data-workbench-resizing')).toBe(false)
+
+    act(() => { workbench.close() })
+    expect(shell.hasAttribute('data-novel-workbench-shell')).toBe(false)
+    expect(shell.style.getPropertyValue('--novel-shell-sidebar-track')).toBe('')
+    expect(shell.style.getPropertyValue('--novel-shell-conversation-track')).toBe('')
   })
 })
 
@@ -934,6 +947,7 @@ describe('ContextTray', () => {
   }
 
   function libraryHook() { return hookOf(new NovelLibraryContextFocusController()) as never }
+  const discoverProject = vi.fn(async () => project)
 
   it('shows compact human labels while keeping coordinates out of visible tray text', () => {
     expect(humanContextLabel('第一章 觉醒老爷爷')).toBe('第一章：觉醒老爷爷')
@@ -949,7 +963,7 @@ describe('ContextTray', () => {
       useContextFocus={hookOf(new NovelContextFocusController()) as never}
       useLibraryContext={libraryHook()}
       useProjectStatus={statusHook('uninitialized')}
-      search={search} replace={replace} t={t}
+      search={search} discover={vi.fn(async () => undefined)} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       useWorkspaces={vi.fn() as never}
     />)
@@ -973,7 +987,7 @@ describe('ContextTray', () => {
       session={{} as never} input={{} as never}
       sessionId={SID} useSessions={useSessions as never} useProjection={() => null}
       useContextFocus={hookOf(focus) as never} useLibraryContext={libraryHook()}
-      useProjectStatus={statusHook()} search={search} replace={replace} t={t}
+      useProjectStatus={statusHook()} search={search} discover={discoverProject} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       useWorkspaces={vi.fn() as never}
     />)
@@ -1010,7 +1024,7 @@ describe('ContextTray', () => {
       } as never)) as never}
       useProjection={() => null} useContextFocus={hookOf(focus) as never}
       useLibraryContext={libraryHook()} useProjectStatus={statusHook()}
-      search={search} replace={replace} t={t} useSession={vi.fn() as never}
+      search={search} discover={discoverProject} replace={replace} t={t} useSession={vi.fn() as never}
       useInput={vi.fn() as never} inputActions={{} as never} useWorkspaces={vi.fn() as never}
     />)
     expect(hidden.container.innerHTML).toBe('')
@@ -1025,12 +1039,13 @@ describe('ContextTray', () => {
         label: '第一章', mode: 'follow', origin: 'active-asset',
       }],
     }
+    window.localStorage.setItem(`dsh.novel.workset.${SID}`, JSON.stringify(workset))
     const replace = vi.fn(async (value: NovelContextWorksetDescriptor) => value)
     const view = render(<ContextTray
       session={{} as never} input={{} as never}
       sessionId={SID} useSessions={useSessions as never} useProjection={() => workset}
       useContextFocus={hookOf(focus) as never} useLibraryContext={libraryHook()}
-      useProjectStatus={statusHook()} search={vi.fn()} replace={replace} t={t}
+      useProjectStatus={statusHook()} search={vi.fn()} discover={discoverProject} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       useWorkspaces={vi.fn() as never}
     />)
@@ -1059,13 +1074,14 @@ describe('ContextTray', () => {
         label: '第一章', mode: 'follow', origin: 'active-asset',
       }],
     }
+    window.localStorage.setItem(`dsh.novel.workset.${SID}`, JSON.stringify(prior))
     const replace = vi.fn(async (value: NovelContextWorksetDescriptor) => value)
     const view = render(<ContextTray
       session={{} as never} input={{} as never} sessionId={SID}
       useSessions={useSessions as never} useProjection={() => prior}
       useContextFocus={hookOf(new NovelContextFocusController()) as never}
       useLibraryContext={hookOf(library) as never} useProjectStatus={statusHook()}
-      search={vi.fn()} replace={replace} t={t}
+      search={vi.fn()} discover={discoverProject} replace={replace} t={t}
       useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
       useWorkspaces={vi.fn() as never}
     />)
@@ -1078,6 +1094,23 @@ describe('ContextTray', () => {
       items: [],
       surface: expect.objectContaining({ kind: 'library-home', bookCount: 3 }),
     }) })
+  })
+
+  it('discovers and binds the current Novel Project while the workbench overlay is closed', async () => {
+    const replace = vi.fn(async (value: NovelContextWorksetDescriptor) => value)
+    const view = render(<ContextTray
+      session={{} as never} input={{} as never} sessionId={SID}
+      useSessions={useSessions as never} useProjection={() => null}
+      useContextFocus={hookOf(new NovelContextFocusController()) as never}
+      useLibraryContext={libraryHook()}
+      useProjectStatus={hookOf(new NovelProjectStatusController()) as never}
+      search={vi.fn()} discover={discoverProject} replace={replace} t={t}
+      useSession={vi.fn() as never} useInput={vi.fn() as never} inputActions={{} as never}
+      useWorkspaces={vi.fn() as never}
+    />)
+
+    await waitFor(() => { expect(view.getByText(zh.followCurrent)).toBeTruthy() })
+    expect(replace).toHaveBeenCalledWith({ version: 2, projectId: 'project-1', items: [] })
   })
 })
 
@@ -1744,9 +1777,11 @@ describe('Novel workbench stores and browser assembly', () => {
         projectStatus: NovelProjectStatusController
       }
       search: (request: unknown) => Promise<unknown>
+      discover: () => Promise<unknown>
       replace: (workset: NovelContextWorksetDescriptor) => Promise<unknown>
     })(SID)
     await expect(trayFace.search({ query: '白港' })).resolves.toEqual([])
+    await expect(trayFace.discover()).resolves.toEqual(project)
     const workset: NovelContextWorksetDescriptor = { version: 2, projectId: 'project-1' as never, items: [] }
     await expect(trayFace.replace(workset)).resolves.toEqual(workset)
 

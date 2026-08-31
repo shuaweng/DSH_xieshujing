@@ -75,7 +75,7 @@ The protagonist reaches White Harbor.
 
 ## Profile 隔离
 
-[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 overlay，组合在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。原生 `ui-layout` 始终是唯一根与布局服务拥有者，并暴露按 selector 路由的 `shell.workbench` chain。[`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) 只向该 chain 贡献纯 `novel` surface，保留原生侧栏、对话、详情、设置、模型选择、工具渲染与 overlay surface，并仅在它被选中时声明类型化 Asset explorer 与 canvas 插槽。
+[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) 是私有 overlay，组合在 `@deepseek-ai/dsh-base` 与 `@deepseek-ai/dsh-web-app` 之后。原生 `ui-layout` 始终是唯一根与布局服务拥有者。[`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) 通过可叠加的 `shell.overlay` 座位贡献纯 surface。由于 DSH 0.1.2 尚未公开 Shell 分栏 API，包内兼容适配器只在 surface 可见时把已渲染 Shell 网格临时映射为“侧栏、Agent、工作台”三列，跟随原生侧栏，并在卸载时清除全部标记。插件不修改宿主源码，保留原生详情、设置、模型选择、工具渲染与 Session service；类型化 Asset explorer 与 canvas 插槽只存在于自身 surface 下。
 
 只有 Agent preset 精确为 `novel-workbench` 的 Session 才会在 access/plan 控件旁得到 Composer 开关，并可选中小说 surface。打开后，AppFrame 把 Agent 对话放在左侧，把 Asset 浏览器与画布放在右侧；作者可从同一开关收起整个工作台，切到其他 preset 也会立即恢复普通 tracks。类型化 `novel_present` 结果可请求同一切换，不解析 Agent 回复文字。默认 `web` 与 `headless` Profile 模板不包含这些实验性包；overlay 的安全 preset 不包含 shell 或通用文件系统修改能力。
 
@@ -173,12 +173,12 @@ Exact-read Consumer that freezes canonical references before a model step.
 ```ts cordis-catalog
 /**
  * Replace the complete non-prose context workset for one live Session.
- * @param agent - owning Agent whose Session records the whole value.
- * @param workset - exact retained references selected by the browser.
- * @param signal - optional cancellation before validation and append.
+ * @param agent - owning Agent whose live Session selects the value.
+ * @param workset - live follow identity and exact pinned references selected by the browser.
+ * @param signal - optional cancellation before validation and retention.
  * @returns the detached normalized value now in force.
  */
-async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorkset>
+async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorksetV2>
 
 /**
  * Resolve exact retained Revisions for Novel tools and prompt preparation.
@@ -387,11 +387,11 @@ Project browser projection consuming the provider-neutral repository service.
 @Remote('search') async search( agent: Agent, request: SearchNovelAssetsRequest, signal: AbortSignal, ): Promise<NovelAssetSearchResult[]>
 
 /**
- * Replace the Session-owned non-prose Novel context workset.
- * @param agent Addressed Agent whose Session owns the workset event.
+ * Replace the addressed Agent's live non-prose Novel context workset.
+ * @param agent Addressed Agent whose live workset is replaced.
  * @param workset Complete next follow-and-pinned reference value.
- * @param signal Caller cancellation while validating and appending the update.
- * @returns The validated whole workset retained by the Session.
+ * @param signal Caller cancellation while validating the update.
+ * @returns The validated whole workset retained for the active Agent.
  */
 @Remote('replaceContextWorkset') async replaceContextWorkset( agent: Agent, workset: NovelContextWorksetDescriptor, signal: AbortSignal, ): Promise<NovelContextWorksetDescriptor>
 

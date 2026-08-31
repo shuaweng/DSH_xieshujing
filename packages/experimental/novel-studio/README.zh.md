@@ -26,12 +26,12 @@ kind: "package-bundle"
 ## 行为
 
 - 应在现有 base 与 Web App 组合包之后加入本 bundle。它会先插入 Host Asset 类型注册表、独立的自由策划/全书指导 Host/Client contribution 与 `novel-repository-local`，随后加入 context、绑定 Revision 的分析服务、Remote、独立 Client adapter 和 `novel-workbench`。
-- 普通 `ui-layout` 始终是唯一根与布局服务拥有者。Novel Workbench 通过按 selector 路由的 `shell.workbench` chain 贡献按 preset 限定的 `novel` surface，因此原生 DSH 侧栏、对话、详情、设置、模型选择、工具渲染与 Session service 仍保持权威。
+- 普通 `ui-layout` 始终是唯一根与布局服务拥有者。Novel Workbench 通过 `shell.overlay` 贡献按 preset 限定的 surface；包内 DSH 0.1.2 兼容适配器在不修改宿主源码的前提下建立临时 Agent/工作台分栏，因此 DSH 侧栏、对话、详情、设置、模型选择、工具渲染与 Session service 仍保持权威。
 - 包自带的 `novel-workbench` Agent Preset 组合 Novel persona，并包含需用户批准的 `novel_initialize_project`、`novel_list`、`novel_search`、`novel_create`、`novel_get`、显式只读的 `novel_get_analysis`、`novel_propose_changes` 与 `novel_present`；不包含通用 shell 或文件系统修改工具。
 - 同一 Preset 通过标准按需 `skill` 工具挂载十个包内自包含写作/审稿 Skill：新书启动、大纲/beat 设计、章节执行、文风改写、文风审查、场景推进、对白诊断、精确 Revision 章节审稿、草稿/定稿偏好提取与定稿正文 Story State 提取。每个 Skill 声明一个闭集 `novelContextPolicy`；Skill 可以教授方法并选择有边界的上下文策略，但不能扩大 Novel 工具权限。章节执行与场景推进现在会从自由章纲、已确认 Story State、本书风格与必要前文提炼临时执行草案。普通场景直接推进；关键或高不确定场景可以比较 2–3 个短行动方案，等待用户选择或由 Agent 明确选择一项，随后仍默认只通过现有 ChangeSet 流程生成一个正文候选。
 - 绑定 Revision 的分析服务为工作台提供确定性 NOAI 扫描、固定 one-shot 审稿人、偏好 worker 与 Story State worker。它们都只收到冻结的有界材料、`skill` 工具与严格 Schema，且不拥有 Asset 修改权限；只有面向用户的 Host 流程可以保留定稿，并通过 ChangeSet 应用已采纳候选。
 - 历史作者 Revision 是只读证据。作者可以显式对照并把其中一版恢复为新的、受版本保护的当前 Revision；恢复绝不倒退历史，会把该 Asset 的陈旧提案标为冲突、保留绑定 Revision 的分析证据，并在章节 Canon 可能变化时要求复查 Story State。
-- `NovelStudioPaths` 通过 `ctx.agentPresets.registerRoot()` 注册包内 Preset 根。该贡献的 effect 生命周期属于本 bundle，不会替换其他包的根目录配置，并在 bundle 卸载时消失。
+- Bundle patch 通过原生 `agent-presets` 配置贡献包内 Preset 根，并从已安装的门面包解析路径。它会与内置根和用户根组合，不依赖私有运行时注册 API；从 Profile 移除插件后该根也随之消失。
 - 安装本 bundle 不会改变宿主 Profile 的默认 Preset。默认 `web` 与 `headless` 组合仍不包含 Novel Repository、上下文解析器、Novel Remote、工作台或 Novel 工具。产品若明确把某一 Profile 专用于写作，可以应用 `dedicated-profile.patch.yml`，只把该 Profile 的无显式选择会话默认值改为 `novel-workbench`。
 
 ## 本地单包产物
@@ -50,7 +50,7 @@ pnpm run pack:xieshujing
 
 ```sh
 pnpm dsh plugin --profile web add \
-  "$PWD/.artifacts/xieshujing-plugin/xieshujing-dsh-plugin-0.1.1-rc.2.tgz"
+  "$PWD/.artifacts/xieshujing-plugin/xieshujing-dsh-plugin-0.1.2-alpha.2.tgz"
 pnpm dsh --profile web --port 3082 --no-open
 ```
 

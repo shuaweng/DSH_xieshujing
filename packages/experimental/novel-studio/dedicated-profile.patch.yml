@@ -4,4 +4,15 @@
 - id: agent-presets
   config:
     default: novel-workbench
+    includeShippedRoot: true
     includeUserRoot: true
+    roots:
+      - path: !!js >-
+          process.getBuiltinModule('node:path').join(
+            process.getBuiltinModule('node:path').dirname(
+              process.getBuiltinModule('node:module').createRequire(baseUrl)
+                .resolve('@deepseek-ai/dsh-experimental-novel-studio/package.json')
+            ),
+            'presets'
+          )
+        trust: system

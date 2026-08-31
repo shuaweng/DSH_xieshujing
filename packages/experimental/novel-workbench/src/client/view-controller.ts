@@ -15,7 +15,7 @@ export interface NovelWorkbenchViewState {
   readonly requestedAssetId: string | undefined
 }
 
-/** Small observable controller: presentation state never enters authored Assets or Session projections. */
+/** Small observable controller: presentation state never enters authored Assets or Session logs. */
 export class NovelWorkbenchViewController {
   #snapshot: NovelWorkbenchViewState
   readonly #listeners = new Set<() => void>()

@@ -7,7 +7,6 @@ import { apply as applyOutlineAssetTypes } from '@deepseek-ai/dsh-experimental-n
 import LocalNovelRepository from '../../novel-repository-local/src/index.ts'
 import NovelAssetTypeRegistry from '../../novel-repository/src/asset-types.ts'
 import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SkillRegistry from '@deepseek-ai/dsh-skill'
 import { afterEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -87,7 +86,6 @@ async function harness(config: ConstructorParameters<typeof NovelContextResolver
   applyOutlineAssetTypes(ctx)
   await ctx.plugin(LocalNovelRepository)
   await ctx.plugin(SessionStore)
-  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SkillRegistry)
   await ctx.plugin(NovelContextResolver, config)
   cleanups.push(async () => { await ctx.fiber.dispose() })
@@ -240,8 +238,8 @@ describe('Novel context preparation', () => {
     expect(Object.isFrozen(decision.messages[1])).toBe(true)
   })
 
-  it('retains a whole-value follow and pinned workset, projects it, and freezes it only for a direct turn', async () => {
-    const { ctx, agent, session, revisionId } = await harness()
+  it('retains a live whole-value follow and pinned workset and freezes it only for a direct turn', async () => {
+    const { ctx, agent, revisionId } = await harness()
     const workset = {
       version: 1 as const,
       projectId: ProjectId('project-context'),
@@ -263,10 +261,7 @@ describe('Novel context preparation', () => {
       }],
     }
     await expect(ctx.novelContextResolver.replaceWorkset(agent, workset)).resolves.toEqual(currentWorkset)
-    const eventCount = session.events.filter(event => event.type === 'novel/context-workset').length
-    await ctx.novelContextResolver.replaceWorkset(agent, workset)
-    expect(session.events.filter(event => event.type === 'novel/context-workset')).toHaveLength(eventCount)
-    expect(ctx.sessionProjections.snapshot(session).values.novelContextWorkset).toEqual(currentWorkset)
+    await expect(ctx.novelContextResolver.replaceWorkset(agent, workset)).resolves.toEqual(currentWorkset)
 
     const direct = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: '继续写。' }] })
     const signal = new AbortController().signal

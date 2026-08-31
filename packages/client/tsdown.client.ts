@@ -11,10 +11,11 @@
 import { readFile } from 'node:fs/promises'
 import { existsSync, globSync, readFileSync } from 'node:fs'
 import { isBuiltin } from 'node:module'
-import { basename, dirname, isAbsolute, relative, resolve as resolvePath, sep } from 'node:path'
+import { basename, dirname, extname, isAbsolute, relative, resolve as resolvePath, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { UserConfig } from 'tsdown'
 import { transform } from 'lightningcss'
+import type { Dependency, TransformResult } from 'lightningcss'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
@@ -29,6 +30,70 @@ const GLOBAL_CSS_VIRTUAL_PREFIX = '\0dsh-global-css:'
 const INLINE_CSS_VIRTUAL_PREFIX = '\0dsh-inline-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 const INLINE_CSS_QUERY = '?inline'
+
+const CSS_ASSET_MIME_TYPES: Readonly<Record<string, string>> = {
+  '.avif': 'image/avif',
+  '.gif': 'image/gif',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.otf': 'font/otf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ttf': 'font/ttf',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+}
+
+/** Compile one dynamic-plugin stylesheet and self-contain its package-local assets. */
+async function compilePluginCss(
+  fileId: string,
+  source: Uint8Array,
+  options: { readonly cssModules?: Parameters<typeof transform>[0]['cssModules'] } = {},
+): Promise<TransformResult> {
+  const result = transform({
+    filename: fileId,
+    code: source,
+    ...(options.cssModules === undefined ? {} : { cssModules: options.cssModules }),
+    analyzeDependencies: true,
+    minify: true,
+  })
+  const css = await inlinePluginCssAssets(fileId, result.code.toString(), result.dependencies ?? [])
+  return { ...result, code: Buffer.from(css) }
+}
+
+/** Replace Lightning CSS URL placeholders with either their authored URL or a local data URL. */
+async function inlinePluginCssAssets(
+  fileId: string,
+  compiled: string,
+  dependencies: readonly Dependency[],
+): Promise<string> {
+  let css = compiled
+  for (const dependency of dependencies) {
+    if (dependency.type !== 'url') continue
+    const localPath = localCssAssetPath(fileId, dependency.url)
+    const replacement = localPath === undefined
+      ? dependency.url
+      : `data:${cssAssetMimeType(localPath)};base64,${(await readFile(localPath)).toString('base64')}`
+    css = css.replaceAll(dependency.placeholder, replacement)
+  }
+  return css
+}
+
+/** Resolve a relative CSS URL to disk; public, fragment, data, and network URLs stay untouched. */
+function localCssAssetPath(fileId: string, value: string): string | undefined {
+  if (/^(?:[A-Za-z][A-Za-z\d+.-]*:|\/|#)/.test(value)) return undefined
+  const pathname = value.replace(/[?#].*$/, '')
+  if (pathname === '') return undefined
+  return resolvePath(dirname(fileId), decodeURIComponent(pathname))
+}
+
+function cssAssetMimeType(file: string): string {
+  const extension = extname(file).toLowerCase()
+  const mime = CSS_ASSET_MIME_TYPES[extension]
+  if (mime === undefined) throw new Error(`tsdown: unsupported CSS asset type ${extension || '(none)'} in ${file}`)
+  return mime
+}
 
 /** Emit one plugin-owned style injector and an optional CSS Modules export. */
 function styleInjectionModule(
@@ -511,11 +576,8 @@ function clientConfig(id: string, entry: string): UserConfig {
         // The virtual id otherwise hides the physical stylesheet from Rolldown's watch graph.
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
-        const { code, exports: cssExports } = transform({
-          filename: fileId,
-          code: source,
+        const { code, exports: cssExports } = await compilePluginCss(fileId, source, {
           cssModules: { pattern: '[hash]_[local]' },
-          minify: true,
         })
         const classMap: Record<string, string> = {}
         const exportEntries = Object.entries(cssExports ?? {})
@@ -536,7 +598,7 @@ function clientConfig(id: string, entry: string): UserConfig {
         const fileId = virtualId.slice(INLINE_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
-        const { code } = transform({ filename: fileId, code: source, minify: true })
+        const { code } = await compilePluginCss(fileId, source)
         return `export default ${JSON.stringify(code.toString())};`
       },
     }, {
@@ -551,7 +613,7 @@ function clientConfig(id: string, entry: string): UserConfig {
         const fileId = virtualId.slice(GLOBAL_CSS_VIRTUAL_PREFIX.length, -CSS_VIRTUAL_SUFFIX.length)
         this.addWatchFile(fileId)
         const source = await readFile(fileId)
-        const { code } = transform({ filename: fileId, code: source, minify: true })
+        const { code } = await compilePluginCss(fileId, source)
         return styleInjectionModule(id, fileId, code.toString())
       },
     }],

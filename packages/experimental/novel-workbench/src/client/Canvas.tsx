@@ -287,8 +287,8 @@ export function Canvas({
   }
 
   const openLibraryBookSafely: NovelHomeInjected['openBook'] = async (book, assetId) => {
-    // A Workspace switch replaces the current Session projection. Flush the
-    // editor draft first so navigating from Home cannot discard local prose.
+    // A Workspace switch replaces the current live workset. Flush the editor
+    // draft first so navigating from Home cannot discard local prose.
     const hadDirtyDraft = state.dirty
     const saved = await persist()
     if (hadDirtyDraft && saved === undefined) throw new Error(t('switchBookSaveFailed'))

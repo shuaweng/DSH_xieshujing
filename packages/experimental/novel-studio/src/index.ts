@@ -24,9 +24,7 @@ export class NovelStudioPaths extends Service {
   /** Absolute directory containing this package's shipped Agent Presets. */
   readonly presetRoot: string = fileURLToPath(new URL('../presets', import.meta.url))
 
-  constructor(ctx: Context) {
-    super(ctx, 'novelStudioPaths')
-  }
+  constructor(ctx: Context) { super(ctx, 'novelStudioPaths') }
 }
 
 /**

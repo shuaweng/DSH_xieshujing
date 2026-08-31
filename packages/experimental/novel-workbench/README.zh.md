@@ -23,7 +23,7 @@ kind: "package-reference"
 <a id="behavior"></a>
 ## 行为
 
-- 原生 `ui-layout` 始终是唯一根和布局服务的拥有者。本包只向其按 selector 路由的 `shell.workbench` chain 贡献纯 `novel` surface，并仅在该 surface 被选中时声明 `novel.explorer` 与 `novel.canvas`。它既不跨插件导入 React 组件，也不注册竞争根。
+- 原生 `ui-layout` 始终是唯一根和布局服务的拥有者。本包通过可叠加的 `shell.overlay` 座位贡献纯 `novel` surface，并仅在该 surface 下声明 `novel.explorer` 与 `novel.canvas`。DSH 0.1.2 尚未提供公开的 Shell 分栏 API，因此包内兼容适配器只在工作台打开时把已渲染 Shell 网格临时映射为“侧栏、Agent、工作台”三列，跟随原生侧栏变化，并在卸载时移除全部标记；无需修改宿主源码、跨插件导入 React 组件或注册竞争根。
 - 整个工作台按 Preset 限定。只有精确选择 `novel-workbench` 时，才会在 `conversation.input.left`、原生 access/plan 控件旁得到纯图标“小说工作台”开关；其无障碍名称与悬浮提示仍保留完整动作说明。已经开始的 Session 读取已提交摘要，空白 Composer 则读取 Agent preset 选择器所用的同一份只读暂存值。Session 仍从普通 DSH Frame 开始；作者无需切换 preset 或修改作者数据即可展开/收起工作台。切到任何其他 preset 会立即恢复普通 Frame 并移除按钮。
 - 桌面组合把 Agent 对话放在左侧，把正文浏览器与创作画布放在右侧，同时在最外侧保留可折叠的原生 DSH Session 侧栏。无障碍拖拽分隔条（也支持方向键）会按动画帧频率预览 CSS track，并在松开时只提交一次经过边界限制的宽度，因此作者工作台不会随每个 pointer 事件重渲染。
 - 原生 DSH 侧栏仍然可用，可收起或展开以搜索和导航会话。切换 Session 不会替换已选中的小说 surface；切到不符合条件的 preset 会关闭它。
@@ -39,7 +39,7 @@ kind: "package-reference"
 - 章节头部可以把屏幕上的精确 Revision 标记为定稿。满足条件的 Agent 草稿/作者定稿比较会打开偏好抽屉并展示前后证据；候选在作者采纳前不会改变任何内容，采纳后通过 ChangeSet 写入精确“本书风格”Revision，拒绝决策同样可审计。
 - `@deepseek-ai/dsh-experimental-novel-asset-outline` 独立贡献自由的 `planning.outline` 与 `planning.chapter-outline` Renderer。书本指导和策划 Asset 默认展示渲染后的 Markdown 阅读视图，并可明确切换到不受模板限制、支持精确文本选区与 Diff 的源码编辑。一个 ChangeSet 可以同时预览一次标题变更和一次正文变更。正文底栏把用户提供的章纲图标放在皮肤控件左侧；点击会打开与当前章节一对一绑定的右侧抽屉，作者可自由写作、保存或把章纲选区引用给 Agent。情绪/钩子/节奏/起承转合实用起步模板只是可选按钮，插入后仍是普通可编辑 Markdown。
 - Agent 创建的 Asset 会返回可回放创建卡片并刷新权威 Explorer。人类与 Agent 创建都经过同一条类型化 Remote/Repository 链路，任何一方都不能自行发明文件路径。
-- 小说 Agent 可以用 `novel_present` 调用 `open-workbench` 或 `close-workbench`。其持久工具结果 metadata 与 Composer 开关驱动同一个浏览器本地 `ctx.layout` 选择；普通 Agent 回复文字绝不控制布局，展示动作也绝不修改 Asset。
+- 小说 Agent 可以用 `novel_present` 调用 `open-workbench` 或 `close-workbench`。其持久工具结果 metadata 与 Composer 开关驱动同一个浏览器本地工作台控制器；普通 Agent 回复文字绝不控制布局，展示动作也绝不修改 Asset。
 - “引用选区到 Agent”先保存脏的类型化草稿，保存失败即安全停止，然后冻结选区。Composer 会在当前光标处插入可见引用，或替换 Composer 当前选区，不再一律追加到末尾。它只显示 `@[引用文字前十个字…]`；隐藏的 occurrence 保留完整规范 `dsh-novel:` mention，并在提交时把精确值序列化给 Agent。
 - 按 Preset 限定的 `conversation.input.dock` 会加入与 Composer 等宽的紧凑坐标栏。实时跟随项只保存当前可见 Asset 的身份，在下一次任务编译时解析当前已保存 head；搜索后固定的条目仍保留精确 Revision 坐标。回到书库首页时，自动 Asset 跟随会替换为一份有边界、可重放的首页可见快照，其中只含汇总数字和最多 24 本书的摘要，同时保留同项目的显式固定项；该快照不会授予访问另一本书 Asset 的能力。有脏稿时仍指向最后已保存的 head，并明确提示保存。显式划词引用则另行发送规范精确坐标与完整选中文字。
 - `novel_propose_changes` 工具结果渲染持久的行内 Diff 卡片。接受和拒绝调用 Session 所属 Remote 方法；接受后从权威 Repository 状态刷新资产浏览器和画布。

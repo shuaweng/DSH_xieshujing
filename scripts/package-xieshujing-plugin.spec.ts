@@ -48,17 +48,19 @@ describe('WriteBookWhale one-package artifact', () => {
   it('carries the complete private runtime and rewrites the Bundle owner', () => {
     const staged = stage()
     const patch = readFileSync(join(staged.directory, 'cordis.patch.yml'), 'utf8')
+    const dedicatedPatch = readFileSync(join(staged.directory, 'dedicated-profile.patch.yml'), 'utf8')
     const files = inspectStagedPackage(staged.directory).map(file => file.path)
 
     expect(patch).toContain("name: '@xieshujing/dsh-plugin'")
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-experimental-novel-studio'")
+    expect(dedicatedPatch).toContain(".resolve('@xieshujing/dsh-plugin/package.json')")
+    expect(dedicatedPatch).not.toContain('@deepseek-ai/dsh-experimental-novel-studio')
     expect(files).toEqual(expect.arrayContaining([
       'cordis.patch.yml',
       'presets/novel-workbench/agent.cordis.yml',
       'node_modules/@deepseek-ai/dsh-experimental-novel-workbench/lib/client.js',
       'node_modules/@deepseek-ai/dsh-experimental-novel-repository-remote/lib/typert.host.js',
     ]))
-    expect(existsSync(join(staged.directory, 'dedicated-profile.patch.yml'))).toBe(true)
   })
 
   it('exports a prebuilt public repository without install-time code execution', () => {

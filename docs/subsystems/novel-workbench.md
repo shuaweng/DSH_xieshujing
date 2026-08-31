@@ -75,7 +75,7 @@ The browser reads that ChangeSet into an inline Diff card. Accept or Reject is a
 
 ## Profile isolation
 
-[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) is a private overlay composed after `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. The shipped `ui-layout` remains the single root and layout-service owner and exposes a selector-routed `shell.workbench` chain. [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) contributes a pure `novel` surface to that chain, preserves native sidebar, conversation, details, settings, model-selection, tool-rendering, and overlay surfaces, and declares typed Asset explorer and canvas slots only beneath its elected surface.
+[`@deepseek-ai/dsh-experimental-novel-studio`](../../packages/experimental/novel-studio) is a private overlay composed after `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app`. The shipped `ui-layout` remains the single root and layout-service owner. [`@deepseek-ai/dsh-experimental-novel-workbench`](../../packages/experimental/novel-workbench) contributes a pure surface through the additive `shell.overlay` seat. Because DSH 0.1.2 has no public shell-column API, a package-local compatibility adapter temporarily maps the rendered shell grid into sidebar, Agent, and workbench tracks while the surface is visible, follows the native sidebar, and removes every marker on teardown. The plugin patches no host source and preserves native details, settings, model-selection, tool-rendering, and Session services; typed Asset explorer and canvas slots exist only beneath its surface.
 
 Only a Session whose exact Agent preset is `novel-workbench` receives the Composer toggle beside access/plan controls and may elect the Novel surface. AppFrame then places Agent conversation on the left and Asset explorer plus canvas on the right; the author can close the whole workbench from the same toggle, and switching to another preset immediately restores the ordinary tracks. Typed `novel_present` results can request the same transition without parsing Agent prose. The default `web` and `headless` Profile templates include none of these experimental packages. The overlay's safe preset excludes shell and generic filesystem mutation.
 
@@ -173,12 +173,12 @@ Exact-read Consumer that freezes canonical references before a model step.
 ```ts cordis-catalog
 /**
  * Replace the complete non-prose context workset for one live Session.
- * @param agent - owning Agent whose Session records the whole value.
- * @param workset - exact retained references selected by the browser.
- * @param signal - optional cancellation before validation and append.
+ * @param agent - owning Agent whose live Session selects the value.
+ * @param workset - live follow identity and exact pinned references selected by the browser.
+ * @param signal - optional cancellation before validation and retention.
  * @returns the detached normalized value now in force.
  */
-async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorkset>
+async replaceWorkset( agent: Agent, workset: NovelContextWorkset, signal?: AbortSignal, ): Promise<NovelContextWorksetV2>
 
 /**
  * Resolve exact retained Revisions for Novel tools and prompt preparation.
@@ -387,11 +387,11 @@ Project browser projection consuming the provider-neutral repository service.
 @Remote('search') async search( agent: Agent, request: SearchNovelAssetsRequest, signal: AbortSignal, ): Promise<NovelAssetSearchResult[]>
 
 /**
- * Replace the Session-owned non-prose Novel context workset.
- * @param agent Addressed Agent whose Session owns the workset event.
+ * Replace the addressed Agent's live non-prose Novel context workset.
+ * @param agent Addressed Agent whose live workset is replaced.
  * @param workset Complete next follow-and-pinned reference value.
- * @param signal Caller cancellation while validating and appending the update.
- * @returns The validated whole workset retained by the Session.
+ * @param signal Caller cancellation while validating the update.
+ * @returns The validated whole workset retained for the active Agent.
  */
 @Remote('replaceContextWorkset') async replaceContextWorkset( agent: Agent, workset: NovelContextWorksetDescriptor, signal: AbortSignal, ): Promise<NovelContextWorksetDescriptor>
 

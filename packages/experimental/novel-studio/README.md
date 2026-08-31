@@ -26,12 +26,12 @@ The source package remains private and experimental inside this monorepo. The su
 ## Behavior
 
 - Add this bundle after the existing base and Web App bundles. It inserts the Host Asset-type registry, the independent freeform planning/guidance Host/Client contribution, and `novel-repository-local`, followed by context, Revision-bound analysis, Remote, the separate Client adapter, and `novel-workbench`.
-- The ordinary `ui-layout` remains the sole root and layout-service owner. Novel Workbench contributes a preset-scoped `novel` surface through its selector-routed `shell.workbench` chain, so native DSH sidebar, conversation, details, settings, model selection, tool rendering, and Session services stay authoritative.
+- The ordinary `ui-layout` remains the sole root and layout-service owner. Novel Workbench contributes a preset-scoped surface through `shell.overlay`; a package-local DSH 0.1.2 compatibility adapter creates the temporary Agent/workbench split without patching host source, so DSH sidebar, conversation, details, settings, model selection, tool rendering, and Session services stay authoritative.
 - A package-owned `novel-workbench` Agent Preset combines a Novel persona with approval-gated `novel_initialize_project`, `novel_list`, `novel_search`, `novel_create`, `novel_get`, explicit read-only `novel_get_analysis`, `novel_propose_changes`, and `novel_present`; generic shell and filesystem mutation tools are absent.
 - The same Preset mounts ten package-owned, self-contained writing/review Skills through the standard on-demand `skill` tool: new-book bootstrap, outline/beat design, chapter execution, style rewrite, style audit, scene drive, dialogue diagnostics, exact-Revision chapter review, draft/final preference extraction, and finalized-prose Story State extraction. Each Skill declares a closed `novelContextPolicy`; Skills teach method and select bounded context policy but cannot widen Novel tool authority. Chapter execution and scene drive now derive a temporary execution draft from freeform chapter guidance, confirmed Story State, style, and necessary prior prose. Ordinary scenes proceed directly; key or uncertain scenes may compare 2–3 short action options, wait for the user's choice or select one explicitly, and still produce one prose candidate by default through the existing ChangeSet flow.
 - The Revision-bound analysis service gives the workbench deterministic NOAI scanning, a fixed one-shot reviewer, a preference worker, and a Story State worker. They receive only frozen bounded material, the `skill` tool, and a strict schema; none has Asset mutation authority. The user-facing Host flow alone can retain finalization and apply an accepted candidate through a ChangeSet.
 - Historical authored Revisions are read-only evidence. The author can explicitly compare and restore one as a new guarded current Revision; restore never rewinds history, conflicts stale proposals for that Asset, retains Revision-bound analysis evidence, and asks for Story State review when chapter Canon may have changed.
-- `NovelStudioPaths` registers the package-owned Preset root through `ctx.agentPresets.registerRoot()`. The contribution is effect-scoped to this bundle, never replaces another package's root configuration, and disappears if the bundle unloads.
+- The bundle patch contributes the package-owned Preset root through the shipped `agent-presets` configuration and resolves it from the installed facade package. It composes with shipped and user roots, does not require a private runtime registration API, and disappears when the plugin is removed from the Profile.
 - Installing the bundle leaves the host Profile's default Preset unchanged. The default `web` and `headless` compositions also remain free of the Novel Repository, context resolver, Novel Remote, workbench, and Novel tools. A product that intentionally dedicates one Profile to writing can apply `dedicated-profile.patch.yml`, which changes only that Profile's unnamed-session default to `novel-workbench`.
 
 ## Local one-package artifact
@@ -50,7 +50,7 @@ Install the tarball into an existing Web Profile with one plugin command:
 
 ```sh
 pnpm dsh plugin --profile web add \
-  "$PWD/.artifacts/xieshujing-plugin/xieshujing-dsh-plugin-0.1.1-rc.2.tgz"
+  "$PWD/.artifacts/xieshujing-plugin/xieshujing-dsh-plugin-0.1.2-alpha.2.tgz"
 pnpm dsh --profile web --port 3082 --no-open
 ```
 

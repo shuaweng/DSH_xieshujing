@@ -176,7 +176,9 @@ export function apply(ctx: Context): void {
     id: 'novel-workbench',
     order: 20,
     locale: NS,
-    inject: (): NovelFrameInjected => ({ workbench }),
+    inject: (): NovelFrameInjected => ({
+      workbench,
+    }),
     children: {
       'novel.explorer': { kind: 'single', scope: 'root' },
       'novel.canvas': { kind: 'single', scope: 'root' },
@@ -208,6 +210,7 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: (sessionId): ContextTrayInjected => ({
       hooks: { contextFocus, libraryContext, projectStatus },
+      discover: async () => await unwrapRemote(remote.discover(sessionId), 'discover Novel Project for context'),
       search: async request => await unwrapRemote(remote.search(sessionId, request), 'search Novel Assets'),
       replace: async workset => await unwrapRemote(
         remote.replaceContextWorkset(sessionId, workset),

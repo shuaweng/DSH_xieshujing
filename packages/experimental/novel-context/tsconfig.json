@@ -12,7 +12,6 @@
     { "path": "../../core/agent" },
     { "path": "../../fs/fs" },
     { "path": "../../core/session" },
-    { "path": "../../session/session-projection" },
     { "path": "../../llm/llm" },
     { "path": "../novel-repository" },
     { "path": "../../runtime-diagnostics/invariants" }

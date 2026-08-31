@@ -1,4 +1,4 @@
-/** Public records for frozen Novel references and durable context. */
+/** Public records for live Novel references and frozen model context. */
 
 import type { UserMessage } from '@deepseek-ai/dsh-llm/message'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm/types'
@@ -75,7 +75,7 @@ export interface NovelContextCompileRequest {
   readonly includeWorkset?: boolean
 }
 
-/** One exact cross-turn reference retained in Session coordination state. */
+/** One exact cross-turn reference retained in live browser/Host coordination state. */
 export interface NovelContextWorksetItemV1 extends Required<Pick<
   NovelReferenceInput,
   'projectId' | 'assetId' | 'revisionId' | 'label'
@@ -85,7 +85,7 @@ export interface NovelContextWorksetItemV1 extends Required<Pick<
   readonly origin: Extract<NovelContextReferenceOrigin, 'active-asset' | 'selection' | 'search'>
 }
 
-/** Legacy exact-Revision workset retained for existing Session replay. */
+/** Legacy exact-Revision workset accepted from older browser clients. */
 export interface NovelContextWorksetV1 {
   readonly version: 1
   readonly projectId: ProjectId
@@ -131,7 +131,7 @@ export interface NovelContextPinnedItem extends Required<Pick<
   readonly origin: Extract<NovelContextReferenceOrigin, 'selection' | 'search'>
 }
 
-/** Current live/frozen workset authored by the browser. */
+/** Current live workset authored by the browser. */
 export interface NovelContextWorksetV2 {
   readonly version: 2
   readonly projectId: ProjectId
@@ -140,13 +140,8 @@ export interface NovelContextWorksetV2 {
   readonly surface?: NovelContextSurface
 }
 
-/** Every durable workset accepted during Session replay. */
+/** Every live workset accepted from the workbench. */
 export type NovelContextWorkset = NovelContextWorksetV1 | NovelContextWorksetV2
-
-/** Versioned whole-value Session event; last event wins. */
-export type NovelContextWorksetChange =
-  | { readonly version: 1; readonly workset: NovelContextWorksetV1 }
-  | { readonly version: 2; readonly workset: NovelContextWorksetV2 }
 
 /** Legacy durable source retained for existing Session replay. */
 export interface NovelContextSourceV1 {
@@ -214,23 +209,6 @@ export type NovelContextSource = NovelContextSourceV1 | NovelContextSourceV2 | N
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'novel-context': NovelContextSource
-  }
-}
-
-declare module '@deepseek-ai/dsh-session/types' {
-  interface SessionEventMap {
-    /** Whole-value non-prose reference workset; latest event wins. */
-    'novel/context-workset': NovelContextWorksetChange
-  }
-}
-
-declare module '@deepseek-ai/dsh-session-projection/types' {
-  interface SessionProjectionStateMap {
-    novelContextWorkset: NovelContextWorkset | null
-  }
-  interface SessionProjectionMap {
-    /** Current live-follow and exact-pinned Novel workset, or null before the first mutation. */
-    novelContextWorkset: NovelContextWorkset | null
   }
 }
 

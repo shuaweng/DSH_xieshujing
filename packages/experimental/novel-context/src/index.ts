@@ -3,9 +3,7 @@
 import { createHash } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { z as zod } from 'zod'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
-import type {} from '@deepseek-ai/dsh-session-projection'
 import { createUserMessage, freezeMessage, type ContentBlock, type UserMessage } from '@deepseek-ai/dsh-llm'
 import type {
   AssetSnapshot,
@@ -199,6 +197,18 @@ export class NovelContextResolver extends Service {
 
   private readonly config: Required<Config>
 
+  /**
+   * Live composer coordination keyed by the actual Session object.
+   *
+   * A workset is deliberately not a custom Session event: an out-of-tree
+   * plugin must not extend the Harness's required persistence vocabulary and
+   * make an otherwise ordinary transcript unreadable after the plugin is
+   * removed. The browser restores this small preference and republishes it
+   * when it reconnects. Every exact context Manifest the model actually sees
+   * is still frozen into the standard message surface.
+   */
+  private readonly worksets = new WeakMap<object, NovelContextWorksetV2>()
+
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'novelContextResolver')
     this.config = {
@@ -222,24 +232,13 @@ export class NovelContextResolver extends Service {
         messages: await this.prepareSkillContinuation(agent, direct, turn, step, signal),
       }
     }, { prepend: true })
-    ctx.inject(['sessionProjections'], (projectionCtx) => {
-      const schema = zod.custom<NovelContextWorkset | null>(value => value === null || isWorkset(value))
-      projectionCtx.sessionProjections.register<'novelContextWorkset', NovelContextWorkset | null>({
-        key: 'novelContextWorkset',
-        stateSchema: schema,
-        init: () => null,
-        apply: (state, event) => event.type === 'novel/context-workset' ? event.data.workset : state,
-        wire: { viewSchema: schema, view: state => state },
-        stateVersion: 2,
-      })
-    })
   }
 
   /**
    * Replace the complete non-prose context workset for one live Session.
-   * @param agent - owning Agent whose Session records the whole value.
+   * @param agent - owning Agent whose live Session selects the value.
    * @param workset - live follow identity and exact pinned references selected by the browser.
-   * @param signal - optional cancellation before validation and append.
+   * @param signal - optional cancellation before validation and retention.
    * @returns the detached normalized value now in force.
    */
   async replaceWorkset(
@@ -265,9 +264,9 @@ export class NovelContextResolver extends Service {
         signal,
       )
     }
-    const current = foldNovelContextWorkset(agent.session.events)
+    const current = this.worksets.get(agent.session)
     if (current?.version === 2 && JSON.stringify(current) === JSON.stringify(normalized)) return structuredClone(current)
-    agent.session.append('novel/context-workset', { version: 2, workset: normalized })
+    this.worksets.set(agent.session, structuredClone(normalized))
     return structuredClone(normalized)
   }
 
@@ -394,7 +393,7 @@ export class NovelContextResolver extends Service {
     signal?.throwIfAborted()
     const policies = normalizePolicies(request.policies)
     const rawTargets = normalizeCompileTargets(request.targets)
-    const workset = request.includeWorkset === true ? foldNovelContextWorkset(agent.session.events) : null
+    const workset = request.includeWorkset === true ? this.worksets.get(agent.session) ?? null : null
     const projectId = rawTargets[0]?.projectId ?? workset?.projectId
     if (projectId === undefined) {
       throw new NovelContextError('novel context: compile requires a target or workset', 'NOVEL_CONTEXT_INVALID_REFERENCE')
@@ -683,7 +682,7 @@ export class NovelContextResolver extends Service {
       return freezeMessage({ ...message, content })
     })
     if (lastDirect < 0) return parsed
-    const workset = foldNovelContextWorkset(agent.session.events)
+    const workset = this.worksets.get(agent.session) ?? null
     if (references.length === 0 && workset === null) return parsed
     let policy: NovelContextPolicyId = 'direct-turn'
     for (const skillName of invokedSkills) {
@@ -908,21 +907,6 @@ function isBoundedText(value: unknown, maximum: number, allowBlank = false): val
 
 function isNonNegativeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0
-}
-
-/**
- * Fold durable workset events with latest-value semantics.
- * @param events Session events inspected by Host preparation or Projection replay.
- * @returns The latest valid Novel context workset, or null before any valid update.
- */
-export function foldNovelContextWorkset(events: readonly { readonly type: string; readonly data: unknown }[]): NovelContextWorkset | null {
-  let current: NovelContextWorkset | null = null
-  for (const event of events) {
-    if (event.type !== 'novel/context-workset') continue
-    const data = event.data as { workset?: unknown }
-    if (isWorkset(data.workset)) current = data.workset
-  }
-  return current
 }
 
 function manifestId(value: unknown): string {
