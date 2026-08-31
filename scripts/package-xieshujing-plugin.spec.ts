@@ -49,12 +49,18 @@ describe('WriteBookWhale one-package artifact', () => {
     const staged = stage()
     const patch = readFileSync(join(staged.directory, 'cordis.patch.yml'), 'utf8')
     const dedicatedPatch = readFileSync(join(staged.directory, 'dedicated-profile.patch.yml'), 'utf8')
+    const skillProvider = readFileSync(join(
+      staged.directory,
+      'presets/novel-workbench/plugins/dsh-novel-workbench-skills/index.js',
+    ), 'utf8')
     const files = inspectStagedPackage(staged.directory).map(file => file.path)
 
     expect(patch).toContain("name: '@xieshujing/dsh-plugin'")
     expect(patch).not.toContain("name: '@deepseek-ai/dsh-experimental-novel-studio'")
     expect(dedicatedPatch).toContain(".resolve('@xieshujing/dsh-plugin/package.json')")
     expect(dedicatedPatch).not.toContain('@deepseek-ai/dsh-experimental-novel-studio')
+    expect(skillProvider).toContain("from '../../../../lib/index.js'")
+    expect(skillProvider).not.toContain("from '@deepseek-ai/dsh-experimental-novel-studio'")
     expect(files).toEqual(expect.arrayContaining([
       'cordis.patch.yml',
       'presets/novel-workbench/agent.cordis.yml',

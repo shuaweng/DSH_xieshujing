@@ -25,6 +25,18 @@ requireCondition(
   existsSync(resolve(root, 'presets/novel-workbench/skills/chapter-execution/SKILL.md')),
   'missing Novel Preset skills',
 )
+const skillProvider = readFileSync(
+  resolve(root, 'presets/novel-workbench/plugins/dsh-novel-workbench-skills/index.js'),
+  'utf8',
+)
+requireCondition(
+  !skillProvider.includes("from '@deepseek-ai/dsh-experimental-novel-studio'"),
+  'Novel Preset skill provider references the unpublished monorepo facade',
+)
+requireCondition(
+  skillProvider.includes("from '../../../../lib/index.js'"),
+  'Novel Preset skill provider does not resolve the packaged facade',
+)
 
 for (const packageName of manifest.bundledDependencies ?? []) {
   const packageRoot = resolve(root, 'node_modules', ...packageName.split('/'))
