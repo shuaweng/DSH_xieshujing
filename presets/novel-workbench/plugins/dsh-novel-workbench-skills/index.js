@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { apply as applySkillFilesystem } from '@deepseek-ai/dsh-skill-filesystem'
-import { applyNovelProjectSkillPolicy } from '@deepseek-ai/dsh-experimental-novel-studio'
+import { applyNovelProjectSkillPolicy } from '../../../../lib/index.js'
 
 export const name = 'dsh-novel-workbench-skills'
 export const inject = ['skills', 'fs', 'novelRepository']

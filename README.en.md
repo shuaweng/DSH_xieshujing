@@ -31,7 +31,7 @@ Pin a release tag:
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.3
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.4
 dsh --profile web
 ```
 
@@ -43,7 +43,7 @@ Upgrade by running `add` again with the new tag:
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.3
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.4
 ```
 
 Remove the plugin:
