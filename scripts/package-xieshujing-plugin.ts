@@ -21,6 +21,7 @@ const SOURCE_FACADE = 'packages/experimental/novel-studio'
 const SOURCE_PACKAGE_NAME = '@deepseek-ai/dsh-experimental-novel-studio'
 const DISTRIBUTION_FILES = `${SOURCE_FACADE}/distribution`
 const PUBLIC_REPOSITORY = 'https://github.com/shuaweng/DSH_xieshujing'
+const COMPATIBLE_DSH_VERSION = '0.1.2-alpha.2'
 const PUBLIC_ASSETS = [
   ['packages/experimental/novel-workbench/src/client/assets/brand/xieshujing-logo-horizontal-web.png', 'assets/xieshujing-logo.png'],
   ['packages/experimental/novel-workbench/src/client/assets/brand/xieshujing-app-icon-256.png', 'assets/xieshujing-app-icon.png'],
@@ -153,11 +154,32 @@ function walkFiles(directory: string, root = directory): string[] {
 }
 
 function globExpression(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&')
-  const expression = escaped
-    .replace(/\*\*\/\*/g, '(?:.*/)?[^/]*')
-    .replace(/\*\*/g, '.*')
-    .replace(/\*/g, '[^/]*')
+  // Replace glob tokens while scanning the source pattern. Replacing them in
+  // several string passes is unsafe because later `*` replacements also
+  // rewrite the regex fragments inserted by an earlier pass. That bug made
+  // `presets/**/*` match only shallow preset files and silently omitted the
+  // packaged preset's nested `plugins/` and `skills/` directories.
+  let expression = ''
+  for (let index = 0; index < pattern.length;) {
+    if (pattern.startsWith('**/*', index)) {
+      expression += '(?:.*/)?[^/]*'
+      index += 4
+      continue
+    }
+    if (pattern.startsWith('**', index)) {
+      expression += '.*'
+      index += 2
+      continue
+    }
+    if (pattern[index] === '*') {
+      expression += '[^/]*'
+      index += 1
+      continue
+    }
+    const character = pattern.charAt(index)
+    expression += /[.+^${}()|[\]\\]/.test(character) ? `\\${character}` : character
+    index += 1
+  }
   return new RegExp(`^${expression}$`)
 }
 
@@ -194,7 +216,7 @@ function copyDistributionFiles(root: string, destinationRoot: string, version: s
     const source = join(sourceRoot, ...file.split('/'))
     const rendered = readFileSync(source, 'utf8')
       .replaceAll('{{PLUGIN_VERSION}}', version)
-      .replaceAll('{{DSH_VERSION}}', version)
+      .replaceAll('{{DSH_VERSION}}', COMPATIBLE_DSH_VERSION)
     if (file === 'README.md') {
       const destination = join(destinationRoot, 'README.en.md')
       mkdirSync(dirname(destination), { recursive: true })

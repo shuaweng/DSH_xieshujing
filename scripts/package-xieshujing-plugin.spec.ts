@@ -58,6 +58,9 @@ describe('WriteBookWhale one-package artifact', () => {
     expect(files).toEqual(expect.arrayContaining([
       'cordis.patch.yml',
       'presets/novel-workbench/agent.cordis.yml',
+      'presets/novel-workbench/plugins/dsh-novel-workbench-skills/index.js',
+      'presets/novel-workbench/skills/chapter-execution/SKILL.md',
+      'presets/novel-workbench/skills/new-book-bootstrap/SKILL.md',
       'node_modules/@deepseek-ai/dsh-experimental-novel-workbench/lib/client.js',
       'node_modules/@deepseek-ai/dsh-experimental-novel-repository-remote/lib/typert.host.js',
     ]))
@@ -79,6 +82,14 @@ describe('WriteBookWhale one-package artifact', () => {
     expect(readme).not.toContain('{{PLUGIN_VERSION}}')
     expect(existsSync(join(directory, 'LICENSE'))).toBe(true)
     expect(existsSync(join(directory, 'assets/xieshujing-logo.png'))).toBe(true)
+    expect(existsSync(join(
+      directory,
+      'presets/novel-workbench/plugins/dsh-novel-workbench-skills/index.js',
+    ))).toBe(true)
+    expect(existsSync(join(
+      directory,
+      'presets/novel-workbench/skills/chapter-execution/SKILL.md',
+    ))).toBe(true)
     expect(existsSync(join(directory, '.github/workflows/verify.yml'))).toBe(true)
     expect(existsSync(join(directory, 'scripts/verify-distribution.mjs'))).toBe(true)
   })
