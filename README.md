@@ -31,7 +31,7 @@
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.2
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.3
 dsh --profile web
 ```
 
@@ -43,7 +43,7 @@ dsh --profile web
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.2
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.3
 ```
 
 卸载：

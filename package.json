@@ -1,6 +1,6 @@
 {
   "name": "@xieshujing/dsh-plugin",
-  "version": "0.1.2-alpha.2",
+  "version": "0.1.2-alpha.3",
   "description": "写书鲸：面向 DeepSeek Harness 的原生小说创作工作台",
   "files": [
     "lib/index.js",

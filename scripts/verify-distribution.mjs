@@ -17,6 +17,14 @@ requireCondition(!serialized.includes('workspace:'), 'workspace dependency escap
 requireCondition(existsSync(resolve(root, 'cordis.patch.yml')), 'missing bundle patch')
 requireCondition(existsSync(resolve(root, 'lib/index.js')), 'missing prebuilt facade')
 requireCondition(existsSync(resolve(root, 'presets/novel-workbench/agent.cordis.yml')), 'missing Novel Preset')
+requireCondition(
+  existsSync(resolve(root, 'presets/novel-workbench/plugins/dsh-novel-workbench-skills/index.js')),
+  'missing Novel Preset skill provider',
+)
+requireCondition(
+  existsSync(resolve(root, 'presets/novel-workbench/skills/chapter-execution/SKILL.md')),
+  'missing Novel Preset skills',
+)
 
 for (const packageName of manifest.bundledDependencies ?? []) {
   const packageRoot = resolve(root, 'node_modules', ...packageName.split('/'))
