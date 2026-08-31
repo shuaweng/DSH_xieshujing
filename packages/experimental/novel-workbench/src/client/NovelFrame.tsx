@@ -71,6 +71,12 @@ export function NovelFrame({ renderSlot, t, workbench }: NovelFrameProps) {
 const SHELL_SIDEBAR_PROPERTY = '--novel-shell-sidebar-track'
 const SHELL_CONVERSATION_PROPERTY = '--novel-shell-conversation-track'
 
+/** Resolve the Host shell without depending on Cordis slot wrapper depth. */
+function resolveHostShell(frame: HTMLElement | null): HTMLElement | null {
+  const overlay = frame?.closest<HTMLElement>('[data-shell-overlay]')
+  return overlay?.parentElement ?? null
+}
+
 /**
  * Adapt the public `shell.overlay` seat to a native conversation/workbench split.
  *
@@ -85,9 +91,8 @@ function useNativeConversationSplit(
   preferredWidth: number,
 ): void {
   useLayoutEffect(() => {
-    const overlay = frameRef.current?.parentElement
-    const shell = overlay?.parentElement
-    if (!visible || overlay?.hasAttribute('data-shell-overlay') !== true || shell === undefined || shell === null) return
+    const shell = resolveHostShell(frameRef.current)
+    if (!visible || shell === null) return
 
     const sync = (): void => {
       const sidebar = shell.style.gridTemplateColumns.match(/^([0-9.]+)px\b/u)?.[1] ?? '0'
@@ -212,7 +217,7 @@ function PanelResizer({ value, label, resetLabel, onChange }: PanelResizerProps)
           latestClientX: event.clientX,
           width: value,
           host,
-          shell: host.parentElement?.parentElement ?? null,
+          shell: resolveHostShell(host),
         }
         host.setAttribute('data-workbench-resizing', '')
         event.currentTarget.setPointerCapture(event.pointerId)

@@ -282,10 +282,12 @@ describe('NovelFrame', () => {
     }) as never
     const view = render(<div data-workbench="novel" style={{ gridTemplateColumns: '280px minmax(0, 1fr) 0px' }}>
       <div data-shell-overlay>
-        <NovelFrame
-          renderSlot={renderSlot} t={t} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
-          workbench={workbench}
-        />
+        <div data-slot="shell.overlay" style={{ display: 'contents' }}>
+          <NovelFrame
+            renderSlot={renderSlot} t={t} useSessions={useSessions as never} useWorkspaces={vi.fn() as never}
+            workbench={workbench}
+          />
+        </div>
       </div>
     </div>)
 
