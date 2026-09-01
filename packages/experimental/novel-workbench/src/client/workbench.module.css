@@ -31,6 +31,9 @@
 .frame:has(.editorStage[data-reader-skin='rose']) { --novel-workspace-bg: #eadcdd; --novel-paper-bg: #fbf2f2; --novel-text: #4b3438; --novel-muted: #9a7c80; --novel-paper-border: #dfc9cb; --novel-chrome-bg: #f0e4e5; --novel-chrome-strong: #fbf2f2; --novel-chrome-text: #4b3438; --novel-chrome-muted: #907378; --novel-chrome-border: #d9c2c5; --novel-accent: #966670; }
 .frame:has(.editorStage[data-reader-skin='blue']) { --novel-workspace-bg: #d9e2ec; --novel-paper-bg: #f2f6fa; --novel-text: #2d3948; --novel-muted: #7b899a; --novel-paper-border: #c8d3df; --novel-chrome-bg: #e4ebf2; --novel-chrome-strong: #f2f6fa; --novel-chrome-text: #2d3948; --novel-chrome-muted: #718095; --novel-chrome-border: #c1cdda; --novel-accent: #607b9d; }
 .frame:has(.editorStage[data-reader-skin='night']) { --novel-workspace-bg: #20211f; --novel-paper-bg: #2d2f2c; --novel-text: #e7e1d7; --novel-muted: #aaa49a; --novel-paper-border: #3d403b; --novel-chrome-bg: #272925; --novel-chrome-strong: #30322e; --novel-chrome-text: #e7e1d7; --novel-chrome-muted: #aaa49a; --novel-chrome-border: #41443e; --novel-accent: #819b77; --novel-accent-contrast: #182016; }
+.frame:has(.projectBootstrap) { grid-template-columns: 0 minmax(320px, 1fr) !important; }
+.frame:has(.projectBootstrap) .explorer { visibility: hidden; opacity: 0; pointer-events: none; }
+.frame:has(.projectBootstrap) .explorerToggle { display: none; }
 
 .explorer { min-width: 0; overflow: hidden; border-right: 1px solid var(--ds-color-border-subtle); }
 .canvas { min-width: 0; overflow: hidden; container-type: inline-size; }
@@ -302,8 +305,7 @@
   .chapterOutlineDrawer { width: min(560px, 68%); }
   .analysisDrawer { width: min(600px, 72%); }
 }
-.home { position: relative; box-sizing: border-box; height: 100%; overflow: auto; color: var(--novel-chrome-text); background: color-mix(in srgb, var(--novel-chrome-strong) 96%, #f7f7f4); isolation: isolate; }
-.home::before { position: absolute; z-index: -1; top: 58px; right: 0; width: min(1080px, 76vw); aspect-ratio: 16 / 9; content: ''; background: url('./assets/brand/xieshujing-home-hero-web.png') center / cover no-repeat; opacity: .84; pointer-events: none; -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 25%, #000 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 25%, #000 100%); }
+.home { position: relative; box-sizing: border-box; height: 100%; overflow: auto; color: var(--novel-chrome-text); background-color: #f7f1e8; background-image: linear-gradient(180deg, rgb(255 253 249 / 16%), rgb(249 244 235 / 30%)), url('./assets/brand/xieshujing-home-hero-web.png'); background-position: center, center top; background-size: cover, cover; background-repeat: no-repeat; background-attachment: local; isolation: isolate; }
 .homeNav { position: sticky; z-index: 2; top: 0; display: flex; box-sizing: border-box; min-height: 58px; align-items: center; justify-content: space-between; padding: 0 clamp(24px, 4vw, 52px); border-bottom: 1px solid color-mix(in srgb, var(--novel-chrome-border) 72%, transparent); background: color-mix(in srgb, var(--novel-chrome-strong) 92%, transparent); backdrop-filter: blur(18px) saturate(1.1); }
 .homeBrand { display: block; width: 112px; height: 42px; background: url('./assets/brand/xieshujing-logo-horizontal-web.png') left center / contain no-repeat; }
 .newBookButton { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid color-mix(in srgb, var(--novel-accent) 68%, transparent); border-radius: 9px; color: var(--novel-accent-contrast); background: var(--novel-accent); box-shadow: 0 5px 16px color-mix(in srgb, var(--novel-accent) 16%, transparent); font-size: 12px; font-weight: 650; cursor: pointer; transition: box-shadow 160ms ease, filter 160ms ease, transform 160ms ease; }
@@ -357,7 +359,7 @@
 .homeError { color: var(--ds-color-text-error, #d14343); }
 @keyframes home-enter { from { opacity: 0; transform: translateY(8px); } }
 @media (max-width: 760px) {
-  .home::before { width: 100%; opacity: .48; -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 90%); mask-image: linear-gradient(180deg, #000 0%, transparent 90%); }
+  .home { background-image: linear-gradient(180deg, rgb(255 253 249 / 34%), rgb(249 244 235 / 48%)), url('./assets/brand/xieshujing-home-hero-web.png'); background-position: center, 62% top; }
   .homeNav { padding-inline: 18px; }
   .homeMain { width: calc(100% - 40px); padding: 42px 0 56px; }
   .homeHero { min-height: 220px; }
