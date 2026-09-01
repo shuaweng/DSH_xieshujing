@@ -2,6 +2,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-session-controller/client'
+import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
@@ -51,10 +52,12 @@ export {
 } from './renderers.tsx'
 
 export const inject = [
-  'slots', 'sessions', 'uiWorkspace', 'remote', 'remote.novelRepository', 'theme', 'locale', 'inputTriggers',
+  'slots', 'sessions', 'workspaces', 'uiWorkspace', 'remote', 'remote.agentPresets',
+  'remote.novelRepository', 'theme', 'locale', 'inputTriggers',
 ]
 
 const NOVEL_SELECTION_REFERENCE_SOURCE = 'novel-selection'
+const NOVEL_PRESET_ID = 'novel-workbench'
 
 interface NovelComposerReference {
   readonly mention: string
@@ -269,13 +272,20 @@ export function apply(ctx: Context): void {
         ctx.sessions.open(targetSessionId)
         workbench.openBook(assetId)
       },
-      startNewBook: () => {
-        // Preserve the user's new-book intent while DSH clears the current
-        // Session and asks for a target Workspace. Once the new Session is
-        // rooted, the visible Novel surface should continue into bootstrap
-        // instead of falling back to the cross-Workspace library home.
+      startNewBook: async () => {
+        // A new book is still a native DSH Workspace and Session. Complete
+        // the whole hand-off here so the generic New Session screen never
+        // gets a chance to discard either the selected directory or preset.
+        const path = await ctx.uiWorkspace.pickDirectory()
+        if (path === null) return
+        const workspace = await ctx.workspaces.create({ path })
+        const targetSessionId = await ctx.uiWorkspace.connectWorkspace(workspace.workspaceId)
+        await unwrapRemote(
+          ctx.remote.agentPresets.select(targetSessionId, NOVEL_PRESET_ID),
+          'select Novel Workbench preset',
+        )
+        ctx.sessions.open(targetSessionId)
         workbench.openBook()
-        ctx.sessions.clear()
       },
       renderers,
       initialize: async (sessionId, request) => await unwrapRemote(

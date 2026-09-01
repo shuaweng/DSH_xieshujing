@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-experimental-novel-studio",
   "description": "Experimental installable Novel Studio bundle",
-  "version": "0.1.2-alpha.6",
+  "version": "0.1.2-alpha.7",
   "private": true,
   "repository": {
     "type": "git",

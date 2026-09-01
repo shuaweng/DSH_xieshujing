@@ -34,6 +34,7 @@
 
 .explorer { min-width: 0; overflow: hidden; border-right: 1px solid var(--ds-color-border-subtle); }
 .canvas { min-width: 0; overflow: hidden; container-type: inline-size; }
+.canvas:has(.projectBootstrap) { overflow: auto; background: #fbf8f2; }
 .statusHost { position: absolute; right: 0; bottom: 0; left: 0; z-index: 8; height: 38px; }
 .panelResizer { position: absolute; top: 0; bottom: 0; left: -7px; z-index: 12; width: 14px; cursor: col-resize; outline: 0; background: transparent; touch-action: none; }
 .panelResizer::after { position: absolute; inset: 0 6px; content: ''; background: var(--ds-color-border-subtle); transition: background 140ms ease, inset 140ms ease; }
@@ -375,8 +376,8 @@
   .continueRow, .newBookButton, .continueAction, .bookRow { transition: none; }
 }
 .empty { display: grid; height: 100%; place-items: center; color: var(--ds-color-text-tertiary); }
-.projectBootstrap { display: grid; box-sizing: border-box; height: 100%; min-height: 0; overflow: auto; grid-template-columns: minmax(260px, 42%) minmax(0, 1fr); color: #2d2b28; background: #fbf8f2; }
-.projectBootstrapArtwork { position: relative; min-height: 100%; background: #f2ede4 url('./assets/brand/xieshujing-new-book-ink.png') center / cover no-repeat; animation: project-bootstrap-art 520ms ease-out both; }
+.projectBootstrap { display: grid; box-sizing: border-box; min-height: 100%; grid-template-columns: minmax(220px, 37%) minmax(0, 1fr); align-items: stretch; overflow: visible; color: #2d2b28; background: #fbf8f2; }
+.projectBootstrapArtwork { position: relative; min-height: 100%; align-self: stretch; background: #f2ede4 url('./assets/brand/xieshujing-new-book-ink.png') center / cover no-repeat; animation: project-bootstrap-art 520ms ease-out both; }
 .projectBootstrapArtwork::after { position: absolute; z-index: 1; top: -4%; right: -30px; width: 60px; height: 108%; border-radius: 52% 0 0 48% / 48% 0 0 52%; content: ''; background: #fbf8f2; }
 .projectBootstrapBody { display: flex; box-sizing: border-box; width: min(620px, calc(100% - 72px)); margin: auto; padding: clamp(34px, 7vh, 76px) 0; flex-direction: column; align-items: stretch; animation: project-bootstrap-form 420ms 80ms ease-out both; }
 .projectBootstrapLogo { display: block; width: 180px; height: 62px; margin-bottom: clamp(24px, 4vh, 42px); background: url('./assets/brand/xieshujing-logo-horizontal-web.png') left center / contain no-repeat; }
@@ -401,8 +402,8 @@
 .projectBootstrap small { margin-top: 15px; color: #96918a; font-size: 10px; line-height: 1.6; text-align: center; }
 @keyframes project-bootstrap-art { from { opacity: .55; transform: scale(1.015); } }
 @keyframes project-bootstrap-form { from { opacity: 0; transform: translateY(9px); } }
-@container (max-width: 760px) {
-  .projectBootstrap { grid-template-columns: 1fr; }
+@container (max-width: 560px) {
+  .projectBootstrap { grid-template-columns: 1fr; background: linear-gradient(rgb(251 248 242 / 90%), rgb(251 248 242 / 94%)), url('./assets/brand/xieshujing-new-book-ink.png') center / cover no-repeat; }
   .projectBootstrapArtwork { display: none; }
   .projectBootstrapBody { width: min(560px, calc(100% - 44px)); }
 }

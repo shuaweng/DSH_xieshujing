@@ -429,10 +429,10 @@ describe('NovelHome', () => {
         kind: 'library-home', bookCount: 1, manuscriptCharacters: 4321, todayCharacterDelta: 286,
       }),
     })) })
+    fireEvent.click(view.getByRole('button', { name: /新建小说/u }))
+    await waitFor(() => { expect(startNewBook).toHaveBeenCalledTimes(1) })
     fireEvent.click(view.getByRole('button', { name: zh.continueWriting }))
     expect(openBook).toHaveBeenCalledWith(expect.objectContaining({ title: '白港' }), 'asset-chapter-1')
-    fireEvent.click(view.getByRole('button', { name: /新建小说/u }))
-    expect(startNewBook).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -1696,7 +1696,11 @@ describe('Novel workbench stores and browser assembly', () => {
     const clearSession = vi.fn()
     ctx.provide('sessions', { scope: () => sessionScope.value, open: openSession, clear: clearSession } as never)
     const connectWorkspace = vi.fn(async () => SID)
-    ctx.provide('uiWorkspace', { connectWorkspace } as never)
+    const pickDirectory = vi.fn(async () => '/stories/new-book')
+    const createWorkspace = vi.fn(async () => ({ workspaceId: 'workspace-new' }))
+    const selectPreset = vi.fn(async () => ({ ok: true as const, value: 'novel-workbench' }))
+    ctx.provide('workspaces', { create: createWorkspace } as never)
+    ctx.provide('uiWorkspace', { connectWorkspace, pickDirectory } as never)
     let referenceSource: InputTriggerSource | undefined
     ctx.provide('inputTriggers', {
       registerSource: (source: InputTriggerSource) => { referenceSource = source; return () => { referenceSource = undefined } },
@@ -1731,7 +1735,7 @@ describe('Novel workbench stores and browser assembly', () => {
       search: vi.fn(async () => ({ ok: true as const, value: [] })),
       replaceContextWorkset: vi.fn(async (_sid: unknown, value: NovelContextWorksetDescriptor) => ({ ok: true as const, value })),
     }
-    ctx.provide('remote', { novelRepository: remote } as never)
+    ctx.provide('remote', { novelRepository: remote, agentPresets: { select: selectPreset } } as never)
     let theme: ThemeSnapshot = {
       preference: 'light', active: { id: 'light', colorScheme: 'light', tokens: { '--novel-old': '1px' } },
       fontSize: 16, themes: [], revision: 0,
@@ -1750,7 +1754,7 @@ describe('Novel workbench stores and browser assembly', () => {
     const fiber = ctx.plugin({
       // The production client module loader understands dotted Remote facets;
       // this direct Cordis bench provides the complete remote object itself.
-      inject: workbenchInject.filter(name => name !== 'remote.novelRepository'),
+      inject: workbenchInject.filter(name => name !== 'remote.novelRepository' && name !== 'remote.agentPresets'),
       apply: applyWorkbench,
     })
     await fiber.await()
@@ -1814,6 +1818,7 @@ describe('Novel workbench stores and browser assembly', () => {
       reportLibraryContext: (value?: Parameters<NovelLibraryContextFocusController['set']>[0]) => void
       reportProjectStatus: (value?: Parameters<NovelProjectStatusController['set']>[0]) => void
       openLibraryBook: (book: NovelLibraryBook, assetId?: string) => Promise<void>
+      startNewBook: () => Promise<void>
     }
     const canvasFace = canvas()
     canvasFace.reportProjectStatus({ sessionId: SID, status: 'uninitialized' })
@@ -1843,6 +1848,14 @@ describe('Novel workbench stores and browser assembly', () => {
     expect(workbenchFace.workbench.getSnapshot()).toMatchObject({
       page: 'book', requestedAssetId: 'asset-chapter-1',
     })
+    await canvasFace.startNewBook()
+    expect(pickDirectory).toHaveBeenCalledTimes(1)
+    expect(createWorkspace).toHaveBeenCalledWith({ path: '/stories/new-book' })
+    expect(connectWorkspace).toHaveBeenLastCalledWith('workspace-new')
+    expect(selectPreset).toHaveBeenCalledWith(SID, 'novel-workbench')
+    expect(openSession).toHaveBeenLastCalledWith(SID)
+    expect(selectPreset.mock.invocationCallOrder[0]).toBeLessThan(openSession.mock.invocationCallOrder.at(-1)!)
+    expect(workbenchFace.workbench.getSnapshot()).toMatchObject({ page: 'book', visible: true })
     await expect(canvasFace.save(SID, {})).resolves.toMatchObject({ revisionId: 'revision-2' })
     await expect(canvasFace.capture(SID, {})).resolves.toMatchObject({ id: 'selection-1' })
     expect(() => { canvasFace.appendReference(SID, selection(), '[新句]') }).toThrow(/no browser scope/u)

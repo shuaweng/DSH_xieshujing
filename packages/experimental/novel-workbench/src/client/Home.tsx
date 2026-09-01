@@ -41,7 +41,7 @@ export interface NovelHomeInjected {
     dayStart: string,
   ) => Promise<readonly NovelLibraryBook[]>
   readonly openBook: (book: NovelLibraryBook, assetId?: string) => Promise<void>
-  readonly startNewBook: () => void
+  readonly startNewBook: () => Promise<void>
   readonly reportLibraryContext: (value?: NovelLibraryContextFocus) => void
 }
 
@@ -62,6 +62,7 @@ export function NovelHome({
   const [books, setBooks] = useState<readonly NovelLibraryBook[]>([])
   const [loading, setLoading] = useState(true)
   const [openingWorkspaceId, setOpeningWorkspaceId] = useState<string>()
+  const [creatingBook, setCreatingBook] = useState(false)
   const [error, setError] = useState<string>()
   const candidates = useMemo(() => libraryCandidates(workspaces.items, workspaces.archivedSessionIds, sessions),
     [sessions, workspaces.archivedSessionIds, workspaces.items])
@@ -121,17 +122,26 @@ export function NovelHome({
   }, [currentProjectId, currentSessionId, librarySurface, loading, reportLibraryContext])
 
   const activateBook = async (book: NovelLibraryBook, assetId?: string): Promise<void> => {
-    if (openingWorkspaceId !== undefined) return
+    if (openingWorkspaceId !== undefined || creatingBook) return
     setOpeningWorkspaceId(book.workspaceId)
     setError(undefined)
     try { await openBook(book, assetId) }
     catch (cause: unknown) { setError(errorMessage(cause)); setOpeningWorkspaceId(undefined) }
   }
 
+  const createBook = async (): Promise<void> => {
+    if (openingWorkspaceId !== undefined || creatingBook) return
+    setCreatingBook(true)
+    setError(undefined)
+    try { await startNewBook() }
+    catch (cause: unknown) { setError(errorMessage(cause)) }
+    finally { setCreatingBook(false) }
+  }
+
   return <div className={css.home}>
     <nav className={css.homeNav} aria-label={t('studio')}>
       <span className={css.homeBrand} role="img" aria-label={t('studio')} />
-      <button type="button" className={css.newBookButton} onClick={startNewBook}>
+      <button type="button" className={css.newBookButton} disabled={creatingBook} onClick={() => { void createBook() }}>
         <span aria-hidden="true">＋</span>{t('newNovel')}
       </button>
     </nav>
