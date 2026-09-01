@@ -270,7 +270,11 @@ export function apply(ctx: Context): void {
         workbench.openBook(assetId)
       },
       startNewBook: () => {
-        workbench.close()
+        // Preserve the user's new-book intent while DSH clears the current
+        // Session and asks for a target Workspace. Once the new Session is
+        // rooted, the visible Novel surface should continue into bootstrap
+        // instead of falling back to the cross-Workspace library home.
+        workbench.openBook()
         ctx.sessions.clear()
       },
       renderers,

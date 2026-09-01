@@ -106,6 +106,7 @@ B5 中性微笑是静态主标识。状态化表情仅用于产品内反馈，�
 - `xieshujing-app-icon-{512,256,128}.png`：应用图标尺寸变体。
 - `xieshujing-home-hero.png`：首页主视觉背景。
 - `xieshujing-cover-base.png`：默认小说封面底图。
+- `xieshujing-new-book-ink.png`：新书启动页左侧水墨主视觉，不承载文字或品牌标志。
 - `*-key.png`：保留的绿色抠图源文件，不用于产品界面。
 
 全部正式视觉以 Image2 生成的 PNG 为准，不另做低复原度矢量重绘。界面根据实际显示尺寸加载对应的 PNG 变体，避免浏览器在小尺寸下重复缩放原图。

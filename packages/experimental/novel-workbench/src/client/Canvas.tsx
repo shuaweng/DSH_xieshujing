@@ -458,20 +458,21 @@ export function Canvas({
     finally { setPreferenceBusy(false) }
   }
 
-  if (state.projectStatus === 'uninitialized') {
-    return <ProjectBootstrap
-      sessionId={sessionId}
-      initialize={initialize}
-      onInitialized={(project) => { actions.loaded(project, []); actions.refresh() }}
-      fail={actions.fail}
-      t={t}
-    />
-  }
   if (page === 'home' && inspectLibrary !== undefined && openLibraryBook !== undefined && startNewBook !== undefined) {
     return <NovelHome useSessions={useSessions} useWorkspaces={useWorkspaces}
       inspectLibrary={inspectLibrary} openBook={openLibraryBookSafely} startNewBook={startNewBook}
       {...(!ownsCurrentSession || state.project === undefined ? {} : { currentProjectId: state.project.id })}
       reportLibraryContext={reportLibraryContext} t={t} />
+  }
+  if (state.projectStatus === 'uninitialized') {
+    return <ProjectBootstrap
+      sessionId={sessionId}
+      initialize={initialize}
+      onInitialized={(project) => { actions.loaded(project, []); actions.refresh() }}
+      openExisting={() => { workbench.openHome() }}
+      fail={actions.fail}
+      t={t}
+    />
   }
   if (state.document === undefined || state.draft === undefined) {
     return <div className={css.empty}>{state.error ?? t('noChapter')}</div>
@@ -652,10 +653,11 @@ function RestoreRevisionDialog({ current, historical, renderer, busy, cancel, co
   </div>
 }
 
-function ProjectBootstrap({ sessionId, initialize, onInitialized, fail, t }: {
+function ProjectBootstrap({ sessionId, initialize, onInitialized, openExisting, fail, t }: {
   readonly sessionId: SessionId | undefined
   readonly initialize: CanvasInjected['initialize']
   readonly onInitialized: (project: NovelProjectDescriptor) => void
+  readonly openExisting: () => void
   readonly fail: (message: string) => void
   readonly t: CanvasProps['t']
 }) {
@@ -676,27 +678,32 @@ function ProjectBootstrap({ sessionId, initialize, onInitialized, fail, t }: {
     finally { setBusy(false) }
   }
   return <section className={css.projectBootstrap} aria-labelledby="novel-project-bootstrap-title">
-    <div className={css.projectBootstrapBody}>
-      <span className={css.projectBootstrapMark} aria-hidden="true">✦</span>
-      <p className={css.projectBootstrapEyebrow}>{t('studio')}</p>
+    <div className={css.projectBootstrapArtwork} aria-hidden="true" />
+    <form className={css.projectBootstrapBody} onSubmit={(event) => { event.preventDefault(); void submit() }}>
+      <span className={css.projectBootstrapLogo} aria-hidden="true" />
+      <p className={css.projectBootstrapEyebrow}>{t('newProject')}</p>
       <h1 id="novel-project-bootstrap-title">{t('initializeProjectTitle')}</h1>
-      <p>{t('initializeProjectDescription')}</p>
+      <p className={css.projectBootstrapDescription}>{t('initializeProjectDescription')}</p>
       <label>
         <span>{t('projectTitleLabel')}</span>
         <input value={title} autoFocus placeholder={t('projectTitlePlaceholder')}
-          onChange={(event) => { setTitle(event.target.value) }}
-          onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void submit() } }} />
+          onChange={(event) => { setTitle(event.target.value) }} />
       </label>
       <label>
         <span>{t('projectDescriptionLabel')}</span>
         <textarea value={description} maxLength={1000} placeholder={t('projectDescriptionPlaceholder')}
           onChange={(event) => { setDescription(event.target.value) }} />
       </label>
-      <button type="button" disabled={busy || title.trim() === ''} onClick={() => { void submit() }}>
-        {busy ? t('initializingProject') : t('initializeProject')}
-      </button>
+      <div className={css.projectBootstrapActions}>
+        <button className={css.projectBootstrapPrimary} type="submit" disabled={busy || title.trim() === ''}>
+          {busy ? t('initializingProject') : t('initializeProject')}
+        </button>
+        <button className={css.projectBootstrapSecondary} type="button" disabled={busy} onClick={openExisting}>
+          {t('openExistingProject')}
+        </button>
+      </div>
       <small>{t('initializeProjectSafety')}</small>
-    </div>
+    </form>
   </section>
 }
 

@@ -469,6 +469,7 @@ describe('Canvas', () => {
 
   it('turns an uninitialized folder into a ready Novel Project from one quiet empty state', async () => {
     const store = createNovelWorkbenchStore().create()
+    const workbench = new NovelWorkbenchViewController('book')
     act(() => { store.actions.uninitialized() })
     const initialized = {
       schema: 1 as const, id: 'project-new' as never, title: '国运擂台', rootDisplayPath: '/story',
@@ -478,6 +479,7 @@ describe('Canvas', () => {
     const initialize = vi.fn(async () => initialized)
     const view = render(<Canvas
       {...canvasAnalysisStubs}
+      workbench={workbench}
       initialize={initialize}
       open={openStub} create={createStub}
       useStore={hookOf(store) as never} actions={store.actions}
@@ -486,6 +488,9 @@ describe('Canvas', () => {
     />)
 
     expect(view.getByRole('heading', { name: zh.initializeProjectTitle })).toBeTruthy()
+    fireEvent.click(view.getByRole('button', { name: zh.openExistingProject }))
+    expect(workbench.getSnapshot().page).toBe('home')
+    act(() => { workbench.openBook() })
     expect(view.queryByRole('alert')).toBeNull()
     fireEvent.change(view.getByLabelText(zh.projectTitleLabel), { target: { value: '国运擂台' } })
     fireEvent.change(view.getByLabelText(zh.projectDescriptionLabel), {
