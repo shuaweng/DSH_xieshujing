@@ -8,6 +8,24 @@
 
 ### 让灵感、正文与 Agent，真正写在同一本书里。
 
+让大肥鲸变成专业小说家，和你一起创作吧。
+
+写书鲸是一套完全 DSH 原生、由 Agent 与人共同协作的小说工作台，效率 Maxing。
+
+## 写书鲸的三种能力
+
+### 1. 所见即所得
+
+写书鲸与人眼共享上下文。人能看到的工作台内容，Agent 也能看到并修改，保障符合直觉的交互体验：你正在读哪一章、圈选了哪一段、固定了哪些资料，都会成为可追踪的创作上下文。
+
+### 2. 小说专家
+
+让写书鲸成为成熟的小说家。写书鲸创建了一套完整的小说专属 tools、hooks、skills、subagent，让 Agent 能围绕大纲、章纲、故事状态和版本工作，写出来的小说情节自然流畅，文笔没有 AI 味。
+
+### 3. 自进化
+
+用户的每一次手动修改、Prompt 指令导致的正文变更，再到最终正文章节定稿，都会被记录下来并分析，帮助写书鲸理解你的写作偏好，写得越来越好。
+
 写书鲸是一张为长篇创作准备的 AI 写作桌。你可以像往常一样写正文、理大纲、看章纲，也可以随手圈选一段，让 Agent 接着写、改一版或认真挑错。
 
 它不要求你把整本书反复复制进聊天框。Agent 会跟随你正在看的书、章节和选区，所有修改先作为建议回到原位置，由你决定是否落稿。
@@ -16,15 +34,17 @@
 
 写书鲸不是另一套孤立的 AI 写作工具。它把小说工作台接入 DSH 原生的 Agent、Preset、Skills 与 Subagent，同时用小说资产、明确引用和版本提案，保证人和 Agent 始终在编辑同一本书。
 
+![写书鲸产品架构：所见即所得、小说专家与自进化](assets/showcase/xieshujing-architecture.png)
+
 ```mermaid
 flowchart LR
-  Writer["作者<br/>写作 · 选择 · 审阅 · 定稿"]
+  Writer["作者 · 所见即所得<br/>写作 · 选择 · 审阅 · 定稿"]
   Workbench["写书鲸工作台<br/>书库 · 正文 · 大纲 · 章纲"]
   Context["创作上下文<br/>当前资产 · 选区 · Story State"]
-  Agent["DSH Agent<br/>Preset · Skills · Subagent"]
+  Agent["DSH Agent · 小说专家<br/>Preset · Skills · Subagent"]
   Tools["小说专属工具<br/>定位 · 读取 · 搜索 · 提案"]
   Assets["小说资产<br/>正文 · 大纲 · 风格 · 审查"]
-  Safety["安全修改<br/>ChangeSet · Diff · Revision"]
+  Safety["安全修改与自进化<br/>ChangeSet · Diff · Revision · 偏好"]
   Files["本地小说项目<br/>Markdown · YAML · .novel"]
 
   Writer -->|直接创作与选择| Workbench
