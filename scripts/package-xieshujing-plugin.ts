@@ -27,6 +27,9 @@ const PUBLIC_ASSETS = [
   ['packages/experimental/novel-workbench/src/client/assets/brand/xieshujing-app-icon-256.png', 'assets/xieshujing-app-icon.png'],
   ['packages/experimental/novel-studio/distribution-assets/screenshots/home.png', 'assets/screenshots/home.png'],
   ['packages/experimental/novel-studio/distribution-assets/screenshots/editor.png', 'assets/screenshots/editor.png'],
+  ['packages/experimental/novel-studio/distribution-assets/screenshots/outline.png', 'assets/screenshots/outline.png'],
+  ['packages/experimental/novel-studio/distribution-assets/screenshots/chapter-plan.png', 'assets/screenshots/chapter-plan.png'],
+  ['packages/experimental/novel-studio/distribution-assets/screenshots/review.png', 'assets/screenshots/review.png'],
   ['packages/experimental/novel-studio/distribution-assets/screenshots/noai.png', 'assets/screenshots/noai.png'],
 ] as const
 

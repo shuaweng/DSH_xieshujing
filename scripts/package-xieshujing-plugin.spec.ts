@@ -90,6 +90,9 @@ describe('WriteBookWhale one-package artifact', () => {
     expect(existsSync(join(directory, 'assets/xieshujing-logo.png'))).toBe(true)
     expect(existsSync(join(directory, 'assets/screenshots/home.png'))).toBe(true)
     expect(existsSync(join(directory, 'assets/screenshots/editor.png'))).toBe(true)
+    expect(existsSync(join(directory, 'assets/screenshots/outline.png'))).toBe(true)
+    expect(existsSync(join(directory, 'assets/screenshots/chapter-plan.png'))).toBe(true)
+    expect(existsSync(join(directory, 'assets/screenshots/review.png'))).toBe(true)
     expect(existsSync(join(directory, 'assets/screenshots/noai.png'))).toBe(true)
     expect(existsSync(join(
       directory,
