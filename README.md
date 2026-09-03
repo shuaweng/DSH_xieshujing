@@ -8,15 +8,9 @@
 
 ### 让灵感、正文与 Agent，真正写在同一本书里。
 
-<p align="center">
-  <img src="assets/showcase/xieshujing-hero.png" alt="写书鲸产品主视觉" width="100%">
-</p>
-
 写书鲸是一张为长篇创作准备的 AI 写作桌。你可以像往常一样写正文、理大纲、看章纲，也可以随手圈选一段，让 Agent 接着写、改一版或认真挑错。
 
 它不要求你把整本书反复复制进聊天框。Agent 会跟随你正在看的书、章节和选区，所有修改先作为建议回到原位置，由你决定是否落稿。
-
-![写书鲸首页：继续创作《国运擂台》](assets/screenshots/home.png)
 
 ## 一张图看懂写书鲸
 
@@ -49,33 +43,9 @@ flowchart LR
 
 ## 写作时，资料就在手边
 
-![写书鲸正文创作界面](assets/screenshots/editor.png)
-
-## 看见它如何工作
-
-写书鲸把一本书的创建、写作、检查和协作放进同一个安静的工作台。下面是产品中的真实界面：
-
-<table>
-  <tr>
-    <td width="50%"><img src="assets/showcase/01-create-project.png" alt="创建小说项目"><br><sub>从一个作品名称开始，创建小说项目</sub></td>
-    <td width="50%"><img src="assets/showcase/02-manuscript-editor.png" alt="小说正文编辑器"><br><sub>正文、章节结构与 DSH 对话并排协作</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="assets/showcase/03-noai-scan.png" alt="NOAI 扫描"><br><sub>写完后快速扫描高频 AI 味表达</sub></td>
-    <td width="50%"><img src="assets/showcase/07-review-report.png" alt="章节审查报告"><br><sub>让审查 Subagent 从逻辑、节奏和出戏感挑刺</sub></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="assets/showcase/04-theme-light.png" alt="浅色主题"><br><sub>按阅读习惯切换纸白、暖黄、护眼绿等皮肤</sub></td>
-    <td width="50%"><img src="assets/showcase/05-theme-dark.png" alt="深色主题"><br><sub>夜间写作也保持清晰、克制的阅读体验</sub></td>
-  </tr>
-</table>
-
-<p align="center">
-  <img src="assets/showcase/06-skills-management.png" alt="Skills 管理" width="82%"><br>
-  <sub>在当前会话中选择要启用的写作 Skills，让 Agent 的工作方式由作者掌控</sub>
-</p>
-
 正文、全书大纲、卷纲、章纲、本书概述、本书风格与故事状态，都属于同一本小说。你在工作台里看见什么，Agent 就能通过准确的小说坐标找到什么；你圈选的短文本也会连同原文交给它，而不是只留下一个含糊的“帮我改改”。
+
+![写书鲸正文创作界面：资料与正文同屏](assets/showcase/writing-with-context.png)
 
 - **续写一章：** Agent 会结合当前章纲、故事状态、本书风格和上一段正文继续写。
 - **改好一段：** 圈选原文后直接说明目标，建议会以可审阅的修改出现。
@@ -84,13 +54,11 @@ flowchart LR
 
 ## 大纲可以自由写，结构仍然清楚
 
-![《国运擂台》全书大纲](assets/screenshots/outline.png)
+![《国运擂台》全书大纲：自由写作与清晰结构](assets/showcase/outline-freeform.png)
 
 全书大纲和卷纲都是自由写作空间，不用先回答几十个模板问题。它们仍然拥有稳定的小说坐标、独立版本和专属渲染，因此既适合作者整理思路，也方便 Agent 精确读取、修改和引用。
 
 ## 章纲贴着正文，卡文时不用来回翻
-
-![正文旁的章纲面板](assets/screenshots/chapter-plan.png)
 
 章纲作为单章的随手工作区，始终绑定当前章节。可以记情绪目标、场面钥匙、起承转合或章末钩子，也可以保持完全自由；写正文时随时展开，写顺了就收起。
 
@@ -101,10 +69,6 @@ Agent 不会绕过工作台偷偷覆盖正文。它创建可查看差异的修�
 这意味着你可以放心让 Agent 尝试更激进的开头、更强的冲突或另一种节奏，而不用担心好句子被一次覆盖抹掉。
 
 ## 不只帮你写，也认真帮你挑刺
-
-![写书鲸严格章节审查](assets/screenshots/review.png)
-
-![写书鲸 NOAI 文本诊断](assets/screenshots/noai.png)
 
 章节完成后，可以主动运行严格审查或 NOAI 扫描。审查 Agent 会从逻辑、节奏、人物行为、读者出戏感与表达自然度等角度挑刺；NOAI 则用本地规则快速标出高频机械句式，并把问题绑定到当前正文版本。两者都只给诊断，不会趁你不注意重写正文。
 

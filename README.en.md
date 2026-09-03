@@ -12,8 +12,6 @@ WriteBookWhale is an AI writing desk built for long-form fiction. Write chapters
 
 You do not have to paste the whole novel into chat again and again. The Agent follows the book, chapter, and selection you are looking at, and every edit returns to its original place as a proposal you can review before it becomes part of the manuscript.
 
-![WriteBookWhale home with The National-Fortune Arena ready to continue](assets/screenshots/home.png)
-
 ## WriteBookWhale in one picture
 
 WriteBookWhale is not a separate AI editor bolted onto DSH. It composes with native DSH Agents, Presets, Skills, and Subagents, while novel assets, explicit references, and revision proposals keep the writer and the Agent inside the same book.
@@ -45,7 +43,7 @@ The home screen brings your books, word count, and recent progress together. Con
 
 ## Keep the story beside the page
 
-![WriteBookWhale manuscript editor](assets/screenshots/editor.png)
+![WriteBookWhale manuscript editor: context beside the page](assets/showcase/writing-with-context.png)
 
 Manuscript chapters, free-form book and volume outlines, chapter plans, the book brief, style profile, and Story State all belong to the same novel. Anything visible in the workbench has a precise novel address the Agent can follow. A short text selection also carries its original words, so “please improve this” always has a concrete target.
 
@@ -56,13 +54,11 @@ Manuscript chapters, free-form book and volume outlines, chapter plans, the book
 
 ## Free-form outlines with a dependable structure
 
-![The National-Fortune Arena book outline](assets/screenshots/outline.png)
+![The National-Fortune Arena book outline: free-form writing](assets/showcase/outline-freeform.png)
 
 Book and volume outlines stay open writing spaces instead of long questionnaires. They still have stable novel addresses, independent revisions, and dedicated rendering, so the writer can think freely while the Agent can locate, read, reference, and revise them precisely.
 
 ## Keep the chapter plan beside the manuscript
-
-![Chapter plan beside the manuscript](assets/screenshots/chapter-plan.png)
 
 The chapter plan is a scratch space permanently bound to its chapter. Capture an emotional target, a key image, a four-beat progression, or an ending hook—or ignore every template and write freely. Open it when the scene stalls and fold it away when the prose is moving.
 
@@ -73,10 +69,6 @@ The Agent cannot silently overwrite the manuscript. It creates a reviewable Chan
 That makes it safe to try a sharper opening, a stronger conflict, or a different rhythm without losing the lines that already work.
 
 ## A writing partner that is willing to be critical
-
-![WriteBookWhale strict chapter review](assets/screenshots/review.png)
-
-![WriteBookWhale NOAI diagnostics](assets/screenshots/noai.png)
 
 Run a strict chapter review or a fast NOAI scan when you decide the draft is ready. The reviewer challenges logic, pacing, character behavior, immersion breaks, and unnatural expression. NOAI uses local rules to flag common mechanical patterns and binds its findings to the exact manuscript revision it scanned. Both diagnose; neither silently rewrites the page.
 
