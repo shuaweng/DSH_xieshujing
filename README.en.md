@@ -63,7 +63,7 @@ WriteBookWhale currently targets the DeepSeek Harness `0.1.2-alpha.2` release fa
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.9
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.10
 dsh --profile web
 ```
 

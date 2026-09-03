@@ -63,7 +63,7 @@ Agent 不会绕过工作台偷偷覆盖正文。它创建可查看差异的修�
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.9
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.10
 dsh --profile web
 ```
 
