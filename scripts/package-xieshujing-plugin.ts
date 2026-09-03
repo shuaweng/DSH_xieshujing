@@ -25,6 +25,9 @@ const COMPATIBLE_DSH_VERSION = '0.1.2-alpha.2'
 const PUBLIC_ASSETS = [
   ['packages/experimental/novel-workbench/src/client/assets/brand/xieshujing-logo-horizontal-web.png', 'assets/xieshujing-logo.png'],
   ['packages/experimental/novel-workbench/src/client/assets/brand/xieshujing-app-icon-256.png', 'assets/xieshujing-app-icon.png'],
+  ['packages/experimental/novel-studio/distribution-assets/screenshots/home.png', 'assets/screenshots/home.png'],
+  ['packages/experimental/novel-studio/distribution-assets/screenshots/editor.png', 'assets/screenshots/editor.png'],
+  ['packages/experimental/novel-studio/distribution-assets/screenshots/noai.png', 'assets/screenshots/noai.png'],
 ] as const
 
 /** Private implementation packages carried inside the public-facing facade. */

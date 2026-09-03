@@ -88,6 +88,9 @@ describe('WriteBookWhale one-package artifact', () => {
     expect(readme).not.toContain('{{PLUGIN_VERSION}}')
     expect(existsSync(join(directory, 'LICENSE'))).toBe(true)
     expect(existsSync(join(directory, 'assets/xieshujing-logo.png'))).toBe(true)
+    expect(existsSync(join(directory, 'assets/screenshots/home.png'))).toBe(true)
+    expect(existsSync(join(directory, 'assets/screenshots/editor.png'))).toBe(true)
+    expect(existsSync(join(directory, 'assets/screenshots/noai.png'))).toBe(true)
     expect(existsSync(join(
       directory,
       'presets/novel-workbench/plugins/dsh-novel-workbench-skills/index.js',

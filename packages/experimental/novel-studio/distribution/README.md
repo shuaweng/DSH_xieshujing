@@ -4,30 +4,62 @@
 
 # WriteBookWhale (写书鲸)
 
-WriteBookWhale is a native novel-writing workbench for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). Authors and agents operate the same addressable, revisioned novel assets through DSH Presets, Skills, Tools, Sessions, and Subagents.
-
 English | [中文](README.zh.md)
 
-## Highlights
+### Keep your ideas, manuscript, and Agent inside the same book.
 
-- File-first projects with manuscript chapters, free-form outlines, volume and chapter outlines, book brief, style profile, and Story State.
-- Precise Novel references shared by the workbench and conversation context.
-- Agents read, create, and propose edits through typed Novel Tools; manuscript changes use ChangeSets and Revisions instead of bypassing the workbench with direct file writes.
-- Bundled chapter execution, scene drive, dialogue diagnostics, style rewriting, strict review, preference extraction, and Story State extraction Skills.
-- Revision restore, chapter review, NOAI scanning, finalization, and bounded writing-preference learning.
-- A neutral `novel-workbench` Preset contribution that does not replace the host Profile's default Preset.
+WriteBookWhale is an AI writing desk built for long-form fiction. Write chapters, shape outlines, inspect chapter plans, or select a passage and ask the Agent to continue it, revise it, or challenge it.
 
-## Requirements
+You do not have to paste the whole novel into chat again and again. The Agent follows the book, chapter, and selection you are looking at, and every edit returns to its original place as a proposal you can review before it becomes part of the manuscript.
 
-- Node.js `^22.19.0 || >=24.0.0`
-- DeepSeek Harness release family `{{DSH_VERSION}}`
-- A working DSH Web Profile
+![WriteBookWhale home alongside a DSH conversation](assets/screenshots/home.png)
 
-WriteBookWhale currently tracks DSH prereleases. Check the [compatibility matrix](COMPATIBILITY.md) before upgrading DSH.
+## Open the desk and know what comes next
+
+The home screen brings your books, word count, and recent progress together. Continue from the last chapter or open any novel; the conversation and writing desk move to that project without making you explain its background again.
+
+## Keep the story beside the page
+
+![WriteBookWhale manuscript editor](assets/screenshots/editor.png)
+
+Manuscript chapters, free-form book and volume outlines, chapter plans, the book brief, style profile, and Story State all belong to the same novel. Anything visible in the workbench has a precise novel address the Agent can follow. A short text selection also carries its original words, so “please improve this” always has a concrete target.
+
+- **Continue a chapter:** the Agent can work from the chapter plan, current Story State, book style, and the text immediately before the cursor.
+- **Improve a passage:** select the original text, describe the intent, and review the proposed change in place.
+- **Reshape the story:** outlines remain free-form writing spaces instead of rigid questionnaires.
+- **Protect continuity:** revisions, Story State, and explicit references help the Agent remember established facts and avoid crossing books.
+
+## Let the Agent experiment while you keep final say
+
+The Agent cannot silently overwrite the manuscript. It creates a reviewable ChangeSet that you may accept, reject, or edit further, and previous revisions remain recoverable. Only a revision you explicitly mark as final becomes eligible for writing-preference learning.
+
+That makes it safe to try a sharper opening, a stronger conflict, or a different rhythm without losing the lines that already work.
+
+## A writing partner that is willing to be critical
+
+![WriteBookWhale NOAI diagnostics](assets/screenshots/noai.png)
+
+Run a strict chapter review or a fast NOAI scan after drafting. The reviewer looks for logic, pacing, character behavior, immersion breaks, and unnatural expression. NOAI uses local rules to flag common mechanical patterns and binds its findings to the exact manuscript revision it scanned.
+
+## Who it is for
+
+- Serial-fiction writers who want an Agent to remember earlier chapters, plans, and the book's rhythm.
+- DSH users who have outgrown managing a novel as chat history plus scattered files.
+- Writers who want AI help with drafting, revision, and critique while keeping every change visible, optional, and recoverable.
+- Authors who want their books to stay on their own computer in portable Markdown and YAML files.
+
+## What is already here
+
+- A library home, cross-project continuation, and daily word-count summary.
+- Manuscript chapters, book and volume outlines, chapter plans, book brief, style profile, and Story State.
+- Active-asset and text-selection references, dedicated Novel Tools, ChangeSets, and Revisions.
+- Chapter creation, renaming, deletion, drag sorting, autosave, finalization, and revision restore.
+- Chapter execution, scene-action choices, style revision, strict review, NOAI diagnostics, and preference extraction.
+- A dedicated DSH Agent Preset, Skills, and review Subagent, all composed through native DSH extension points.
 
 ## Install
 
-Pin a release tag:
+WriteBookWhale currently targets the DeepSeek Harness `{{DSH_VERSION}}` release family and follows DSH prereleases closely. Install a tagged release and check the [compatibility matrix](COMPATIBILITY.md) before upgrading DSH.
 
 ```sh
 dsh plugin --profile web add \
@@ -35,33 +67,29 @@ dsh plugin --profile web add \
 dsh --profile web
 ```
 
-Select the Novel Workbench Preset after DSH starts. Installation adds one bundle to the selected Profile and leaves every other Profile unchanged.
+After DSH starts, choose the Novel Workbench Agent Preset and click the WriteBookWhale icon inside the composer. Installation does not replace the existing default Preset or change other Profiles.
 
-## Upgrade and remove
+<details>
+<summary>Requirements, upgrades, and removal</summary>
 
-Upgrade by running `add` again with the new tag:
+Requirements: Node.js `^22.19.0 || >=24.0.0`, DeepSeek Harness release family `{{DSH_VERSION}}`, and a working DSH Web Profile.
 
-```sh
-dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v{{PLUGIN_VERSION}}
-```
-
-Remove the plugin:
+Upgrade by running `add` again with the new release tag. Remove the plugin with:
 
 ```sh
 dsh plugin --profile web remove @xieshujing/dsh-plugin
 ```
 
-Removal only deletes the plugin dependency and bundle layer from the Profile. Novel Project `novel.yaml`, Markdown, YAML, and `.novel/` history data remain in the directory selected by the user.
+Removal deletes only the plugin. Your `novel.yaml`, manuscript, planning files, and `.novel/` history remain in their original directory.
 
-## Data and permissions
+</details>
 
-WriteBookWhale writes Novel Assets only inside the Novel Project selected by the current Session. The default Novel Preset does not expose a general shell or arbitrary file-writing tools to the Agent; authored manuscript and planning content changes flow through typed Novel Tools, Revisions, and ChangeSets.
+## Your book remains yours
 
-## Feedback
+Novel content stays in the local directory you choose. The default Novel Preset does not expose a general shell or arbitrary file-writing tools to the Agent; authored assets move through dedicated Novel Tools, Revisions, and reviewable ChangeSets.
 
-Open a [GitHub Issue](https://github.com/shuaweng/DSH_xieshujing/issues) with reproduction steps, the DSH version, the WriteBookWhale version, and relevant error logs. Follow [SECURITY.md](SECURITY.md) for vulnerability reports.
+For help, open a [GitHub Issue](https://github.com/shuaweng/DSH_xieshujing/issues) with reproduction steps and the DSH and WriteBookWhale versions. Follow [SECURITY.md](SECURITY.md) for vulnerability reports.
 
 ## License
 
-[MIT](LICENSE). This distribution includes work derived from MIT-licensed DeepSeek Harness; see [NOTICE.md](NOTICE.md).
+[MIT](LICENSE). WriteBookWhale is built on MIT-licensed DeepSeek Harness; see [NOTICE.md](NOTICE.md).

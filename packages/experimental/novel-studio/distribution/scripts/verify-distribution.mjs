@@ -16,6 +16,9 @@ requireCondition(manifest.scripts === undefined, 'distribution must not execute 
 requireCondition(!serialized.includes('workspace:'), 'workspace dependency escaped into the distribution')
 requireCondition(existsSync(resolve(root, 'cordis.patch.yml')), 'missing bundle patch')
 requireCondition(existsSync(resolve(root, 'lib/index.js')), 'missing prebuilt facade')
+requireCondition(existsSync(resolve(root, 'assets/screenshots/home.png')), 'missing home screenshot')
+requireCondition(existsSync(resolve(root, 'assets/screenshots/editor.png')), 'missing editor screenshot')
+requireCondition(existsSync(resolve(root, 'assets/screenshots/noai.png')), 'missing NOAI screenshot')
 requireCondition(existsSync(resolve(root, 'presets/novel-workbench/agent.cordis.yml')), 'missing Novel Preset')
 requireCondition(
   existsSync(resolve(root, 'presets/novel-workbench/plugins/dsh-novel-workbench-skills/index.js')),

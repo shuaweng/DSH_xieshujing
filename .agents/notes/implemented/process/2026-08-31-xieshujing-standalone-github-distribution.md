@@ -10,7 +10,7 @@ WriteBookWhale already had a verified one-package artifact, but a clean DSH inst
 
 ## Decision
 
-The public `main` branch is a generated, prebuilt package repository for `@xieshujing/dsh-plugin`; the monorepo integration history remains on the separate `dsh-integration` branch. `scripts/package-xieshujing-plugin.ts` owns both outputs: the `.tgz` artifact and the standalone repository tree are staged by the same function, so they cannot silently acquire different dependency or Bundle boundaries.
+The public `main` branch is a generated, prebuilt package repository for `@xieshujing/dsh-plugin`; the monorepo integration history remains on the separate `dsh-integration` branch. `scripts/package-xieshujing-plugin.ts` owns both outputs: the `.tgz` artifact and the standalone repository tree are staged by the same function, so they cannot silently acquire different dependency or Bundle boundaries. The generated repository also carries the product README and its real workbench screenshots, keeping the public product presentation in the same versioned artifact as the runtime it describes.
 
 The generated repository intentionally carries the nine private Novel implementation packages under its `node_modules` subtree. Those packages are marked vendored in `.gitattributes`; DSH, Cordis, Agent, Session, and Client framework packages remain peer dependencies supplied by the host Profile. The repository contains built `lib` output and no `prepare`, `postinstall`, or other install-time execution. A GitHub tag runs a verification workflow and attaches the exact npm tarball to a GitHub Release.
 
@@ -18,7 +18,7 @@ GitHub installation is pinned to a release tag or commit, and the compatibility 
 
 ## Verification
 
-The packaging test exports the public tree and checks its repository metadata, Node engine, absence of install scripts, rendered installation command, documentation, brand asset, workflow, and distribution verifier. The release verifier checks that no `workspace:` dependency escaped, every bundled Novel package exists, the facade patch points at `@xieshujing/dsh-plugin`, and no install-time lifecycle script exists. Release acceptance installs the exact GitHub commit into an isolated DSH Profile, inspects the resolved configuration, and removes the plugin again without browser automation.
+The packaging test exports the public tree and checks its repository metadata, Node engine, absence of install scripts, rendered installation command, bilingual product documentation, brand assets, screenshot set, workflow, and distribution verifier. The release verifier checks that no `workspace:` dependency escaped, every bundled Novel package exists, the facade patch points at `@xieshujing/dsh-plugin`, and no install-time lifecycle script exists. Release acceptance installs the exact GitHub commit into an isolated DSH Profile, inspects the resolved configuration, and removes the plugin again without browser automation.
 
 ## Alternatives considered
 

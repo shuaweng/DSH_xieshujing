@@ -10,7 +10,7 @@
 
 ## 决策
 
-公共 `main` 分支是为 `@xieshujing/dsh-plugin` 生成的预构建包仓库；monorepo 集成历史继续保留在独立的 `dsh-integration` 分支。`.tgz` 产物与独立仓库树都由 `scripts/package-xieshujing-plugin.ts` 的同一个函数暂存，因此两种输出无法悄然产生不同的依赖或 Bundle 边界。
+公共 `main` 分支是为 `@xieshujing/dsh-plugin` 生成的预构建包仓库；monorepo 集成历史继续保留在独立的 `dsh-integration` 分支。`.tgz` 产物与独立仓库树都由 `scripts/package-xieshujing-plugin.ts` 的同一个函数暂存，因此两种输出无法悄然产生不同的依赖或 Bundle 边界。生成仓库也会携带产品 README 与真实工作台截图，让公共产品介绍和它描述的运行时进入同一份版本化产物。
 
 生成仓库有意在其 `node_modules` 子树中携带九个私有 Novel 实现包。这些包在 `.gitattributes` 中标为 vendored；DSH、Cordis、Agent、Session 与 Client 框架包继续作为 peer dependency，由宿主 Profile 提供。仓库包含已构建的 `lib` 输出，不包含 `prepare`、`postinstall` 或其他安装时执行。GitHub tag 会运行验证 workflow，并把完全相同的 npm tarball 附加到 GitHub Release。
 
@@ -18,7 +18,7 @@ GitHub 安装会固定到 release tag 或 commit，兼容性文档则固定匹�
 
 ## 验证
 
-打包测试会导出公共目录树，并检查仓库元数据、Node engine、安装 script 缺失、渲染后的安装命令、文档、品牌资产、workflow 与分发验证器。release 验证器会检查没有 `workspace:` 依赖泄漏、每个内置 Novel 包都存在、门面 patch 指向 `@xieshujing/dsh-plugin`，且不存在安装时 lifecycle script。release 验收会把精确 GitHub commit 安装到隔离的 DSH Profile，检查解析后的配置，再移除插件；不使用浏览器自动化。
+打包测试会导出公共目录树，并检查仓库元数据、Node engine、安装 script 缺失、渲染后的安装命令、双语产品文档、品牌资产、截图集、workflow 与分发验证器。release 验证器会检查没有 `workspace:` 依赖泄漏、每个内置 Novel 包都存在、门面 patch 指向 `@xieshujing/dsh-plugin`，且不存在安装时 lifecycle script。release 验收会把精确 GitHub commit 安装到隔离的 DSH Profile，检查解析后的配置，再移除插件；不使用浏览器自动化。
 
 ## 考虑过的替代方案
 

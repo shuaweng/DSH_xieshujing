@@ -4,30 +4,62 @@
 
 # 写书鲸
 
-写书鲸是面向 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的原生小说创作工作台。作者和 Agent 共用同一套可定位、可版本化的小说资产，在 DSH 的 Preset、Skill、Tool、Session 和 Subagent 体系内完成写作、修改、审查与恢复。
-
 [English](README.md) | 中文
 
-## 能力
+### 让灵感、正文与 Agent，真正写在同一本书里。
 
-- 文件优先的小说项目，支持正文、全书大纲、卷纲、章纲、本书概述、本书风格与 Story State。
-- 对话与工作台共享精确 Novel 坐标，当前资产和选区可直接交给 Agent。
-- Agent 通过 Novel Tool 读取、创建和提议修改，正文变更使用 ChangeSet 和 Revision，不绕过工作台直接覆盖文件。
-- 内置章节执行、场景推进、对话诊断、文风改写、严格审稿、偏好提取和 Story State 提取 Skill。
-- 支持版本恢复、章节审查、NOAI 扫描、定稿与有边界的写作偏好学习。
-- 安装后新增 `novel-workbench` Preset，不替换宿主 Profile 原有默认 Preset。
+写书鲸是一张为长篇创作准备的 AI 写作桌。你可以像往常一样写正文、理大纲、看章纲，也可以随手圈选一段，让 Agent 接着写、改一版或认真挑错。
 
-## 要求
+它不要求你把整本书反复复制进聊天框。Agent 会跟随你正在看的书、章节和选区，所有修改先作为建议回到原位置，由你决定是否落稿。
 
-- Node.js `^22.19.0 || >=24.0.0`
-- DeepSeek Harness `{{DSH_VERSION}}` 版本家族
-- 已可正常启动的 DSH Web Profile
+![写书鲸首页与 DSH 对话协作](assets/screenshots/home.png)
 
-写书鲸目前跟随 DSH 预发布版本。升级 DSH 前请先查看 [兼容矩阵](COMPATIBILITY.md)。
+## 打开就知道下一步写什么
+
+首页把书、字数与最近进度放在一起。你可以从上次停下的章节继续，也可以打开任意一本小说；对话与写作台同步切换到对应项目，不必重新解释背景。
+
+## 写作时，资料就在手边
+
+![写书鲸正文创作界面](assets/screenshots/editor.png)
+
+正文、全书大纲、卷纲、章纲、本书概述、本书风格与故事状态，都属于同一本小说。你在工作台里看见什么，Agent 就能通过准确的小说坐标找到什么；你圈选的短文本也会连同原文交给它，而不是只留下一个含糊的“帮我改改”。
+
+- **续写一章：** Agent 会结合当前章纲、故事状态、本书风格和上一段正文继续写。
+- **改好一段：** 圈选原文后直接说明目标，建议会以可审阅的修改出现。
+- **调整结构：** 大纲与卷纲可以自由写，不会被固定模板限制成填表。
+- **保持连续：** 章节版本、故事状态和上下文引用帮助 Agent 少忘设定、少串书。
+
+## Agent 可以大胆提案，你始终握着定稿权
+
+Agent 不会绕过工作台偷偷覆盖正文。它创建可查看差异的修改提案；你可以接受、拒绝、继续修改，也可以从历史版本恢复。只有主动“标记为定稿”的版本，才会进入写作偏好学习流程。
+
+这意味着你可以放心让 Agent 尝试更激进的开头、更强的冲突或另一种节奏，而不用担心好句子被一次覆盖抹掉。
+
+## 不只帮你写，也认真帮你挑刺
+
+![写书鲸 NOAI 文本诊断](assets/screenshots/noai.png)
+
+章节完成后，可以运行严格审查或 NOAI 扫描。审查 Agent 会从逻辑、节奏、人物行为、读者出戏感与表达自然度等角度找问题；NOAI 则用本地规则快速标出高频机械句式，并把问题绑定到当前正文版本。
+
+## 谁会喜欢写书鲸
+
+- 正在连载长篇网文，希望 Agent 记得前文、章纲和本书节奏的作者。
+- 已经在 DSH 中写作，但不想继续用“聊天记录 + 一堆散落文件”管理小说的人。
+- 想让 AI 参与续写、改写和审稿，又坚持所有改动都可见、可选、可恢复的人。
+- 希望小说仍保存在自己电脑里，并能继续用 Markdown、YAML 和 Git 管理的人。
+
+## 目前已经具备
+
+- 小说书库首页、跨项目继续创作与今日字数统计。
+- 正文、全书大纲、卷纲、章纲、本书概述、本书风格与 Story State。
+- 当前资产与划词引用、专属 Novel Tools、ChangeSet 和 Revision。
+- 章节新建、改名、删除、拖动排序、自动保存、定稿与历史恢复。
+- 章节执行、场景行动选择、文风改写、严格审稿、NOAI 扫描与偏好提取。
+- 写书鲸专属 Agent Preset、Skills 与审查 Subagent，全部运行在 DSH 原生体系内。
 
 ## 安装
 
-推荐锁定版本标签，避免后续提交在未确认时改变本机运行代码：
+写书鲸目前适配 DeepSeek Harness `{{DSH_VERSION}}` 版本家族，并跟随 DSH 预发布版本迭代。建议使用版本标签安装，并在升级 DSH 前查看[兼容矩阵](COMPATIBILITY.md)。
 
 ```sh
 dsh plugin --profile web add \
@@ -35,32 +67,28 @@ dsh plugin --profile web add \
 dsh --profile web
 ```
 
-启动后在 Agent Preset 中选择“小说工作台”，再打开写书鲸入口。安装只会向 `web` Profile 加入写书鲸 bundle，不会修改其他 Profile。
+启动后，在 Agent Preset 中选择“小说工作台”，再点击输入框中的写书鲸图标。安装不会替换原有默认 Preset，也不会影响其他 Profile。
 
-## 升级与卸载
+<details>
+<summary>运行要求、升级与卸载</summary>
 
-升级时用新标签重新执行 `add`：
+运行要求：Node.js `^22.19.0 || >=24.0.0`、DeepSeek Harness `{{DSH_VERSION}}` 版本家族，以及一个可正常启动的 DSH Web Profile。
 
-```sh
-dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v{{PLUGIN_VERSION}}
-```
-
-卸载：
+升级时使用新的版本标签重新执行 `add`。卸载命令如下：
 
 ```sh
 dsh plugin --profile web remove @xieshujing/dsh-plugin
 ```
 
-卸载只移除 Profile 中的插件依赖和 bundle 层。小说项目的 `novel.yaml`、Markdown、YAML 与 `.novel/` 历史数据仍保留在用户选定的目录中。
+卸载只移除插件本身。你的 `novel.yaml`、正文、策划文件与 `.novel/` 历史数据会继续留在原目录。
 
-## 数据和权限
+</details>
 
-写书鲸只将小说资产写入当前 Session 选定的 Novel Project。默认 Novel Preset 不向 Agent 暴露通用 shell 或任意文件写入工具；正文和策划内容通过类型化 Novel Tool、Revision 与 ChangeSet 修改。
+## 你的书，仍然属于你
 
-## 问题反馈
+小说内容保存在你选定的本地目录。写书鲸的默认 Novel Preset 不向 Agent 暴露通用 Shell 或任意文件写入能力；正式资产通过小说专属工具、版本和修改提案流转。
 
-请在 [GitHub Issues](https://github.com/shuaweng/DSH_xieshujing/issues) 中提交可复现步骤、DSH 版本、写书鲸版本和错误日志。安全问题请遵循 [SECURITY.md](SECURITY.md)。
+遇到问题，欢迎在 [GitHub Issues](https://github.com/shuaweng/DSH_xieshujing/issues) 提交复现步骤、DSH 版本与写书鲸版本。安全问题请遵循 [SECURITY.md](SECURITY.md)。
 
 ## 许可证
 
