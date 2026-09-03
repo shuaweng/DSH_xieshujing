@@ -8,6 +8,10 @@
 
 ### 让灵感、正文与 Agent，真正写在同一本书里。
 
+<p align="center">
+  <img src="assets/showcase/xieshujing-hero.png" alt="写书鲸产品主视觉" width="100%">
+</p>
+
 写书鲸是一张为长篇创作准备的 AI 写作桌。你可以像往常一样写正文、理大纲、看章纲，也可以随手圈选一段，让 Agent 接着写、改一版或认真挑错。
 
 它不要求你把整本书反复复制进聊天框。Agent 会跟随你正在看的书、章节和选区，所有修改先作为建议回到原位置，由你决定是否落稿。
@@ -46,6 +50,30 @@ flowchart LR
 ## 写作时，资料就在手边
 
 ![写书鲸正文创作界面](assets/screenshots/editor.png)
+
+## 看见它如何工作
+
+写书鲸把一本书的创建、写作、检查和协作放进同一个安静的工作台。下面是产品中的真实界面：
+
+<table>
+  <tr>
+    <td width="50%"><img src="assets/showcase/01-create-project.png" alt="创建小说项目"><br><sub>从一个作品名称开始，创建小说项目</sub></td>
+    <td width="50%"><img src="assets/showcase/02-manuscript-editor.png" alt="小说正文编辑器"><br><sub>正文、章节结构与 DSH 对话并排协作</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/showcase/03-noai-scan.png" alt="NOAI 扫描"><br><sub>写完后快速扫描高频 AI 味表达</sub></td>
+    <td width="50%"><img src="assets/showcase/07-review-report.png" alt="章节审查报告"><br><sub>让审查 Subagent 从逻辑、节奏和出戏感挑刺</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="assets/showcase/04-theme-light.png" alt="浅色主题"><br><sub>按阅读习惯切换纸白、暖黄、护眼绿等皮肤</sub></td>
+    <td width="50%"><img src="assets/showcase/05-theme-dark.png" alt="深色主题"><br><sub>夜间写作也保持清晰、克制的阅读体验</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="assets/showcase/06-skills-management.png" alt="Skills 管理" width="82%"><br>
+  <sub>在当前会话中选择要启用的写作 Skills，让 Agent 的工作方式由作者掌控</sub>
+</p>
 
 正文、全书大纲、卷纲、章纲、本书概述、本书风格与故事状态，都属于同一本小说。你在工作台里看见什么，Agent 就能通过准确的小说坐标找到什么；你圈选的短文本也会连同原文交给它，而不是只留下一个含糊的“帮我改改”。
 
