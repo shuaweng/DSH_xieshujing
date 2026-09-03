@@ -12,6 +12,8 @@ WriteBookWhale is an AI writing desk built for long-form fiction. Write chapters
 
 You do not have to paste the whole novel into chat again and again. The Agent follows the book, chapter, and selection you are looking at, and every edit returns to its original place as a proposal you can review before it becomes part of the manuscript.
 
+![WriteBookWhale: writer and Agent creating in one book](assets/showcase/hero.png)
+
 ## WriteBookWhale in one picture
 
 WriteBookWhale is not a separate AI editor bolted onto DSH. It composes with native DSH Agents, Presets, Skills, and Subagents, while novel assets, explicit references, and revision proposals keep the writer and the Agent inside the same book.
@@ -37,26 +39,31 @@ flowchart LR
   Safety -->|stores content and history in| Files
 ```
 
+![WriteBookWhale architecture: shared context, novel expertise, and self-improvement](assets/showcase/architecture.png)
+
 ## Open the desk and know what comes next
 
 The home screen brings your books, word count, and recent progress together. Continue from the last chapter or open any novel; the conversation and writing desk move to that project without making you explain its background again.
 
-## Keep the story beside the page
+## The WriteBookWhale writing desk
 
-![WriteBookWhale manuscript editor: context beside the page](assets/showcase/writing-with-context.png)
+![WriteBookWhale new-book launch page](assets/showcase/new-book.png)
 
-Manuscript chapters, free-form book and volume outlines, chapter plans, the book brief, style profile, and Story State all belong to the same novel. Anything visible in the workbench has a precise novel address the Agent can follow. A short text selection also carries its original words, so “please improve this” always has a concrete target.
+![WriteBookWhale manuscript and context side by side](assets/showcase/manuscript.png)
 
-- **Continue a chapter:** the Agent can work from the chapter plan, current Story State, book style, and the text immediately before the cursor.
-- **Improve a passage:** select the original text, describe the intent, and review the proposed change in place.
-- **Reshape the story:** outlines remain free-form writing spaces instead of rigid questionnaires.
-- **Protect continuity:** revisions, Story State, and explicit references help the Agent remember established facts and avoid crossing books.
+## NOAI scan and rigorous review
 
-## Free-form outlines with a dependable structure
+![WriteBookWhale NOAI scan](assets/showcase/noai.png)
 
-![The National-Fortune Arena book outline: free-form writing](assets/showcase/outline-freeform.png)
+![WriteBookWhale chapter review report](assets/showcase/review.png)
 
-Book and volume outlines stay open writing spaces instead of long questionnaires. They still have stable novel addresses, independent revisions, and dedicated rendering, so the writer can think freely while the Agent can locate, read, reference, and revise them precisely.
+## Reading experience and working modes
+
+![WriteBookWhale cloud-blue skin](assets/showcase/skin-cloudblue.png)
+
+![WriteBookWhale night skin](assets/showcase/skin-night.png)
+
+![WriteBookWhale Skills management](assets/showcase/skills.png)
 
 ## Keep the chapter plan beside the manuscript
 

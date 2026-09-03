@@ -12,6 +12,8 @@
 
 它不要求你把整本书反复复制进聊天框。Agent 会跟随你正在看的书、章节和选区，所有修改先作为建议回到原位置，由你决定是否落稿。
 
+![写书鲸：让人和 Agent 在同一本书里创作](assets/showcase/hero.png)
+
 ## 一张图看懂写书鲸
 
 写书鲸不是另一套孤立的 AI 写作工具。它把小说工作台接入 DSH 原生的 Agent、Preset、Skills 与 Subagent，同时用小说资产、明确引用和版本提案，保证人和 Agent 始终在编辑同一本书。
@@ -37,26 +39,31 @@ flowchart LR
   Safety -->|保存内容与历史| Files
 ```
 
+![写书鲸产品架构：所见即所得、小说专家与自进化](assets/showcase/architecture.png)
+
 ## 打开就知道下一步写什么
 
 首页把书、字数与最近进度放在一起。你可以从上次停下的章节继续，也可以打开任意一本小说；对话与写作台同步切换到对应项目，不必重新解释背景。
 
-## 写作时，资料就在手边
+## 写书鲸的写作现场
 
-正文、全书大纲、卷纲、章纲、本书概述、本书风格与故事状态，都属于同一本小说。你在工作台里看见什么，Agent 就能通过准确的小说坐标找到什么；你圈选的短文本也会连同原文交给它，而不是只留下一个含糊的“帮我改改”。
+![写书鲸新书启动页](assets/showcase/new-book.png)
 
-![写书鲸正文创作界面：资料与正文同屏](assets/showcase/writing-with-context.png)
+![写书鲸正文与资料同屏](assets/showcase/manuscript.png)
 
-- **续写一章：** Agent 会结合当前章纲、故事状态、本书风格和上一段正文继续写。
-- **改好一段：** 圈选原文后直接说明目标，建议会以可审阅的修改出现。
-- **调整结构：** 大纲与卷纲可以自由写，不会被固定模板限制成填表。
-- **保持连续：** 章节版本、故事状态和上下文引用帮助 Agent 少忘设定、少串书。
+## NOAI 扫描与严格审查
 
-## 大纲可以自由写，结构仍然清楚
+![写书鲸 NOAI 扫描](assets/showcase/noai.png)
 
-![《国运擂台》全书大纲：自由写作与清晰结构](assets/showcase/outline-freeform.png)
+![写书鲸章节审查报告](assets/showcase/review.png)
 
-全书大纲和卷纲都是自由写作空间，不用先回答几十个模板问题。它们仍然拥有稳定的小说坐标、独立版本和专属渲染，因此既适合作者整理思路，也方便 Agent 精确读取、修改和引用。
+## 阅读体验与工作方式
+
+![写书鲸云水蓝皮肤](assets/showcase/skin-cloudblue.png)
+
+![写书鲸夜间皮肤](assets/showcase/skin-night.png)
+
+![写书鲸 Skills 管理](assets/showcase/skills.png)
 
 ## 章纲贴着正文，卡文时不用来回翻
 
