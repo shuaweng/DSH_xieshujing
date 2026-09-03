@@ -12,7 +12,32 @@
 
 它不要求你把整本书反复复制进聊天框。Agent 会跟随你正在看的书、章节和选区，所有修改先作为建议回到原位置，由你决定是否落稿。
 
-![写书鲸首页与 DSH 对话协作](assets/screenshots/home.png)
+![写书鲸首页：继续创作《国运擂台》](assets/screenshots/home.png)
+
+## 一张图看懂写书鲸
+
+写书鲸不是另一套孤立的 AI 写作工具。它把小说工作台接入 DSH 原生的 Agent、Preset、Skills 与 Subagent，同时用小说资产、明确引用和版本提案，保证人和 Agent 始终在编辑同一本书。
+
+```mermaid
+flowchart LR
+  Writer["作者<br/>写作 · 选择 · 审阅 · 定稿"]
+  Workbench["写书鲸工作台<br/>书库 · 正文 · 大纲 · 章纲"]
+  Context["创作上下文<br/>当前资产 · 选区 · Story State"]
+  Agent["DSH Agent<br/>Preset · Skills · Subagent"]
+  Tools["小说专属工具<br/>定位 · 读取 · 搜索 · 提案"]
+  Assets["小说资产<br/>正文 · 大纲 · 风格 · 审查"]
+  Safety["安全修改<br/>ChangeSet · Diff · Revision"]
+  Files["本地小说项目<br/>Markdown · YAML · .novel"]
+
+  Writer -->|直接创作与选择| Workbench
+  Workbench -->|同步当前所见| Context
+  Context -->|按任务提供必要内容| Agent
+  Agent -->|调用| Tools
+  Tools -->|读取或创建修改提案| Assets
+  Assets -->|进入审阅| Safety
+  Safety -->|用户接受后更新| Workbench
+  Safety -->|保存内容与历史| Files
+```
 
 ## 打开就知道下一步写什么
 
@@ -29,6 +54,18 @@
 - **调整结构：** 大纲与卷纲可以自由写，不会被固定模板限制成填表。
 - **保持连续：** 章节版本、故事状态和上下文引用帮助 Agent 少忘设定、少串书。
 
+## 大纲可以自由写，结构仍然清楚
+
+![《国运擂台》全书大纲](assets/screenshots/outline.png)
+
+全书大纲和卷纲都是自由写作空间，不用先回答几十个模板问题。它们仍然拥有稳定的小说坐标、独立版本和专属渲染，因此既适合作者整理思路，也方便 Agent 精确读取、修改和引用。
+
+## 章纲贴着正文，卡文时不用来回翻
+
+![正文旁的章纲面板](assets/screenshots/chapter-plan.png)
+
+章纲作为单章的随手工作区，始终绑定当前章节。可以记情绪目标、场面钥匙、起承转合或章末钩子，也可以保持完全自由；写正文时随时展开，写顺了就收起。
+
 ## Agent 可以大胆提案，你始终握着定稿权
 
 Agent 不会绕过工作台偷偷覆盖正文。它创建可查看差异的修改提案；你可以接受、拒绝、继续修改，也可以从历史版本恢复。只有主动“标记为定稿”的版本，才会进入写作偏好学习流程。
@@ -37,9 +74,11 @@ Agent 不会绕过工作台偷偷覆盖正文。它创建可查看差异的修�
 
 ## 不只帮你写，也认真帮你挑刺
 
+![写书鲸严格章节审查](assets/screenshots/review.png)
+
 ![写书鲸 NOAI 文本诊断](assets/screenshots/noai.png)
 
-章节完成后，可以运行严格审查或 NOAI 扫描。审查 Agent 会从逻辑、节奏、人物行为、读者出戏感与表达自然度等角度找问题；NOAI 则用本地规则快速标出高频机械句式，并把问题绑定到当前正文版本。
+章节完成后，可以主动运行严格审查或 NOAI 扫描。审查 Agent 会从逻辑、节奏、人物行为、读者出戏感与表达自然度等角度挑刺；NOAI 则用本地规则快速标出高频机械句式，并把问题绑定到当前正文版本。两者都只给诊断，不会趁你不注意重写正文。
 
 ## 谁会喜欢写书鲸
 
@@ -63,7 +102,7 @@ Agent 不会绕过工作台偷偷覆盖正文。它创建可查看差异的修�
 
 ```sh
 dsh plugin --profile web add \
-  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.10
+  github:shuaweng/DSH_xieshujing#v0.1.2-alpha.11
 dsh --profile web
 ```
 

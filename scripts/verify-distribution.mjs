@@ -18,6 +18,9 @@ requireCondition(existsSync(resolve(root, 'cordis.patch.yml')), 'missing bundle 
 requireCondition(existsSync(resolve(root, 'lib/index.js')), 'missing prebuilt facade')
 requireCondition(existsSync(resolve(root, 'assets/screenshots/home.png')), 'missing home screenshot')
 requireCondition(existsSync(resolve(root, 'assets/screenshots/editor.png')), 'missing editor screenshot')
+requireCondition(existsSync(resolve(root, 'assets/screenshots/outline.png')), 'missing outline screenshot')
+requireCondition(existsSync(resolve(root, 'assets/screenshots/chapter-plan.png')), 'missing chapter-plan screenshot')
+requireCondition(existsSync(resolve(root, 'assets/screenshots/review.png')), 'missing review screenshot')
 requireCondition(existsSync(resolve(root, 'assets/screenshots/noai.png')), 'missing NOAI screenshot')
 requireCondition(existsSync(resolve(root, 'presets/novel-workbench/agent.cordis.yml')), 'missing Novel Preset')
 requireCondition(
